@@ -8,22 +8,35 @@ Requires the Swift 6.2 toolchain (Xcode 26) on macOS, and Node 20 or later for t
 
 ```sh
 swift build -c release
-.build/release/reviewmap /path/to/repo --base main --head feature-x --view
+cd /path/to/repo
+/path/to/review-map/.build/release/reviewmap
 ```
 
-That writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. The first run installs the viewer's npm dependencies. Without `--view` it only writes the file, and `reviewmap view [change-model.json]` opens an existing one. Options:
+With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. The first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+
+The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate` runs the LLM annotator on an existing model, and `reviewmap view [change-model.json]` opens an existing model. Options for the default command and `analyze`:
 
 | Option | Meaning |
 | --- | --- |
-| `--base`, `--head` | Any git refs. By default the base is the merge-base of the two, which is what a PR shows. |
+| `[repo]` | Path to the repo, or any directory inside it (default: the current directory). |
+| `--base`, `--head` | Any git refs (default: `main` and the current branch). The base is the merge-base of the two, which is what a PR shows. |
 | `--no-merge-base` | Compare against `--base` directly. |
 | `-o <file>` | Output path, or `-` for stdout. |
 | `--config <file>` | A `reviewmap.yml`. By default it's read from the head of the repo, if one exists there. |
 | `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
 | `--max-refs <n>` | References kept per edge (default 50). |
 | `--summary` | Print a short summary to stderr. |
-| `--view` | Serve the result in the viewer and open the browser. Stop with Ctrl-C. |
+| `--view`, `--no-view` | Serve the result in the viewer and open the browser; stop it with Ctrl-C. On by default, off for `analyze`. |
 | `--port <n>` | Viewer port (default 5173). |
+| `--no-llm` | Skip the LLM annotator. |
+| `--llm <tool>` | CLI that runs the annotator: `claude` (default) or `codex`. |
+| `--llm-model <name>` | Model passed to the CLI. By default the CLI picks. |
+| `--llm-command <path>` | Executable to run in place of `claude` or `codex`, with the same arguments. |
+| `--llm-cache <dir>` | Cache directory (default `~/.reviewmap/cache`). It must be outside the target repo. |
+| `--llm-jobs <n>` | Batches run at the same time (default 4). |
+| `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
+
+`reviewmap annotate [change-model.json]` runs only the annotator on an existing model and writes it back (or to `-o`). It takes the same `--llm…` options.
 
 The analyzer never writes to the target repo. Both trees are exported with `git archive` into a temporary directory, which is removed on exit.
 
@@ -40,6 +53,21 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - **Review regions**: each non-cosmetic changed entity gets one region per run of changed lines (compared ignoring indentation, spacing, and blank lines). A run with head lines is a `review` region; a run that only deletes lines is a `removed` region on the base side, with `anchor` set to the head line it followed. A new or deleted declaration is one region, and a type's region covers only its header, since its members are entities of their own. Flags that a type carries for its members (a Codable shape, an enum case) put a region on its declaration line.
 - **Risk**: each region combines its signals as `1 - Π(1 - weight)`. High (0.6): a contract flag on an interface entity, a concurrency or persisted-model flag, an isolation annotation in code (`@MainActor` or `@Sendable` closures, `nonisolated(unsafe)`), or a removed check (`guard`, early return, `throw`, `precondition`, `assert`). Medium (0.3): other contract flags, a changed interface signature, a removed interface declaration, new crash points (force unwrap, `try!`, `as!`, `fatalError`), tasks, continuations, and locks added or removed, and changed control flow (branches, loops, `catch`, `try?`). Control flow in SwiftUI view code (a `View` type, `some View`, or a `ui` layer) counts 0.15. Every region adds 0.1, and an interface entity adds 0.05 per other component that uses it (up to 0.2). Test and generated code is scaled by 0.2. Checks inside a deleted declaration don't count. `reasons` lists the signals, most significant first.
 - **Context regions**: unchanged code that explains a review region, with `relation` and `supports` (the review regions it explains): `definition` (same-type members, and top-level declarations or members of mentioned types, when the name resolves to one declaration; up to 6 per entity), `caller` (usedBy first, then the entity's own component, tests last; up to 5, for interface entities and signature or flag changes), `conformer` (other conformers of a changed protocol, or their implementation of a changed requirement), `override` (overrides of a changed method, and the method a changed override overrides), and `state` (the stored properties of the enclosing type when a body changed). `lines` lists the lines that matter, such as the signature and the referencing lines. Test and generated code gets no context.
+
+## LLM annotator
+
+The LLM only annotates facts the analyzer already produced. It never adds entities, edges, or regions, and it never changes the deterministic scores; its results sit next to them in `llm` fields.
+
+- **Tasks**: give every review and removed region a risk from 0 to 1 and one sentence on why it matters; mark each context region as kept or left out, and rank the kept ones; write a one-line behavior summary for each component and each changed entity; tag review regions that add defensive handling for a state that can't occur, or a speculative abstraction, as removal candidates.
+- **Scope**: changed entities outside test components and without `test` or `generated` tags. Cosmetic changes are skipped.
+- **Batches**: one per component, split by size (about 60,000 characters of entity material) for large components. The first batch of a component also asks for its summary.
+- **Prompt**: per entity, its kind, change, contract flags, signatures, usage, the head code (and base code when it changed), its regions with their deterministic risk and reasons, and the lines of each context region that matter. Declarations longer than 150 lines show their first lines and their regions. `REVIEW.md` from the head of the target repo, if there is one, goes in as domain notes. The prompt ends with a reply template that already holds every id, so the reply only fills in values.
+- **Execution**: `claude -p --output-format json --tools "" --no-session-persistence`, or `codex exec --sandbox read-only --output-last-message <file> -`, with the prompt on stdin and `--model` when `--llm-model` is set. Each call runs in an empty temporary directory, so the agent never sees or writes to the target repo.
+- **Validation**: the reply must be the template filled in, with the same entities, regions, and context regions, risks in 0 to 1, one-line notes and summaries, removal kinds `defensive` or `speculative`, and a rank from 1 on every kept context region. Text around the JSON, such as a code fence, is ignored. A batch that fails is retried once with the errors; if it fails again, its regions keep only their deterministic scores and an `llm-rejected` warning names the errors.
+- **Cache**: one file per entity and one per component summary, keyed by a hash of the prompt version, tool, model, `REVIEW.md`, and everything the prompt says about the entity. A second run only calls the CLI for entities whose material changed.
+- **Missing CLI**: the annotator is skipped with an `llm-unavailable` warning, and the model has no `llm` fields.
+
+`scripts/fake-llm.sh` stands in for either CLI in tests and demos: it fills the reply template with canned values picked by a hash of each id. `FAKE_LLM_MODE` makes it wrap the JSON in prose (`prose`), return a risk outside 0 to 1 (`invalid`), exit with an error (`fail`), or return claude's `is_error` result (`error`).
 
 ## Viewer
 
@@ -66,6 +94,14 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - Notes attach to a region and show under it.
 - Previous and Next step through the component's entities. Changed type names and dependencies in the code are links. Callers in unchanged code open as a code location.
 - **Open in Xcode** runs `xed --line` on the file in your working copy (macOS, local server only).
+
+**LLM layer**
+
+- When the model has LLM annotations, Start here shows a **Ranking** toggle: Deterministic or LLM. It switches the risk that Start here, region order, `j`/`k`, and the risk badges use. The LLM layer is on by default, and the choice is kept in browser storage.
+- With the LLM layer on, entity and component summaries show under their headers (side panel, level 2, level 3). The rest shows on demand: a region's note behind **Why** in its label row, and removal candidates as a tag in the label row and as a list behind their count in the overview. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
+- Context the LLM left out folds into a "Show N context snippets left out by the LLM" link after the kept ones, which follow the LLM's rank.
+- With the LLM layer off, the viewer shows only deterministic facts, as if the annotator hadn't run.
+- The overview names the CLI that scored the change and the batches that kept deterministic scores, which open their validation errors.
 
 **Across levels**
 
@@ -113,6 +149,7 @@ The schema is in `Sources/ReviewMapCore/Model.swift`. It follows the sketch in t
 - Entities: `changes`, `parent` (entity id, which may point to an unchanged declaration that isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Entity kinds also include `file` and `target`.
 - `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than entity ids, because the referring declaration usually didn't change and so has no entity.
 - Regions: `anchor` (removed regions), and `component` and `lines` (context regions). Region ids are `<entity id>/r<n>` for review and removed regions and `<entity id>/c<n>` for context. A context region's `reasons` holds the qualified name of the declaration shown.
+- LLM annotations: review and removed regions get `llm: {risk, note, removal?: {kind, note}}`, and context regions `llm: {keep, rank?}`. Components and entities get `llm: {summary}`. The top-level `llm` records the tool, model, stand-in command, prompt version, and how many batches ran, came from the cache, and were rejected.
 
 Fields that are `null` are omitted. Consumers should ignore fields they don't know.
 
@@ -122,7 +159,7 @@ Fields that are `null` are omitted. Consumers should ignore fields they don't kn
 swift test
 ```
 
-`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. Run `UPDATE_SNAPSHOTS=1 swift test` to accept a new snapshot.
+`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. The annotator tests run `scripts/fake-llm.sh` on the same fixture, cover validation, retries, the cache, and both CLIs, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
 
 ## Known limits
 
@@ -131,3 +168,4 @@ swift test
 - A declaration that moves between components shows up as removed plus added.
 - Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
 - Without `--dump-package`, manifests that build their targets with loops or helper functions are only partly read.
+- The annotator has only run against `scripts/fake-llm.sh`, not yet against the real `claude` or `codex` CLI.

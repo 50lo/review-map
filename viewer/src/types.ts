@@ -14,6 +14,21 @@ export interface ChangeModel {
   entities: Entity[];
   regions: Region[];
   warnings: Warning[];
+  /** Set when the LLM annotator ran. */
+  llm?: { tool: string; model?: string; command?: string; promptVersion: string; batches: number; cached: number; failed: number; reviewNotes?: boolean };
+}
+
+export interface LLMSummary {
+  summary: string;
+}
+
+/** Review and removed regions get risk and note (and maybe removal); context regions get keep and rank. */
+export interface RegionLLM {
+  risk?: number;
+  note?: string;
+  removal?: { kind: "defensive" | "speculative" | string; note: string };
+  keep?: boolean;
+  rank?: number;
 }
 
 export interface Component {
@@ -29,6 +44,7 @@ export interface Component {
   changedEntities: number;
   interfaceChanges: number;
   changeScore: number;
+  llm?: LLMSummary;
 }
 
 export interface Ref {
@@ -78,6 +94,7 @@ export interface Entity {
   baseLocation?: Location;
   usedBy?: Usage[];
   dependsOn?: Usage[];
+  llm?: LLMSummary;
 }
 
 export interface Region {
@@ -100,7 +117,7 @@ export interface Region {
   lines?: number[];
   /** Removed regions inside a changed entity: the head line the removed code followed. */
   anchor?: number;
-  llm?: { risk: number; note: string };
+  llm?: RegionLLM;
 }
 
 export interface ExternalDepChange {

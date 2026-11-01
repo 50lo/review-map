@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { buildIndex, componentEntities, edgeKey, flagLabel, regionPosition, related, startHere, stepRegion, visible } from "./graph";
+import { buildIndex, componentEntities, contextOf, edgeKey, flagLabel, llmOf, regionPosition, related, removalCandidates, startHere, stepRegion, visible } from "./graph";
 import { layout } from "./layout";
 import { validate } from "./load";
 
@@ -184,5 +184,55 @@ describe("misc", () => {
   it("tolerates unknown and missing fields", () => {
     const m = validate({ components: [], edges: [], somethingNew: 1 });
     expect(m.entities).toEqual([]);
+  });
+});
+
+describe("LLM ranking", () => {
+  const annotatedPath = path.resolve(__dirname, "../../Tests/ReviewMapCoreTests/Fixtures/basic/annotated.json");
+  const annotated = validate(JSON.parse(fs.readFileSync(annotatedPath, "utf8")));
+  const on = buildIndex(annotated);
+  const off = buildIndex(annotated, { llm: false });
+
+  it("is on by default when the model has annotations, and never without them", () => {
+    expect(on.hasLLM && on.llm).toBe(true);
+    expect(off.hasLLM && !off.llm).toBe(true);
+    expect(index.hasLLM || index.llm).toBe(false);
+    expect(buildIndex(model, { llm: true }).llm).toBe(false);
+  });
+
+  it("orders regions by LLM risk when on, and by deterministic risk when off", () => {
+    const llmRisks = on.riskOrder.map((r) => r.llm?.risk ?? r.risk);
+    expect(llmRisks).toEqual([...llmRisks].sort((a, b) => b - a));
+    expect(off.riskOrder.map((r) => r.id)).toEqual(index.riskOrder.map((r) => r.id));
+    expect(on.riskOrder.map((r) => r.id)).not.toEqual(off.riskOrder.map((r) => r.id));
+    expect(new Set(on.riskOrder.map((r) => r.id))).toEqual(new Set(off.riskOrder.map((r) => r.id)));
+  });
+
+  it("scores Start here by LLM risk only when on", () => {
+    const top = startHere(on)[0];
+    const r = on.regions.get(top.id)!;
+    expect(top.score).toBe(r.llm?.risk ?? r.risk);
+    for (const it of startHere(off, 100)) expect(it.score).toBe(off.regions.get(it.id)!.risk);
+  });
+
+  it("prunes and ranks context only when on", () => {
+    const entity = [...on.contextByEntity.keys()].find((id) => contextOf(on, id).pruned.length > 0)!;
+    expect(entity).toBeDefined();
+    const { shown, pruned } = contextOf(on, entity);
+    expect(pruned.every((c) => c.llm?.keep === false)).toBe(true);
+    expect(shown.map((c) => c.llm?.rank)).toEqual(shown.map((_, i) => i + 1));
+    expect(contextOf(off, entity)).toEqual({ shown: off.contextByEntity.get(entity), pruned: [] });
+  });
+
+  it("lists removal candidates only when on", () => {
+    expect(removalCandidates(on).length).toBeGreaterThan(0);
+    expect(removalCandidates(on).every((r) => r.llm?.removal)).toBe(true);
+    expect(removalCandidates(off)).toEqual([]);
+  });
+
+  it("hides summaries when off", () => {
+    const e = annotated.entities.find((x) => x.llm)!;
+    expect(llmOf(on, e)?.summary).toBeTruthy();
+    expect(llmOf(off, e)).toBeUndefined();
   });
 });

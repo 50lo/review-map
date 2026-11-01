@@ -28,6 +28,7 @@ export function validate(raw: unknown): ChangeModel {
     entities: m.entities ?? [],
     regions: m.regions ?? [],
     warnings: m.warnings ?? [],
+    llm: m.llm,
   };
 }
 

@@ -26,6 +26,11 @@ public struct AnalyzeOptions {
 public enum Analyzer {
     public static let version = "0.1.0"
 
+    /// The branch checked out in the repo, or "HEAD" when it is detached or can't be read.
+    public static func currentBranch(repo: String) -> String {
+        (try? Shell.string(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"])).flatMap { $0.isEmpty ? nil : $0 } ?? "HEAD"
+    }
+
     public static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in }) throws -> ChangeModel {
         let root = try Shell.string(["git", "-C", options.repo, "rev-parse", "--show-toplevel"])
         let git = GitRepo(root: root)

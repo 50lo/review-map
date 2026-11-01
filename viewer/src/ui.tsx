@@ -69,3 +69,25 @@ export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) 
     </label>
   );
 }
+
+/** The LLM's one-line behavior summary of an entity or component. */
+export const LLMSummary = ({ text }: { text: string }) => (
+  <div className="llm-text llm-summary" title="Summary written by the LLM">
+    {text}
+  </div>
+);
+
+/** Switches ranking, and every other LLM annotation, between the analyzer's scores and the LLM's. */
+export function RankingToggle({ on, setOn }: { on: boolean; setOn: (on: boolean) => void }) {
+  return (
+    <div className="ranking-toggle" role="group" aria-label="Ranking">
+      <span className="muted small">Ranking</span>
+      <button className={`seg ${on ? "" : "on"}`} aria-pressed={!on} onClick={() => setOn(false)}>
+        Deterministic
+      </button>
+      <button className={`seg ${on ? "on" : ""}`} aria-pressed={on} onClick={() => setOn(true)}>
+        LLM
+      </button>
+    </div>
+  );
+}

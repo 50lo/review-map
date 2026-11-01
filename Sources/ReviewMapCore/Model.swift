@@ -11,6 +11,47 @@ public struct ChangeModel: Codable, Equatable {
     public var entities: [Entity]
     public var regions: [Region]
     public var warnings: [Warning]
+    /// Set when the LLM annotator ran.
+    public var llm: LLMRun? = nil
+}
+
+/// How the LLM annotator ran. Annotations themselves sit on components, entities, and regions.
+public struct LLMRun: Codable, Equatable {
+    /// "claude" or "codex".
+    public var tool: String
+    /// The model passed to the CLI; missing means the CLI's default.
+    public var model: String?
+    /// File name of the executable that stood in for the tool (--llm-command), such as a fake for tests.
+    public var command: String?
+    public var promptVersion: String
+    /// Batches (one or more per component), how many came fully from the cache, and how many were rejected.
+    public var batches: Int
+    public var cached: Int
+    public var failed: Int
+    /// True when the target repo has a REVIEW.md that went into the prompt.
+    public var reviewNotes: Bool
+}
+
+/// A one-line behavior summary written by the LLM.
+public struct LLMSummary: Codable, Equatable {
+    public var summary: String
+}
+
+/// LLM annotation of a region. Review and removed regions get `risk` and `note` (and maybe
+/// `removal`); context regions get `keep` and, when kept, `rank` (1 is the most needed).
+public struct RegionLLM: Codable, Equatable {
+    public var risk: Double?
+    public var note: String?
+    public var removal: RemovalCandidate?
+    public var keep: Bool?
+    public var rank: Int?
+}
+
+/// Code the LLM thinks could go: defensive handling for a state that can't occur, or a speculative abstraction.
+public struct RemovalCandidate: Codable, Equatable {
+    /// "defensive" or "speculative".
+    public var kind: String
+    public var note: String
 }
 
 public struct AnalyzerInfo: Codable, Equatable {
@@ -50,6 +91,7 @@ public struct Component: Codable, Equatable {
     public var interfaceChanges: Int
     /// 0..1, drives emphasis on the map.
     public var changeScore: Double
+    public var llm: LLMSummary? = nil
 }
 
 public enum EdgeStatus: String, Codable {
@@ -135,6 +177,7 @@ public struct Entity: Codable, Equatable {
     public var usedBy: [Usage]
     /// Declarations in other components that this entity references.
     public var dependsOn: [Usage]
+    public var llm: LLMSummary? = nil
 }
 
 /// A line range the reviewer should read. `review` regions are changed head lines, `removed`
@@ -166,6 +209,7 @@ public struct Region: Codable, Equatable {
     public var lines: [Int]?
     /// Removed regions inside a changed entity: the head line the removed code followed.
     public var anchor: Int?
+    public var llm: RegionLLM? = nil
 }
 
 public struct ExternalDepChange: Codable, Equatable {

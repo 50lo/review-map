@@ -5,6 +5,8 @@ import {
   edgeKey,
   externalChangeOf,
   isLowRisk,
+  llmOf,
+  removalCandidates,
   riskTier,
   startHere,
   stepRegion,
@@ -14,23 +16,24 @@ import {
 } from "./graph";
 import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
-import { ChangeTag, Chips, ReviewedBox, Signature, StatusDot } from "./ui";
+import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
 
 interface Props {
   index: Index;
   focus: Focus;
   setFocus: (f: Focus) => void;
+  setLLM: (on: boolean) => void;
 }
 
-export function Sidebar({ index, focus, setFocus }: Props) {
+export function Sidebar({ index, focus, setFocus, setLLM }: Props) {
   let body: ReactNode;
   if (focus?.type === "component" && index.components.has(focus.id)) {
     body = <ComponentPanel index={index} c={index.components.get(focus.id)!} setFocus={setFocus} />;
   } else if (focus?.type === "edge") {
     const e = index.model.edges.find((x) => edgeKey(x) === focus.key);
-    body = e ? <EdgePanel index={index} e={e} setFocus={setFocus} /> : <Overview index={index} setFocus={setFocus} />;
+    body = e ? <EdgePanel index={index} e={e} setFocus={setFocus} /> : <Overview index={index} setFocus={setFocus} setLLM={setLLM} />;
   } else {
-    body = <Overview index={index} setFocus={setFocus} />;
+    body = <Overview index={index} setFocus={setFocus} setLLM={setLLM} />;
   }
   return <aside className="sidebar">{body}</aside>;
 }
@@ -44,7 +47,7 @@ const Name = ({ index, id, setFocus }: { index: Index; id: string; setFocus: Pro
 
 // ---------------------------------------------------------------------------
 
-function Overview({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
+function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["setFocus"]; setLLM: Props["setLLM"] }) {
   const { model } = index;
   const items = startHere(index);
   const review = useReview();
@@ -57,6 +60,8 @@ function Overview({ index, setFocus }: { index: Index; setFocus: Props["setFocus
     <>
       <section>
         <h2>Start here</h2>
+        {index.hasLLM && <RankingToggle on={index.llm} setOn={setLLM} />}
+        {index.llm && <LLMStatus index={index} />}
         {index.riskOrder.length > 0 && (
           <p className="small step-all">
             <button className="btn primary" onClick={() => setFocus(stepRegion(index, null, 1))}>
@@ -73,6 +78,7 @@ function Overview({ index, setFocus }: { index: Index; setFocus: Props["setFocus
           ))}
         </ol>
       </section>
+      <RemovalSection index={index} setFocus={setFocus} />
       {toReview.length > 0 && (
         <section>
           <h2>Progress</h2>
@@ -172,6 +178,67 @@ function StartRow({ index, it, reviewed, setFocus }: { index: Index; it: StartIt
   );
 }
 
+/** Which CLI annotated the model, and how many components kept deterministic scores. */
+function LLMStatus({ index }: { index: Index }) {
+  const run = index.model.llm!;
+  const rejected = index.model.warnings.filter((w) => w.kind === "llm-rejected");
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="small muted llm-status">
+      Scored by {run.command ? `${run.command}, standing in for ${run.tool}` : run.tool}
+      {run.model ? ` (${run.model})` : ""}
+      {run.reviewNotes ? " with REVIEW.md" : ""}.
+      {run.failed > 0 && (
+        <>
+          {" "}
+          <button className="link" onClick={() => setOpen(!open)}>
+            {run.failed} batch{run.failed === 1 ? "" : "es"} kept deterministic scores
+          </button>
+          {open && (
+            <ul className="warnings">
+              {rejected.map((w, i) => (
+                <li key={i}>{w.message}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+const REMOVAL_LABEL: Record<string, string> = { defensive: "defensive handling", speculative: "speculative abstraction" };
+
+/** Regions the LLM tagged as removal candidates, behind their count. */
+function RemovalSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
+  const [open, setOpen] = useState(false);
+  const items = removalCandidates(index);
+  if (items.length === 0) return null;
+  return (
+    <section>
+      <button className="link" onClick={() => setOpen(!open)}>
+        {items.length} removal candidate{items.length === 1 ? "" : "s"}
+      </button>
+      {open && (
+        <ul className="removals">
+          {items.map((r) => {
+            const e = index.entities.get(r.entity)!;
+            return (
+              <li key={r.id}>
+                <button className="link mono small" onClick={() => setFocus({ type: "entity", id: r.entity, region: r.id })}>
+                  {e.qualifiedName}
+                </button>{" "}
+                <span className="muted small">{REMOVAL_LABEL[r.llm!.removal!.kind] ?? r.llm!.removal!.kind}</span>
+                <div className="small">{r.llm!.removal!.note}</div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 /** Notes on regions, each leading back to its region, and the Markdown export. */
 function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
   const review = useReview();
@@ -260,6 +327,7 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
           </p>
         )}
         {ext && <p>{ext.change === "bumped" ? `Version ${ext.from} → ${ext.to}` : `Package ${ext.change}${ext.to ? ` at ${ext.to}` : ""}`}</p>}
+        {llmOf(index, c) && <LLMSummary text={llmOf(index, c)!.summary} />}
       </section>
       {(shown.length > 0 || cosmetic + lowRisk > 0) && (
         <section>
