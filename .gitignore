@@ -1,0 +1,5 @@
+.build/
+.swiftpm/
+/change-model.json
+*.xcodeproj/xcuserdata/
+.DS_Store

@@ -1,0 +1,41 @@
+// swift-tools-version:5.10
+import PackageDescription
+
+let package = Package(
+    name: "ReviewMap",
+    platforms: [.macOS(.v14)],
+    products: [
+        .executable(name: "reviewmap", targets: ["reviewmap"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "602.0.0"),
+        .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2"),
+        .package(url: "https://github.com/tuist/XcodeProj.git", exact: "9.17.6"),
+        .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
+        .package(url: "https://github.com/kylef/PathKit.git", exact: "1.0.1"),
+    ],
+    targets: [
+        .executableTarget(
+            name: "reviewmap",
+            dependencies: [
+                "ReviewMapCore",
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .target(
+            name: "ReviewMapCore",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "XcodeProj", package: "XcodeProj"),
+                .product(name: "Yams", package: "Yams"),
+                .product(name: "PathKit", package: "PathKit"),
+            ]
+        ),
+        .testTarget(
+            name: "ReviewMapCoreTests",
+            dependencies: ["ReviewMapCore"],
+            resources: [.copy("Fixtures")]
+        ),
+    ]
+)

@@ -1,0 +1,6 @@
+split:
+  threshold: 2
+components:
+  - name: Core
+    paths: ["Sources/Core/**"]
+    layer: domain

@@ -1,0 +1,2013 @@
+{
+  "analyzer" : {
+    "resolution" : "name-based",
+    "version" : "0.1.0"
+  },
+  "components" : [
+    {
+      "changeScore" : 1,
+      "changedEntities" : 14,
+      "id" : "cfg:Core",
+      "interfaceChanges" : 11,
+      "isTest" : false,
+      "kind" : "folder",
+      "layer" : "domain",
+      "module" : "Core",
+      "name" : "Core",
+      "paths" : [
+        "Sources/Core"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "ext:swift-collections",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "external",
+      "name" : "swift-collections",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.174,
+      "changedEntities" : 2,
+      "id" : "folder:App",
+      "interfaceChanges" : 2,
+      "isTest" : false,
+      "kind" : "folder",
+      "name" : "App",
+      "paths" : [
+        "App"
+      ]
+    },
+    {
+      "changeScore" : 0.119,
+      "changedEntities" : 1,
+      "id" : "spm:Features",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "module" : "Features",
+      "name" : "Features",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.028,
+      "changedEntities" : 1,
+      "id" : "spm:Features/Catalog",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "folder",
+      "module" : "Features",
+      "name" : "Features/Catalog",
+      "parent" : "spm:Features",
+      "paths" : [
+        "Sources/Features/Catalog"
+      ]
+    },
+    {
+      "changeScore" : 0.422,
+      "changedEntities" : 10,
+      "id" : "spm:Features/Checkout",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "folder",
+      "module" : "Features",
+      "name" : "Features/Checkout",
+      "parent" : "spm:Features",
+      "paths" : [
+        "Sources/Features/Checkout"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "spm:FeaturesTests",
+      "interfaceChanges" : 0,
+      "isTest" : true,
+      "kind" : "spmTarget",
+      "module" : "FeaturesTests",
+      "name" : "FeaturesTests",
+      "paths" : [
+        "Tests/FeaturesTests"
+      ]
+    },
+    {
+      "changeScore" : 0.119,
+      "changedEntities" : 1,
+      "id" : "spm:Networking",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "module" : "Networking",
+      "name" : "Networking",
+      "paths" : [
+        "Sources/Networking"
+      ]
+    },
+    {
+      "changeScore" : 0.33,
+      "changedEntities" : 6,
+      "id" : "spm:Persistence",
+      "interfaceChanges" : 2,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "module" : "Persistence",
+      "name" : "Persistence",
+      "paths" : [
+        "Sources/Persistence"
+      ]
+    }
+  ],
+  "edges" : [
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Networking"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "dependency Networking"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Networking"
+    },
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "base",
+          "symbol" : "dependency Persistence"
+        }
+      ],
+      "status" : "removed",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+        "dependency Persistence"
+      ],
+      "to" : "spm:Persistence"
+    },
+    {
+      "from" : "spm:Features/Catalog",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 4,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 5,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 2,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 10,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "side" : "head",
+          "symbol" : "PaymentMethod"
+        },
+        {
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 3,
+          "side" : "head",
+          "symbol" : "import Networking"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 8,
+          "side" : "head",
+          "symbol" : "PaymentClient"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "PaymentClient",
+        "import Networking"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Networking"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 3,
+          "side" : "base",
+          "symbol" : "import Persistence"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 7,
+          "side" : "base",
+          "symbol" : "CartStore"
+        }
+      ],
+      "status" : "removed",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+        "CartStore",
+        "import Persistence"
+      ],
+      "to" : "spm:Persistence"
+    },
+    {
+      "from" : "spm:FeaturesTests",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Features"
+        },
+        {
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Features"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Features"
+    },
+    {
+      "from" : "spm:FeaturesTests",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "CheckoutViewModel"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Features/Checkout"
+    },
+    {
+      "from" : "spm:Networking",
+      "refCount" : 6,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 5,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "PaymentError"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "PaymentMethod"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 10,
+          "side" : "head",
+          "symbol" : "PaymentError"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Networking",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Collections"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 2,
+          "side" : "head",
+          "symbol" : "import Collections"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "ext:swift-collections"
+    },
+    {
+      "from" : "spm:Persistence",
+      "refCount" : 6,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 3,
+          "side" : "head",
+          "symbol" : "CartRepository"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 4,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    }
+  ],
+  "entities" : [
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.add(_:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.add(_:)",
+      "signature" : {
+        "base" : "func add(_ item: Item)",
+        "head" : "func add(_ item: Item)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 14,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 12
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.total()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 11
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.total()",
+      "signature" : {
+        "base" : "func total() -> Int",
+        "head" : "func total() -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 11,
+          "symbol" : "CheckoutViewModel.refresh()"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 13,
+          "symbol" : "CheckoutViewModel.refresh()"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 16,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 16
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.price(for:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 15,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 15
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.price(for:)",
+      "signature" : {
+        "base" : "func price(for item: Item) -> Int",
+        "head" : "func price(for item: Item) -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 21,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 19
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "access-changed:internal->public"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.format(_:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 20,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 18
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.format(_:)",
+      "signature" : {
+        "base" : "func format(_ value: Int) -> String",
+        "head" : "func format(_ value: Int) -> String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "base",
+        "startLine" : 1
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "protocol-requirement-added",
+        "protocol-requirement-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository",
+      "isInterface" : true,
+      "kind" : "protocol",
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "CartRepository",
+      "signature" : {
+        "base" : "protocol CartRepository",
+        "head" : "protocol CartRepository"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 3,
+          "symbol" : "CartStore"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 2,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "base",
+        "startLine" : 2
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "async-added",
+        "protocol-requirement-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository.items()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 2,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 2
+      },
+      "parent" : "cfg:Core::CartRepository",
+      "qualifiedName" : "CartRepository.items()",
+      "signature" : {
+        "base" : "func items() -> [Item]",
+        "head" : "func items() async -> [Item]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "protocol-requirement-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository.clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "cfg:Core::CartRepository",
+      "qualifiedName" : "CartRepository.clear()",
+      "signature" : {
+        "head" : "func clear() async throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item",
+      "isInterface" : true,
+      "kind" : "struct",
+      "location" : {
+        "endLine" : 15,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "qualifiedName" : "Item",
+      "signature" : {
+        "base" : "struct Item: Codable, Equatable",
+        "head" : "struct Item: Codable, Equatable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Catalog",
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 4,
+          "symbol" : "CatalogView.items"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "symbol" : "PriceCache.price(for:)"
+        },
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 5,
+          "symbol" : "PaymentClient.queue"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 4,
+          "symbol" : "CartStore.storage"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "symbol" : "CartStore.items()"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 9,
+          "symbol" : "CartStore.add(_:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.price",
+      "isInterface" : true,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 6,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 6
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.price",
+      "signature" : {
+        "base" : "var price: Int",
+        "head" : "var price: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 8,
+          "symbol" : "PriceCache.price(for:)"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 9,
+          "symbol" : "PriceCache.price(for:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.currency",
+      "isInterface" : true,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.currency",
+      "signature" : {
+        "head" : "var currency: String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 12,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 8
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.CodingKeys",
+      "isInterface" : false,
+      "kind" : "enum",
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.CodingKeys",
+      "signature" : {
+        "base" : "enum CodingKeys: String, CodingKey",
+        "head" : "enum CodingKeys: String, CodingKey"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added",
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.CodingKeys.currency",
+      "isInterface" : false,
+      "kind" : "case",
+      "location" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 13
+      },
+      "parent" : "cfg:Core::Item.CodingKeys",
+      "qualifiedName" : "Item.CodingKeys.currency",
+      "signature" : {
+        "head" : "case currency"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "base",
+        "startLine" : 1
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::PaymentMethod",
+      "isInterface" : true,
+      "kind" : "enum",
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "PaymentMethod",
+      "signature" : {
+        "base" : "enum PaymentMethod: String, Codable",
+        "head" : "enum PaymentMethod: String, Codable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 14,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        },
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentClient.charge(_:method:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::PaymentMethod.applePay",
+      "isInterface" : true,
+      "kind" : "case",
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "cfg:Core::PaymentMethod",
+      "qualifiedName" : "PaymentMethod.applePay",
+      "signature" : {
+        "head" : "case applePay"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "folder:App",
+      "contractFlags" : [
+        "info-plist-changed",
+        "url-schemes-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "folder:App::App/Info.plist",
+      "isInterface" : true,
+      "kind" : "file",
+      "location" : {
+        "endLine" : 19,
+        "file" : "App/Info.plist",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "App/Info.plist",
+      "signature" : {
+
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "folder:App",
+      "contractFlags" : [
+        "entitlements-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "folder:App::App/Shop.entitlements",
+      "isInterface" : true,
+      "kind" : "file",
+      "location" : {
+        "endLine" : 11,
+        "file" : "App/Shop.entitlements",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "App/Shop.entitlements",
+      "signature" : {
+
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features",
+      "contractFlags" : [
+        "default-isolation-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features::build settings",
+      "isInterface" : true,
+      "kind" : "target",
+      "location" : {
+        "endLine" : 1,
+        "file" : "Package.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "Features build settings",
+      "signature" : {
+        "head" : "swiftSettings: .defaultIsolation(MainActor.self)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Catalog",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Catalog::extension Banner: Hashable",
+      "isInterface" : false,
+      "kind" : "extension",
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Features/Catalog/Banner.swift",
+        "side" : "head",
+        "startLine" : 5
+      },
+      "qualifiedName" : "extension Banner: Hashable",
+      "signature" : {
+        "head" : "extension Banner: Hashable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Features/Catalog/CatalogView.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "cosmetic",
+      "changes" : [
+        "cosmetic"
+      ],
+      "component" : "spm:Features/Catalog",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Catalog::CatalogView.title()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Features/Catalog/CatalogView.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Catalog::CatalogView",
+      "qualifiedName" : "CatalogView.title()",
+      "signature" : {
+        "base" : "func title() -> String",
+        "head" : "func title() -> String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 18,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 5
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "mainactor-added",
+        "observable-state-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel",
+      "isInterface" : false,
+      "kind" : "class",
+      "location" : {
+        "endLine" : 19,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 5
+      },
+      "qualifiedName" : "CheckoutViewModel",
+      "signature" : {
+        "base" : "class CheckoutViewModel: ObservableObject",
+        "head" : "class CheckoutViewModel: ObservableObject"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 6,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "change" : "removed",
+      "changes" : [
+        "removed"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 7,
+          "symbol" : "CartStore"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.store",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.store",
+      "signature" : {
+        "base" : "let store"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "observable-state-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.total",
+      "signature" : {
+        "base" : "var total: Int",
+        "head" : "var total: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 8,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 8,
+          "symbol" : "PaymentClient"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.client",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.client",
+      "signature" : {
+        "head" : "let client"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.logger",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.logger",
+      "signature" : {
+        "head" : "let logger"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 12,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 10
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "nonisolated-removed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 12
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.refresh()",
+      "signature" : {
+        "base" : "func refresh()",
+        "head" : "func refresh()"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 7,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 17,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 14
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "throws-added"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "PaymentMethod"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 18,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 16
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.pay(with:)",
+      "signature" : {
+        "base" : "func pay(with method: PaymentMethod)",
+        "head" : "func pay(with method: PaymentMethod) throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "kind-changed:class->actor"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::PriceCache",
+      "isInterface" : false,
+      "kind" : "actor",
+      "location" : {
+        "endLine" : 11,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "qualifiedName" : "PriceCache",
+      "signature" : {
+        "base" : "class PriceCache",
+        "head" : "actor PriceCache"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 4
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::PriceCache.cache",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "spm:Features/Checkout::PriceCache",
+      "qualifiedName" : "PriceCache.cache",
+      "signature" : {
+        "base" : "var cache: [String: Int]",
+        "head" : "var cache: [String: Decimal]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "symbol" : "Item"
+        }
+      ],
+      "id" : "spm:Features/Checkout::PriceCache.price(for:)",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 10,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 6
+      },
+      "parent" : "spm:Features/Checkout::PriceCache",
+      "qualifiedName" : "PriceCache.price(for:)",
+      "signature" : {
+        "base" : "func price(for item: Item) -> Int",
+        "head" : "func price(for item: Item) -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "base",
+        "startLine" : 9
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Networking",
+      "contractFlags" : [
+        "access-changed:internal->public",
+        "typed-throws-changed"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentError"
+        },
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 10,
+          "symbol" : "PaymentError"
+        },
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentMethod"
+        }
+      ],
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 11,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "spm:Networking::PaymentClient",
+      "qualifiedName" : "PaymentClient.charge(_:method:)",
+      "signature" : {
+        "base" : "func charge(_ amount: Int, method: PaymentMethod) throws",
+        "head" : "func charge(_ amount: Decimal, method: PaymentMethod) throws(PaymentError)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 17,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "base",
+        "startLine" : 8
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "async-added"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "symbol" : "Item"
+        }
+      ],
+      "id" : "spm:Persistence::CartStore.items()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Persistence::CartStore",
+      "qualifiedName" : "CartStore.items()",
+      "signature" : {
+        "base" : "func items() -> [Item]",
+        "head" : "func items() async -> [Item]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 15,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::CartStore.clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 10,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "head",
+        "startLine" : 10
+      },
+      "parent" : "spm:Persistence::CartStore",
+      "qualifiedName" : "CartStore.clear()",
+      "signature" : {
+        "head" : "func clear() async throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order",
+      "isInterface" : false,
+      "kind" : "class",
+      "location" : {
+        "endLine" : 15,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "qualifiedName" : "Order",
+      "signature" : {
+        "base" : "class Order",
+        "head" : "class Order"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 5,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 5
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.total",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.total",
+      "signature" : {
+        "base" : "var total: Int",
+        "head" : "var total: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.placedAt",
+      "isInterface" : false,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.placedAt",
+      "signature" : {
+        "head" : "var placedAt: Date"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.init(id:total:placedAt:)",
+      "isInterface" : false,
+      "kind" : "init",
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 10
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.init(id:total:placedAt:)",
+      "signature" : {
+        "base" : "init(id: UUID, total: Int)",
+        "head" : "init(id: UUID, total: Decimal, placedAt: Date)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    }
+  ],
+  "externalDeps" : [
+    {
+      "change" : "bumped",
+      "from" : "1.1.0",
+      "name" : "swift-collections",
+      "to" : "1.2.0"
+    }
+  ],
+  "regions" : [
+
+  ],
+  "repo" : {
+    "base" : "base",
+    "baseSha" : "<base>",
+    "head" : "main",
+    "headSha" : "<head>",
+    "root" : "<repo>",
+    "usesMergeBase" : true
+  },
+  "version" : 1,
+  "warnings" : [
+    {
+      "kind" : "ambiguous-name",
+      "message" : "Logger is declared in cfg:Core, spm:Networking; references to it were not resolved (head)."
+    }
+  ]
+}
