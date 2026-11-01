@@ -1,6 +1,6 @@
 # Review Map
 
-A throwaway prototype that shows a Swift change as structure (components, dependency edges, changed contracts) instead of line diffs. This repo holds **milestone 1: the analyzer core**. It reads two git refs and writes `change-model.json`, the only contract between the analyzer and the viewer that comes in later milestones.
+A throwaway prototype that shows a Swift change as structure (components, dependency edges, changed contracts) instead of line diffs. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. Progress is tracked in [docs/progress.md](docs/progress.md).
 
 ## Run it
 
@@ -35,7 +35,7 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - **External packages**: `Package.resolved` pins that were added, removed, or bumped.
 - **Usage**: `usedBy` lists declarations in other components that reference an entity, and `dependsOn` lists what the entity references in other components. An entity is an interface when it's `public`/`open`/`package`, used from another non-test component, or a requirement or case of an interface type.
 
-Review regions, context regions, and risk scores are milestone 4, so `regions` is empty for now.
+Review regions, context regions, and risk scores are not implemented yet, so `regions` is empty.
 
 ## reviewmap.yml
 
@@ -73,7 +73,7 @@ swift test
 
 ## Known limits
 
-- Name-based resolution: member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy`. Index mode (IndexStoreDB) is milestone 6.
+- Name-based resolution: member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy`. An exact index mode (IndexStoreDB) is planned.
 - A declaration that moves between components shows up as removed plus added.
 - Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
 - Without `--dump-package`, manifests that build their targets with loops or helper functions are only partly read.
