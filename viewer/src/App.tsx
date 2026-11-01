@@ -1,24 +1,59 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel } from "./types";
-import { buildIndex, edgeKey, visible, type Focus, type MapOptions } from "./graph";
+import { buildIndex, edgeKey, mapFocus, visible, type Index, type MapOptions } from "./graph";
+import { lastName } from "./levels";
 import { loadFile, loadInitialModel } from "./load";
 import { MapView } from "./MapView";
+import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
+import { EntityPage, InterfacePage, LocationPage } from "./Pages";
 import { Sidebar } from "./Sidebar";
 
 // Focus lives in the URL hash, so browser back/forward walk the focus history.
-function readFocus(): Focus {
-  const h = new URLSearchParams(location.hash.slice(1));
-  const c = h.get("c");
-  if (c) return { type: "component", id: c };
-  const e = h.get("e");
-  if (e) return { type: "edge", key: e };
+const readFocus = (): Focus => hashToFocus(location.hash);
+
+function writeFocus(f: Focus) {
+  const hash = focusToHash(f);
+  if (location.hash.slice(1) === hash) return;
+  history.pushState(null, "", hash ? `#${hash}` : location.pathname + location.search);
+}
+
+/** One level up: entity → its component's interface view → that component on the map → the map. */
+function parentFocus(index: Index, f: Focus): Focus {
+  if (!f) return null;
+  if (f.type === "entity") {
+    const e = index.entities.get(f.id);
+    return e ? { type: "interface", id: e.component } : null;
+  }
+  if (f.type === "interface") return { type: "component", id: f.id };
   return null;
 }
 
-function writeFocus(f: Focus) {
-  const hash = !f ? "" : f.type === "component" ? `c=${encodeURIComponent(f.id)}` : `e=${encodeURIComponent(f.key)}`;
-  if (location.hash.slice(1) === hash) return;
-  history.pushState(null, "", hash ? `#${hash}` : location.pathname + location.search);
+interface Crumb {
+  label: string;
+  focus?: Focus;
+}
+
+function crumbs(index: Index, f: Focus): Crumb[] {
+  const name = (id: string) => index.components.get(id)?.name ?? id;
+  switch (f?.type) {
+    case undefined:
+      return [];
+    case "component":
+      return [{ label: name(f.id) }];
+    case "edge": {
+      const e = index.model.edges.find((x) => edgeKey(x) === f.key);
+      return [{ label: e ? `${name(e.from)} → ${name(e.to)}` : f.key }];
+    }
+    case "interface":
+      return [{ label: name(f.id) }];
+    case "entity": {
+      const e = index.entities.get(f.id);
+      if (!e) return [{ label: f.id }];
+      return [{ label: name(e.component), focus: { type: "interface", id: e.component } }, { label: lastName(e.qualifiedName) }];
+    }
+    case "location":
+      return [{ label: `${f.file.split("/").pop()}:${f.line}` }];
+  }
 }
 
 const OPTIONS_KEY = "reviewmap.options.v2";
@@ -97,30 +132,37 @@ function Viewer({ model }: { model: ChangeModel }) {
   }, []);
 
   const setFocus = useCallback((f: Focus) => {
+    const changesPage = levelOf(f) > 1 || levelOf(readFocus()) > 1;
     writeFocus(f);
     setFocusState(f);
+    if (changesPage) document.querySelector(".page")?.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setFocus(null);
+      if (e.key !== "Escape") return;
+      const f = readFocus();
+      // A code location has no parent of its own; go back to where it was opened from.
+      if (f?.type === "location") history.back();
+      else setFocus(parentFocus(index, f));
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setFocus]);
+  }, [setFocus, index]);
 
   const vis = useMemo(() => visible(index, opts), [index, opts.scope, opts.showTests]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A focus that the current filters hide (e.g. a test component) still shows in the panel.
-  const focusName =
-    focus?.type === "component"
-      ? (index.components.get(focus.id)?.name ?? focus.id)
-      : focus?.type === "edge"
-        ? (() => {
-            const e = model.edges.find((x) => edgeKey(x) === focus.key);
-            return e ? `${index.components.get(e.from)?.name ?? e.from} → ${index.components.get(e.to)?.name ?? e.to}` : focus.key;
-          })()
-        : null;
+  const level = levelOf(focus);
+  const trail = crumbs(index, focus);
+  // On the map, tapping the selected component again opens its interface view.
+  const onMapFocus = useCallback(
+    (f: Focus) => {
+      if (f?.type === "component" && focus?.type === "component" && focus.id === f.id && index.components.get(f.id)?.kind !== "external") {
+        setFocus({ type: "interface", id: f.id });
+      } else setFocus(f);
+    },
+    [focus, index, setFocus],
+  );
 
   const short = (s: string) => s.slice(0, 7);
   return (
@@ -133,20 +175,26 @@ function Viewer({ model }: { model: ChangeModel }) {
           <button className="icon" title="Forward" onClick={() => history.forward()}>
             ›
           </button>
-          <button className={`crumb ${focus ? "" : "current"}`} onClick={() => setFocus(null)}>
+          <button className={`crumb ${focus ? "" : "current"}`} onClick={() => setFocus(level > 1 ? mapFocus(index, focus) : null)}>
             Map
           </button>
-          {focusName && (
-            <>
+          {trail.map((c, i) => (
+            <span key={i} className="crumb-part">
               <span className="sep">›</span>
-              <span className="crumb current">{focusName}</span>
-            </>
-          )}
+              {c.focus ? (
+                <button className="crumb" onClick={() => setFocus(c.focus!)}>
+                  {c.label}
+                </button>
+              ) : (
+                <span className="crumb current">{c.label}</span>
+              )}
+            </span>
+          ))}
         </nav>
         <div className="repo muted" title={`${model.repo.root}\nbase ${model.repo.baseSha}\nhead ${model.repo.headSha}`}>
           {model.repo.base || short(model.repo.baseSha)} → {model.repo.head || short(model.repo.headSha)}
         </div>
-        <div className="toggles">
+        <div className="toggles" hidden={level > 1}>
           <label>
             Show
             <select value={opts.scope} onChange={(e) => setOpts({ ...opts, scope: e.target.value as MapOptions["scope"] })}>
@@ -167,7 +215,7 @@ function Viewer({ model }: { model: ChangeModel }) {
       </header>
       <main className="body">
         <section className="map">
-          <MapView index={index} vis={vis} focus={focus} setFocus={setFocus} showUnchanged={opts.showUnchanged} />
+          <MapView index={index} vis={vis} focus={focus} setFocus={onMapFocus} showUnchanged={opts.showUnchanged} />
           {(vis.hiddenUnrelated > 0 || vis.hiddenTests > 0) && (
             <div className="hidden-note">
               {vis.hiddenUnrelated > 0 && (
@@ -184,6 +232,13 @@ function Viewer({ model }: { model: ChangeModel }) {
           )}
         </section>
         <Sidebar index={index} focus={focus} setFocus={setFocus} />
+        {level > 1 && (
+          <div className="page">
+            {focus?.type === "interface" && <InterfacePage index={index} id={focus.id} go={setFocus} />}
+            {focus?.type === "entity" && <EntityPage index={index} id={focus.id} go={setFocus} />}
+            {focus?.type === "location" && <LocationPage index={index} side={focus.side} file={focus.file} line={focus.line} go={setFocus} />}
+          </div>
+        )}
       </main>
     </div>
   );

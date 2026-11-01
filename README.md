@@ -41,26 +41,42 @@ Review regions, context regions, and risk scores are not implemented yet, so `re
 
 ## Viewer
 
-`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs). It has level 1 of the brief so far, the component map:
+`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs, Shiki). It has three levels, and a breadcrumb (Map › Component › Entity) with back and forward on top.
+
+**Level 1, component map**
 
 - Nodes are components. Split folders are drawn inside their target. A badge shows changed entities and interface changes, and the tint follows `changeScore`. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
 - Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
 - By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
-- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities with contract flags and its dependencies. Unchanged dependencies are folded into a count. Clicking an edge lists the references that create it, with added and removed symbols marked.
-- **Start here** lists the highest-risk regions. Until the analyzer scores regions (milestone 4), it ranks changed entities by their contract flags and folds members into their type.
-- The focus is kept in the URL, so browser back and forward (and the arrows in the top bar) move through it. Escape returns to the map.
+- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked.
+- **Start here** lists the highest-risk regions and opens them at level 3. Until the analyzer scores regions (milestone 4), it ranks changed entities by their contract flags and folds members into their type.
+
+**Level 2, interface view**
+
+- One component's changed interface entities, grouped by kind. Each shows its head signature with changed tokens highlighted (the base signature is behind a "base" toggle), its contract flags, and Used by and Depends on lists that lead to the code behind them.
+- Internal changes are one line each below. Cosmetic, test, and generated changes are behind a count.
+
+**Level 3, implementation view**
+
+- The entity's head code, highlighted. Until regions exist, changed lines inside the entity are marked and removed lines are collapsed markers. Unchanged code is folded. A removed entity shows its base code.
+- Previous and Next step through the component's entities. Changed type names and dependencies in the code are links. Callers in unchanged code open as a code location.
+- **Open in Xcode** runs `xed --line` on the file in your working copy (macOS, local server only).
+
+The focus is kept in the URL, so browser back and forward move through it. Escape goes up one level.
 
 To work on the viewer directly:
 
 ```sh
 cd viewer
 npm ci
-REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model at /api/model
+REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model, sources, and Open in Xcode
 npm test                                                  # logic tests against the analyzer fixture
 REVIEWMAP_MODEL=/path/to/change-model.json npm run build:single
 ```
 
-`build:single` writes `dist/index.html`, one self-contained file with the model embedded, which opens in any browser without a server. Without a model the page asks for a file, and `?model=<url>` loads one from a URL.
+`build:single` writes `dist/index.html`, one self-contained file with the model and the relevant source files embedded, which opens in any browser without a server. Sources are read from the repo at the model's commits (`REVIEWMAP_REPO` overrides the path recorded in the model, and `REVIEWMAP_EMBED_MAX` the 8 MB cap).
+
+The dev server reads file contents with `git show <sha>:<file>` in the repo recorded in the model, so it never touches the working copy. Without a model the page asks for a file, and `?model=<url>` loads one from a URL.
 
 ## reviewmap.yml
 

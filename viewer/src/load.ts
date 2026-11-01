@@ -8,6 +8,11 @@ declare global {
 
 export const SUPPORTED_VERSION = 1;
 
+export type ModelOrigin = "embedded" | "server" | "url" | "file";
+let origin: ModelOrigin = "file";
+/** Where the model came from. Only the local server can read sources from the repo and open Xcode. */
+export const modelOrigin = () => origin;
+
 export function validate(raw: unknown): ChangeModel {
   const m = raw as Partial<ChangeModel>;
   if (!m || typeof m !== "object" || !Array.isArray(m.components) || !Array.isArray(m.edges)) {
@@ -32,7 +37,10 @@ export function validate(raw: unknown): ChangeModel {
  * and the page asks for a file.
  */
 export async function loadInitialModel(): Promise<ChangeModel | null> {
-  if (window.__REVIEWMAP_MODEL__) return validate(window.__REVIEWMAP_MODEL__);
+  if (window.__REVIEWMAP_MODEL__) {
+    origin = "embedded";
+    return validate(window.__REVIEWMAP_MODEL__);
+  }
   const param = new URLSearchParams(location.search).get("model");
   const url = param ?? "/api/model";
   try {
@@ -41,7 +49,9 @@ export async function loadInitialModel(): Promise<ChangeModel | null> {
       if (param) throw new Error(`Couldn't load ${param}: HTTP ${res.status}`);
       return null;
     }
-    return validate(await res.json());
+    const model = validate(await res.json());
+    origin = param ? "url" : "server";
+    return model;
   } catch (err) {
     if (param) throw err;
     return null;
@@ -49,5 +59,6 @@ export async function loadInitialModel(): Promise<ChangeModel | null> {
 }
 
 export async function loadFile(file: File): Promise<ChangeModel> {
+  origin = "file";
   return validate(JSON.parse(await file.text()));
 }
