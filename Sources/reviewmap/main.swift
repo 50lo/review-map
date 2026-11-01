@@ -30,8 +30,8 @@ struct AnalyzeArgs: ParsableArguments {
     @Option(help: "Path to a reviewmap.yml (default: reviewmap.yml at the head of the repo, if present).")
     var config: String?
 
-    @Option(name: .shortAndLong, help: "Output file. Use - for stdout.")
-    var output: String = "change-model.json"
+    @Option(name: .shortAndLong, help: "Output file, or - for stdout (default: ~/.reviewmap/models/<repo>/<head>/change-model.json).")
+    var output: String?
 
     @Option(help: "Maximum references kept per edge.")
     var maxRefs: Int = 50
@@ -55,7 +55,9 @@ struct AnalyzeArgs: ParsableArguments {
             throw ValidationError("The viewer needs a file, not stdout.")
         }
         let start = Date()
-        let opts = AnalyzeOptions(repo: repo, base: base, head: head ?? Analyzer.currentBranch(repo: repo), useMergeBase: !noMergeBase,
+        let head = self.head ?? Analyzer.currentBranch(repo: repo)
+        let output = try self.output ?? ModelPath.default(repo: repo, head: head)
+        let opts = AnalyzeOptions(repo: repo, base: base, head: head, useMergeBase: !noMergeBase,
                                   configPath: config, maxRefsPerEdge: maxRefs, dumpPackage: dumpPackage)
         var model = try Analyzer.run(opts, log: log)
         if !noLLM {
@@ -139,8 +141,8 @@ struct Annotate: ParsableCommand {
         abstract: "Run the LLM annotator on an existing change model and write it back."
     )
 
-    @Argument(help: "The change model to annotate.")
-    var model: String = "change-model.json"
+    @Argument(help: "The change model to annotate (default: the model of the current branch of the repo in the current directory).")
+    var model: String?
 
     @Option(name: .shortAndLong, help: "Output file (default: overwrite the input). Use - for stdout.")
     var output: String?
@@ -148,6 +150,7 @@ struct Annotate: ParsableCommand {
     @OptionGroup var llm: LLMOptions
 
     func run() throws {
+        let model = try self.model ?? ModelPath.current()
         let input = try ChangeModelIO.decode(Data(contentsOf: URL(fileURLWithPath: model)))
         let annotated = try Annotator.run(input, options: llm.options, log: log)
         let data = try ChangeModelIO.encode(annotated)
@@ -158,6 +161,39 @@ struct Annotate: ParsableCommand {
             try data.write(to: URL(fileURLWithPath: out))
             log("Wrote \(out).")
         }
+    }
+}
+
+/// Where models go when no path is given: outside the target repo, one per repo and head,
+/// so reviewed marks and notes (saved next to the model) stay per branch.
+enum ModelPath {
+    static func `default`(repo: String, head: String) throws -> String {
+        let root: String
+        do {
+            root = try Analyzer.repoRoot(repo: repo)
+        } catch {
+            throw ValidationError("\(repo == "." ? "The current directory" : repo) is not inside a git repository. Pass a repo or model path.")
+        }
+        let dir = (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/models")
+            + "/" + slug((root as NSString).lastPathComponent) + "/" + slug(head)
+        try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return dir + "/change-model.json"
+    }
+
+    /// The default model of the current branch of the repo in the current directory.
+    static func current() throws -> String {
+        let path = try `default`(repo: ".", head: Analyzer.currentBranch(repo: "."))
+        guard FileManager.default.fileExists(atPath: path) else {
+            throw ValidationError("No change model at \(path). Run reviewmap first, or pass a model path.")
+        }
+        return path
+    }
+
+    /// "feature/login" → "feature-login"; anything outside letters, digits, dot, dash, and underscore becomes a dash.
+    static func slug(_ s: String) -> String {
+        let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+        let out = String(s.map { allowed.contains($0) ? $0 : "-" })
+        return out.isEmpty || out.allSatisfy({ $0 == "." }) ? "-" : out
     }
 }
 
