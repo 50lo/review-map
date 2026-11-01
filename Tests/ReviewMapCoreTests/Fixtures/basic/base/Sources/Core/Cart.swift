@@ -20,3 +20,7 @@ public final class Cart {
         return "\(value)"
     }
 }
+
+func rounded(_ value: Decimal) -> Decimal {
+    value
+}

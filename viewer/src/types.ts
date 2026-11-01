@@ -90,6 +90,16 @@ export interface Region {
   side: Side;
   risk: number;
   reasons: string[];
+  /** Context: the review regions it supports. */
+  supports?: string[];
+  /** Context: definition, caller, conformer, override, or state. */
+  relation?: string;
+  /** Context: the component the code belongs to. */
+  component?: string;
+  /** Context: the lines that matter. Missing means all of them. */
+  lines?: number[];
+  /** Removed regions inside a changed entity: the head line the removed code followed. */
+  anchor?: number;
   llm?: { risk: number; note: string };
 }
 

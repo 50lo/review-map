@@ -1,7 +1,7 @@
 // Pure logic for levels 2 and 3: how a component's entities are grouped and ordered, and where
 // a reference leads. Kept free of React so it can be tested against the fixture model.
 
-import { componentEntities, entityScore, type Index } from "./graph";
+import { componentEntities, entityRank, type Index } from "./graph";
 import type { Focus } from "./nav";
 import type { Entity, Usage } from "./types";
 
@@ -23,9 +23,9 @@ export interface InterfaceModel {
   hidden: Entity[];
 }
 
-const byScore = (a: Entity, b: Entity) => entityScore(b) - entityScore(a) || a.qualifiedName.localeCompare(b.qualifiedName);
 
 export function interfaceModel(index: Index, componentId: string): InterfaceModel {
+  const byScore = (a: Entity, b: Entity) => entityRank(index, b) - entityRank(index, a) || a.qualifiedName.localeCompare(b.qualifiedName);
   const { shown } = componentEntities(index, componentId);
   const shownIds = new Set(shown.map((e) => e.id));
   const hidden = (index.entitiesByComponent.get(componentId) ?? []).filter((e) => !shownIds.has(e.id));

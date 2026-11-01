@@ -10,3 +10,18 @@ public final class PaymentClient {
         if amount <= 0 { throw PaymentError.declined }
     }
 }
+
+open class Transport {
+    public init() {}
+
+    open func send(_ data: String) -> Bool {
+        if data.isEmpty { return false }
+        return true
+    }
+}
+
+final class LoggingTransport: Transport {
+    override func send(_ data: String) -> Bool {
+        super.send(data)
+    }
+}

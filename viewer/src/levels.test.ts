@@ -6,6 +6,7 @@ import { buildIndex } from "./graph";
 import { dependsOnTarget, interfaceModel, lastName, neighbors, reviewOrder, symbolTargets, usedByTarget } from "./levels";
 import { validate } from "./load";
 import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
+import { notesMarkdown } from "./review";
 
 const fixture = path.resolve(__dirname, "../../Tests/ReviewMapCoreTests/Fixtures/basic/expected.json");
 const model = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
@@ -65,10 +66,11 @@ describe("nav", () => {
       { type: "edge", key: "a->b" },
       { type: "interface", id: "cfg:Core" },
       { type: "entity", id: "cfg:Core::Cart.price(for:)" },
+      { type: "entity", id: "cfg:Core::Cart.add(_:)", region: "cfg:Core::Cart.add(_:)/r1" },
       { type: "location", side: "head", file: "Sources/A b/C.swift", line: 12 },
     ];
     for (const f of all) expect(hashToFocus("#" + focusToHash(f))).toEqual(f);
-    expect(all.map(levelOf)).toEqual([1, 1, 1, 2, 3, 3]);
+    expect(all.map(levelOf)).toEqual([1, 1, 1, 2, 3, 3, 3]);
   });
 });
 
@@ -117,5 +119,30 @@ describe("references", () => {
     expect(lastName("Cart.price(for:)")).toBe("price(for:)");
     expect(lastName("A.B.f(x.y:)")).toBe("f(x.y:)");
     expect(lastName("Cart")).toBe("Cart");
+  });
+});
+
+describe("review notes", () => {
+  it("exports notes as Markdown in file order", () => {
+    const md = notesMarkdown({
+      b: { text: "Why drop the limit?", entity: "x", label: "Cart.add(_:)", file: "Sources/Core/Cart.swift", startLine: 8, endLine: 8, side: "base" },
+      a: { text: "Check callers", entity: "y", label: "Item", file: "Sources/Core/Item.swift", startLine: 3, endLine: 5, side: "head" },
+      c: { text: "first", entity: "z", label: "Cart.first()", file: "Sources/Core/Cart.swift", startLine: 15, endLine: 17, side: "head" },
+    });
+    expect(md.split("\n").filter((l) => l.startsWith("**"))).toEqual([
+      "**`Sources/Core/Cart.swift:8`** (removed code) · Cart.add(_:)",
+      "**`Sources/Core/Cart.swift:15-17`** · Cart.first()",
+      "**`Sources/Core/Item.swift:3-5`** · Item",
+    ]);
+    expect(notesMarkdown({})).toBe("");
+  });
+});
+
+describe("context regions", () => {
+  it("each supports a review or removed region of its entity", () => {
+    for (const [entity, cs] of index.contextByEntity) {
+      const own = new Set((index.regionsByEntity.get(entity) ?? []).map((r) => r.id));
+      for (const c of cs) expect(c.supports?.every((id) => own.has(id))).toBe(true);
+    }
   });
 });

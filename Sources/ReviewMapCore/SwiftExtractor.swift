@@ -40,6 +40,8 @@ struct Decl {
     var parentKind: EntityKind?
     var startLine: Int
     var endLine: Int
+    /// Last line of the declaration's header: the line of the opening brace of its body or members.
+    var headerEndLine: Int = 0
 
     var isContainer: Bool {
         switch kind {
@@ -62,6 +64,8 @@ struct ParsedFile {
     var typeRefs: [NameRef]
     /// Names used after a dot (`x.foo`), for member-level usage.
     var memberRefs: [NameRef]
+    /// Risk-relevant constructs per line (force unwraps, checks, branches, concurrency).
+    var marks: [Int: [LineMark]] = [:]
 
     /// Innermost declaration containing `line`.
     func enclosingDecl(line: Int) -> Decl? {
@@ -85,8 +89,10 @@ enum SwiftExtractor {
         declVisitor.walk(tree)
         let refVisitor = RefVisitor(converter: converter)
         refVisitor.walk(tree)
+        let markVisitor = MarkVisitor(converter: converter)
+        markVisitor.walk(tree)
         return ParsedFile(path: path, decls: declVisitor.decls, imports: refVisitor.imports,
-                          typeRefs: refVisitor.typeRefs, memberRefs: refVisitor.memberRefs)
+                          typeRefs: refVisitor.typeRefs, memberRefs: refVisitor.memberRefs, marks: markVisitor.marks)
     }
 }
 
@@ -224,7 +230,9 @@ private final class DeclVisitor: SyntaxVisitor {
             access: am.access, attributes: am.attrs, modifiers: am.mods, inherited: inheritedNames(inheritance),
             isStatic: false, inProtocol: current.kind == .protocol, parentKind: current.kind,
             startLine: s, endLine: e)
-        let idx = add(d)
+        var dd = d
+        dd.headerEndLine = converter.location(for: memberBlock.leftBrace.positionAfterSkippingLeadingTrivia).line
+        let idx = add(dd)
         stack.append(Scope(qualified: scopeName ?? qualified, index: idx, kind: kind))
         return .visitChildren
     }
@@ -299,6 +307,7 @@ private final class DeclVisitor: SyntaxVisitor {
             access: am.access, attributes: am.attrs, modifiers: am.mods, inherited: [],
             isStatic: am.isStatic, inProtocol: current.kind == .protocol, parentKind: current.kind,
             startLine: s, endLine: e)
+        d.headerEndLine = max(s, converter.location(for: body?.positionAfterSkippingLeadingTrivia ?? node.endPositionBeforeTrailingTrivia).line)
         if let effects {
             d.isAsync = effects.asyncSpecifier != nil
             d.isThrows = effects.throwsClause != nil
@@ -403,6 +412,9 @@ private final class DeclVisitor: SyntaxVisitor {
                 access: am.access, attributes: am.attrs, modifiers: am.mods, inherited: [],
                 isStatic: am.isStatic, inProtocol: inProto, parentKind: current.kind,
                 startLine: s, endLine: e)
+            let headerEnd = binding.accessorBlock?.positionAfterSkippingLeadingTrivia
+                ?? binding.initializer?.positionAfterSkippingLeadingTrivia ?? node.endPositionBeforeTrailingTrivia
+            d.headerEndLine = max(s, converter.location(for: headerEnd).line)
             d.isStored = stored && !inProto
             d.isAsync = isAsync
             d.isThrows = isThrows
@@ -416,6 +428,7 @@ private final class DeclVisitor: SyntaxVisitor {
     override func visit(_ node: EnumCaseDeclSyntax) -> SyntaxVisitorContinueKind {
         for el in node.elements {
             let name = el.name.text
+            let caseLines = lines(el)
             let toks: [TokenSyntax] = [node.caseKeyword] + el.tokens(viewMode: .sourceAccurate).filter { $0.tokenKind != .comma }
             var labelsKey = name
             if let params = el.parameterClause {
@@ -429,7 +442,7 @@ private final class DeclVisitor: SyntaxVisitor {
                 signatureDisplay: display(toks), signatureCanon: toks.map(\.text).joined(separator: " "),
                 modifiersCanon: am.canon, bodyCanon: "", rawText: el.trimmedDescription,
                 access: nil, attributes: am.attrs, modifiers: am.mods, inherited: [],
-                parentKind: current.kind, startLine: s, endLine: e))
+                parentKind: current.kind, startLine: s, endLine: e, headerEndLine: caseLines.1))
             _ = labelsKey
         }
         return .skipChildren
@@ -508,6 +521,138 @@ private final class RefVisitor: SyntaxVisitor {
 
     override func visit(_ node: MacroExpansionDeclSyntax) -> SyntaxVisitorContinueKind {
         typeRefs.append(NameRef(name: node.macroName.text, line: line(node)))
+        return .visitChildren
+    }
+}
+
+// MARK: - Line marks
+
+/// A construct on one line that matters for risk: a crash point, a check, a branch, or a
+/// concurrency primitive.
+struct LineMark: Hashable {
+    enum Kind: String { case crash, check, flow, concurrency }
+    var kind: Kind
+    var label: String
+}
+
+private let concurrencyCalls: [String: String] = [
+    "Task": "Task", "detached": "Task.detached", "run": "MainActor.run",
+    "withTaskGroup": "task group", "withThrowingTaskGroup": "task group", "withDiscardingTaskGroup": "task group",
+    "withCheckedContinuation": "continuation", "withCheckedThrowingContinuation": "continuation",
+    "withUnsafeContinuation": "continuation", "withUnsafeThrowingContinuation": "continuation",
+]
+private let lockNames: Set<String> = ["NSLock", "NSRecursiveLock", "OSAllocatedUnfairLock", "Mutex", "DispatchSemaphore", "DispatchQueue"]
+
+private final class MarkVisitor: SyntaxVisitor {
+    let converter: SourceLocationConverter
+    var marks: [Int: [LineMark]] = [:]
+
+    init(converter: SourceLocationConverter) {
+        self.converter = converter
+        super.init(viewMode: .sourceAccurate)
+    }
+
+    private func mark(_ node: some SyntaxProtocol, _ kind: LineMark.Kind, _ label: String) {
+        let line = converter.location(for: node.positionAfterSkippingLeadingTrivia).line
+        let m = LineMark(kind: kind, label: label)
+        if !(marks[line]?.contains(m) ?? false) { marks[line, default: []].append(m) }
+    }
+
+    override func visit(_ node: ForceUnwrapExprSyntax) -> SyntaxVisitorContinueKind {
+        mark(node.exclamationMark, .crash, "force unwrap")
+        return .visitChildren
+    }
+
+    override func visit(_ node: TryExprSyntax) -> SyntaxVisitorContinueKind {
+        switch node.questionOrExclamationMark?.tokenKind {
+        case .exclamationMark?: mark(node, .crash, "try!")
+        case .postfixQuestionMark?: mark(node, .flow, "try?")
+        default: break
+        }
+        return .visitChildren
+    }
+
+    override func visit(_ node: AsExprSyntax) -> SyntaxVisitorContinueKind {
+        if node.questionOrExclamationMark?.tokenKind == .exclamationMark { mark(node.asKeyword, .crash, "as!") }
+        return .visitChildren
+    }
+
+    override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
+        var name: String?
+        var base: String?
+        if let ref = node.calledExpression.as(DeclReferenceExprSyntax.self) {
+            name = ref.baseName.text
+        } else if let member = node.calledExpression.as(MemberAccessExprSyntax.self) {
+            name = member.declName.baseName.text
+            base = member.base?.as(DeclReferenceExprSyntax.self)?.baseName.text
+        }
+        guard let name else { return .visitChildren }
+        switch name {
+        case "fatalError", "preconditionFailure": mark(node, .crash, name)
+        case "precondition", "assert", "assertionFailure", "dispatchPrecondition": mark(node, .check, name)
+        default:
+            if let label = concurrencyCalls[name] {
+                let ok = name == "detached" ? base == "Task" : name == "run" ? base == "MainActor" : base == nil
+                if ok { mark(node, .concurrency, label) }
+            }
+        }
+        return .visitChildren
+    }
+
+    override func visit(_ node: DeclReferenceExprSyntax) -> SyntaxVisitorContinueKind {
+        if lockNames.contains(node.baseName.text) { mark(node, .concurrency, node.baseName.text) }
+        return .visitChildren
+    }
+
+    override func visit(_ node: AttributeSyntax) -> SyntaxVisitorContinueKind {
+        // Attributes on closures inside code; declaration attributes are covered by contract flags.
+        let name = node.attributeName.trimmedDescription
+        if ["MainActor", "Sendable"].contains(name), node.ancestorOrSelf(mapping: { $0.as(ClosureSignatureSyntax.self) }) != nil {
+            mark(node, .concurrency, "@" + name + " closure")
+        }
+        return .visitChildren
+    }
+
+    override func visit(_ node: DeclModifierSyntax) -> SyntaxVisitorContinueKind {
+        if node.name.text == "nonisolated", node.detail?.detail.text == "unsafe" { mark(node, .concurrency, "nonisolated(unsafe)") }
+        return .visitChildren
+    }
+
+    override func visit(_ node: IfExprSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "if"); return .visitChildren }
+    override func visit(_ node: SwitchExprSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "switch"); return .visitChildren }
+    override func visit(_ node: TernaryExprSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "?:"); return .visitChildren }
+    override func visit(_ node: ForStmtSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "for"); return .visitChildren }
+    override func visit(_ node: WhileStmtSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "while"); return .visitChildren }
+    override func visit(_ node: RepeatStmtSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "repeat"); return .visitChildren }
+    override func visit(_ node: CatchClauseSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "catch"); return .visitChildren }
+    override func visit(_ node: BreakStmtSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "break"); return .visitChildren }
+    override func visit(_ node: ContinueStmtSyntax) -> SyntaxVisitorContinueKind { mark(node, .flow, "continue"); return .visitChildren }
+
+    override func visit(_ node: GuardStmtSyntax) -> SyntaxVisitorContinueKind {
+        mark(node, .check, "guard")
+        mark(node, .flow, "guard")
+        return .visitChildren
+    }
+
+    override func visit(_ node: ThrowStmtSyntax) -> SyntaxVisitorContinueKind {
+        mark(node, .check, "throw")
+        mark(node, .flow, "throw")
+        return .visitChildren
+    }
+
+    override func visit(_ node: ReturnStmtSyntax) -> SyntaxVisitorContinueKind {
+        // A return inside an if or guard, before the end of the function, is an early exit.
+        var p = node.parent
+        while let cur = p {
+            if cur.is(ClosureExprSyntax.self) || cur.is(FunctionDeclSyntax.self) || cur.is(AccessorDeclSyntax.self)
+                || cur.is(InitializerDeclSyntax.self) { break }
+            if cur.is(IfExprSyntax.self) || cur.is(GuardStmtSyntax.self) {
+                mark(node, .check, "early return")
+                mark(node, .flow, "early return")
+                break
+            }
+            p = cur.parent
+        }
         return .visitChildren
     }
 }

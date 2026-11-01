@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel } from "./types";
-import { buildIndex, edgeKey, mapFocus, visible, type Index, type MapOptions } from "./graph";
+import { buildIndex, edgeKey, mapFocus, stepRegion, visible, type Index, type MapOptions } from "./graph";
 import { lastName } from "./levels";
 import { loadFile, loadInitialModel } from "./load";
 import { MapView } from "./MapView";
 import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
 import { EntityPage, InterfacePage, LocationPage } from "./Pages";
+import { initReview } from "./review";
 import { Sidebar } from "./Sidebar";
 
 // Focus lives in the URL hash, so browser back/forward walk the focus history.
@@ -74,7 +75,10 @@ export function App() {
 
   useEffect(() => {
     loadInitialModel()
-      .then(setModel)
+      .then(async (m) => {
+        if (m) await initReview(m);
+        setModel(m);
+      })
       .catch((e) => setError(String(e?.message ?? e)))
       .finally(() => setLoading(false));
   }, []);
@@ -86,7 +90,15 @@ export function App() {
 
 function Picker({ error, onModel, onError }: { error: string | null; onModel: (m: ChangeModel) => void; onError: (e: string) => void }) {
   const [over, setOver] = useState(false);
-  const take = (f?: File) => f && loadFile(f).then(onModel, (e) => onError(String(e?.message ?? e)));
+  const take = (f?: File) =>
+    f &&
+    loadFile(f).then(
+      async (m) => {
+        await initReview(m);
+        onModel(m);
+      },
+      (e) => onError(String(e?.message ?? e)),
+    );
   return (
     <div
       className={`empty picker ${over ? "over" : ""}`}
@@ -135,11 +147,21 @@ function Viewer({ model }: { model: ChangeModel }) {
     const changesPage = levelOf(f) > 1 || levelOf(readFocus()) > 1;
     writeFocus(f);
     setFocusState(f);
-    if (changesPage) document.querySelector(".page")?.scrollTo(0, 0);
+    // A region focus scrolls to the region once its code is shown.
+    if (changesPage && !(f?.type === "entity" && f.region)) document.querySelector(".page")?.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      // Next and previous region in risk order, from anywhere.
+      if (e.key === "j" || e.key === "]" || e.key === "k" || e.key === "[") {
+        const next = stepRegion(index, readFocus(), e.key === "j" || e.key === "]" ? 1 : -1);
+        if (JSON.stringify(next) !== JSON.stringify(readFocus())) setFocus(next);
+        return;
+      }
       if (e.key !== "Escape") return;
       const f = readFocus();
       // A code location has no parent of its own; go back to where it was opened from.
@@ -235,7 +257,7 @@ function Viewer({ model }: { model: ChangeModel }) {
         {level > 1 && (
           <div className="page">
             {focus?.type === "interface" && <InterfacePage index={index} id={focus.id} go={setFocus} />}
-            {focus?.type === "entity" && <EntityPage index={index} id={focus.id} go={setFocus} />}
+            {focus?.type === "entity" && <EntityPage index={index} id={focus.id} region={focus.region} go={setFocus} />}
             {focus?.type === "location" && <LocationPage index={index} side={focus.side} file={focus.file} line={focus.line} go={setFocus} />}
           </div>
         )}

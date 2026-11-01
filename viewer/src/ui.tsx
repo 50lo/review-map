@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { flagLabel } from "./graph";
 import { signatureSegments } from "./diff";
+import { setReviewed, useReview } from "./review";
 import type { Entity } from "./types";
 
 export const Chips = ({ flags }: { flags: string[] }) =>
@@ -54,5 +55,17 @@ export function Signature({ e }: { e: Entity }) {
       </div>
       {showBase && <div className="sig mono base-sig">{base}</div>}
     </div>
+  );
+}
+
+/** The reviewed checkbox of an entity. */
+export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) {
+  const review = useReview();
+  const on = !!review.reviewed[id];
+  return (
+    <label className={`reviewed ${compact ? "compact" : ""} ${on ? "on" : ""}`} title={on ? "Reviewed" : "Mark as reviewed"} onClick={(ev) => ev.stopPropagation()}>
+      <input type="checkbox" checked={on} onChange={(ev) => setReviewed(id, ev.target.checked)} />
+      {!compact && <span>Reviewed</span>}
+    </label>
   );
 }

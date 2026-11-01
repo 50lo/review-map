@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { buildIndex, componentEntities, edgeKey, flagLabel, related, startHere, visible } from "./graph";
+import { buildIndex, componentEntities, edgeKey, flagLabel, regionPosition, related, startHere, stepRegion, visible } from "./graph";
 import { layout } from "./layout";
 import { validate } from "./load";
 
@@ -67,30 +67,49 @@ describe("related", () => {
 
 describe("startHere", () => {
   const items = startHere(index);
+  const flagsOnly = buildIndex({ ...model, regions: [] });
 
-  it("falls back to contract flags when there are no regions", () => {
-    expect(model.regions.length).toBe(0);
+  it("ranks by regions when the analyzer scores them", () => {
+    expect(index.hasRegions).toBe(true);
     expect(items.length).toBe(10);
-    expect(items.every((i) => i.source === "flags")).toBe(true);
+    expect(items.every((i) => i.source === "regions")).toBe(true);
+    for (let i = 1; i < items.length; i++) expect(items[i - 1].score).toBeGreaterThanOrEqual(items[i].score);
   });
 
-  it("leaves out cosmetic changes and folds members into their parent", () => {
-    const names = items.map((i) => i.entity.qualifiedName);
+  it("leads each item to its riskiest region", () => {
+    const add = items.find((i) => i.entity.qualifiedName === "Cart.add(_:)")!;
+    expect(add.focus).toEqual({ type: "entity", id: add.entity.id, region: `${add.entity.id}/r1` });
+    expect(add.reasons.some((r) => r.includes("guard removed"))).toBe(true);
+  });
+
+  it("ranks a removed guard above a new force unwrap", () => {
+    const all = startHere(index, 100);
+    const rank = (n: string) => all.findIndex((i) => i.entity.qualifiedName === n);
+    expect(rank("Cart.add(_:)")).toBeGreaterThanOrEqual(0);
+    expect(rank("Cart.add(_:)")).toBeLessThan(rank("Cart.first()"));
+  });
+
+  it("leaves out cosmetic and test changes and folds members into their parent", () => {
+    const all = startHere(index, 100);
+    const names = all.map((i) => i.entity.qualifiedName);
     expect(names).not.toContain("CatalogView.title()");
+    expect(names).not.toContain("CheckoutTests.testTotal()");
     expect(names).toContain("Item");
     expect(names).not.toContain("Item.price");
-    const item = items.find((i) => i.entity.qualifiedName === "Item")!;
+    const item = all.find((i) => i.entity.qualifiedName === "Item")!;
     expect(item.members.map((m) => m.qualifiedName)).toContain("Item.currency");
     expect(item.reasons).toContain("codable-shape");
   });
 
-  it("ranks interface contract changes above plain body changes", () => {
-    const rank = (n: string) => items.findIndex((i) => i.entity.qualifiedName === n);
+  it("falls back to contract flags without regions", () => {
+    const flagItems = startHere(flagsOnly);
+    expect(flagItems.every((i) => i.source === "flags")).toBe(true);
+    const rank = (n: string) => flagItems.findIndex((i) => i.entity.qualifiedName === n);
     expect(rank("CartRepository")).toBeGreaterThanOrEqual(0);
     expect(rank("CartRepository")).toBeLessThan(5);
   });
 
-  it("uses regions when the analyzer provides them", () => {
+  it("groups an entity's regions into one item scored by the riskiest", () => {
     const e = model.entities[0];
     const withRegions = buildIndex({
       ...model,
@@ -100,7 +119,36 @@ describe("startHere", () => {
         { id: "r3", entity: e.id, kind: "context", file: "a", startLine: 5, endLine: 6, side: "head", risk: 1, reasons: [] },
       ],
     });
-    expect(startHere(withRegions).map((i) => i.id)).toEqual(["r2", "r1"]);
+    const got = startHere(withRegions);
+    expect(got.map((i) => [i.id, i.score, i.regionCount])).toEqual([["r2", 0.9, 2]]);
+    expect(got[0].reasons).toEqual(["high", "low"]);
+  });
+});
+
+describe("region stepping", () => {
+  const order = index.riskOrder;
+
+  it("orders review and removed regions by risk, without context or test code", () => {
+    expect(order.length).toBeGreaterThan(5);
+    expect(order.every((r) => r.kind !== "context")).toBe(true);
+    expect(order.some((r) => r.entity.includes("CheckoutTests"))).toBe(false);
+    for (let i = 1; i < order.length; i++) expect(order[i - 1].risk).toBeGreaterThanOrEqual(order[i].risk);
+  });
+
+  it("steps forward and back from anywhere", () => {
+    const first = stepRegion(index, null, 1);
+    expect(first).toEqual({ type: "entity", id: order[0].entity, region: order[0].id });
+    expect(regionPosition(index, first)).toBe(1);
+    const second = stepRegion(index, first, 1);
+    expect(regionPosition(index, second)).toBe(2);
+    expect(stepRegion(index, second, -1)).toEqual(first);
+    expect(stepRegion(index, first, -1)).toEqual(first);
+    expect(regionPosition(index, stepRegion(index, null, -1))).toBe(order.length);
+  });
+
+  it("enters an entity's riskiest region first", () => {
+    const r = order[3];
+    expect(stepRegion(index, { type: "entity", id: r.entity }, 1)).toEqual({ type: "entity", id: r.entity, region: order.find((x) => x.entity === r.entity)!.id });
   });
 });
 

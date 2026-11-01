@@ -13,6 +13,8 @@
   --unchanged: #9a9aa2;
   --chip: #eef1f8;
   --chip-fg: #2a3d66;
+  --region: #d4910a;
+  --context: #7b5cd6;
   color-scheme: light;
 }
 
@@ -32,6 +34,8 @@
     --unchanged: #6d6d76;
     --chip: #2a3042;
     --chip-fg: #c9d6ff;
+    --region: #f0b23a;
+    --context: #b39dff;
     color-scheme: dark;
   }
 }
@@ -51,6 +55,8 @@
   --unchanged: #6d6d76;
   --chip: #2a3042;
   --chip-fg: #c9d6ff;
+  --region: #f0b23a;
+  --context: #b39dff;
   color-scheme: dark;
 }
 
@@ -819,6 +825,7 @@ code,
 /* ---------- code ---------- */
 
 .code {
+  container-type: inline-size;
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -995,4 +1002,242 @@ code,
 }
 .crumbs > .crumb:first-of-type {
   flex: none;
+}
+
+/* ---------- regions, context, notes, review progress ---------- */
+
+.cl.in-region {
+  border-left-color: var(--region);
+  background: color-mix(in srgb, var(--region) 9%, transparent);
+}
+.cl.in-region.region-focus {
+  background: color-mix(in srgb, var(--region) 17%, transparent);
+}
+/* Blocks inside the scrolling code stay at the visible left edge, one screen wide. */
+.region-head,
+.note,
+.ctx-list {
+  position: sticky;
+  left: 0;
+  width: 100cqi;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+}
+.region-head {
+  border-left: 3px solid var(--region);
+  background: color-mix(in srgb, var(--region) 16%, var(--panel));
+  margin-top: 6px;
+}
+.region-head.region-focus,
+.removed-block.region-focus .rh {
+  box-shadow: inset 0 0 0 1px var(--region);
+}
+.removed-block.in-region .rh {
+  position: sticky;
+  left: 0;
+  width: calc(100cqi - 3px);
+  background: color-mix(in srgb, var(--removed) 12%, var(--panel));
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+}
+.rh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.rh-reasons {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  flex: 1 1 12em;
+  min-width: 0;
+}
+.reason {
+  overflow-wrap: anywhere;
+}
+.reason + .reason::before {
+  content: "· ";
+  color: var(--muted);
+}
+.rh-actions {
+  display: inline-flex;
+  gap: 10px;
+  margin-left: auto;
+}
+.risk {
+  display: inline-block;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #fff;
+  background: var(--unchanged);
+}
+.risk-high {
+  background: var(--removed);
+}
+.risk-medium {
+  background: var(--changed);
+}
+.ctx-list {
+  padding: 2px 0 4px;
+}
+.ctx {
+  border-left: 3px solid var(--context);
+  margin: 2px 0 0;
+  background: color-mix(in srgb, var(--context) 6%, var(--panel));
+}
+.ctx-label {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 6px;
+  align-items: baseline;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ctx-label:hover .ctx-name {
+  color: var(--accent);
+}
+.ctx-chev {
+  color: var(--muted);
+  width: 1em;
+}
+.ctx-rel {
+  color: var(--context);
+  font-weight: 600;
+}
+.ctx-name {
+  overflow-wrap: anywhere;
+}
+.ctx-body {
+  padding: 0 8px 6px;
+}
+.ctx-body .code {
+  border-color: color-mix(in srgb, var(--context) 40%, var(--line));
+  margin-bottom: 4px;
+}
+.ctx-body .cl.kept {
+  border-left-color: var(--context);
+  background: color-mix(in srgb, var(--context) 9%, transparent);
+}
+.note {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: flex-start;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+  padding: 6px 8px;
+  font-size: 13px;
+}
+.note-text {
+  flex: 1 1 14em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.note textarea {
+  flex: 1 1 100%;
+  font: inherit;
+  color: inherit;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px;
+  resize: vertical;
+}
+.note-actions {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+.reviewed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  margin-right: 6px;
+}
+.reviewed input {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  accent-color: var(--added);
+}
+.reviewed.on span {
+  color: var(--added);
+  font-weight: 600;
+}
+.with-check {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+  align-items: baseline;
+}
+.with-check > :not(.reviewed) {
+  grid-column: 2;
+}
+.with-check > .reviewed {
+  grid-row: 1;
+  align-self: center;
+}
+.card {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 8px;
+}
+.card > :not(.reviewed) {
+  grid-column: 2;
+}
+.card > .reviewed {
+  grid-row: 1;
+  align-self: start;
+  margin-top: 2px;
+}
+.start li.is-reviewed .row {
+  opacity: 0.6;
+}
+.progress,
+.node-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--added) 15%, var(--line));
+  overflow: hidden;
+}
+.progress span,
+.node-progress span {
+  display: block;
+  height: 100%;
+  background: var(--added);
+}
+.node-progress {
+  margin-top: 4px;
+  height: 3px;
+}
+.notes-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.notes-list li + li {
+  margin-top: 6px;
+}
+.notes-list .small {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.step-all {
+  margin: 0 0 8px;
+}
+@media (hover: none) {
+  .kbd-hint {
+    display: none;
+  }
 }
