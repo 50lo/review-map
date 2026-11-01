@@ -23,6 +23,15 @@ export interface Index {
   externalChange: Map<string, ExternalDepChange>;
   entitiesByComponent: Map<string, Entity[]>;
   entities: Map<string, Entity>;
+  /** True once the analyzer scores regions; before that, ranking falls back to contract flags. */
+  hasRegions: boolean;
+  /** Review and removed regions per entity, in line order. */
+  regionsByEntity: Map<string, Region[]>;
+  /** Context regions per entity. */
+  contextByEntity: Map<string, Region[]>;
+  regions: Map<string, Region>;
+  /** Review and removed regions of entities in the default views, highest risk first. */
+  riskOrder: Region[];
 }
 
 export const edgeKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`;
@@ -41,8 +50,36 @@ export function buildIndex(model: ChangeModel): Index {
     entitiesByComponent.set(e.component, [...(entitiesByComponent.get(e.component) ?? []), e]);
   }
   const entities = new Map(model.entities.map((e) => [e.id, e]));
-  return { model, components, children, externalChange, entitiesByComponent, entities };
+  const regionsByEntity = new Map<string, Region[]>();
+  const contextByEntity = new Map<string, Region[]>();
+  for (const r of model.regions) {
+    const m = r.kind === "context" ? contextByEntity : regionsByEntity;
+    m.set(r.entity, [...(m.get(r.entity) ?? []), r]);
+  }
+  const index: Index = {
+    model,
+    components,
+    children,
+    externalChange,
+    entitiesByComponent,
+    entities,
+    hasRegions: regionsByEntity.size > 0,
+    regionsByEntity,
+    contextByEntity,
+    regions: new Map(model.regions.map((r) => [r.id, r])),
+    riskOrder: [],
+  };
+  const pos = new Map(model.entities.map((e, i) => [e.id, i]));
+  index.riskOrder = model.regions
+    .filter((r) => r.kind !== "context" && entities.has(r.entity) && !isLowRisk(index, entities.get(r.entity)!))
+    .sort((a, b) => regionRisk(b) - regionRisk(a) || pos.get(a.entity)! - pos.get(b.entity)! || a.startLine - b.startLine);
+  return index;
 }
+
+export const regionRisk = (r: Region) => r.llm?.risk ?? r.risk;
+
+/** Risk tier for display: high, medium, or low. */
+export const riskTier = (risk: number) => (risk >= 0.6 ? "high" : risk >= 0.3 ? "medium" : "low");
 
 export function externalChangeOf(index: Index, c: Component): ExternalDepChange | undefined {
   if (c.kind !== "external") return undefined;
@@ -183,9 +220,9 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
 // Start here
 
 /**
- * Flag weights for the interim ranking used until the analyzer emits risk regions
- * (milestone 4). They follow the brief's table: concurrency and persisted or networked
- * models are high, other contract changes medium.
+ * Flag weights for ranking a model without regions (from an analyzer that doesn't score them).
+ * They follow the brief's table: concurrency and persisted or networked models are high, other
+ * contract changes medium.
  */
 const flagWeight = (flag: string): number => {
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
@@ -205,60 +242,117 @@ export function entityScore(e: Entity): number {
 }
 
 export interface StartItem {
-  /** Region id or entity id. */
+  /** Top region id, or entity id in the interim ranking. */
   id: string;
+  /** The entity the row names: the top region's entity, or the type it is a member of. */
   entity: Entity;
+  /** Where the row leads: the highest-risk region. */
+  focus: Focus;
   score: number;
   reasons: string[];
-  /** Member entities folded into this item (interim ranking only). */
+  /** Member entities folded into this item. */
   members: Entity[];
+  /** Review and removed regions behind the item. */
+  regionCount: number;
   source: "regions" | "flags";
 }
 
-function isLowRisk(index: Index, e: Entity): boolean {
+/** Reasons the analyzer gives a region that has no specific risk signal. */
+const FALLBACK_REASONS = new Set(["changed lines", "new declaration", "removed declaration", "removed lines", "signature changed", "modifiers changed", "changed", "new file", "removed file"]);
+
+export function isLowRisk(index: Index, e: Entity): boolean {
   const c = index.components.get(e.component);
   return e.change === "cosmetic" || !!e.tags?.some((t) => t === "test" || t === "generated") || !!c?.isTest;
 }
 
+/** Highest region risk of an entity, or the contract-flag score before regions exist. */
+export function entityRank(index: Index, e: Entity): number {
+  if (!index.hasRegions) return entityScore(e);
+  return Math.max(0, ...(index.regionsByEntity.get(e.id) ?? []).map(regionRisk));
+}
+
+/**
+ * The highest-risk places in the change. With regions, each item is an entity (with its changed
+ * members folded in) scored by its riskiest region; before regions exist, entities are ranked by
+ * their contract flags.
+ */
 export function startHere(index: Index, limit = 10): StartItem[] {
   const { model } = index;
-  const reviewRegions = model.regions.filter((r: Region) => r.kind !== "context");
-  if (reviewRegions.length > 0) {
-    return reviewRegions
-      .map((r) => ({ r, e: index.entities.get(r.entity) }))
-      .filter((x): x is { r: Region; e: Entity } => !!x.e && !isLowRisk(index, x.e))
-      .map(({ r, e }) => ({ id: r.id, entity: e, score: r.llm?.risk ?? r.risk, reasons: r.reasons, members: [], source: "regions" as const }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
-  }
-
-  // Interim: rank entities by contract flags, folding members into their listed parent
-  // so one Codable type doesn't fill the whole list.
-  const candidates = model.entities.filter((e) => !isLowRisk(index, e) && entityScore(e) > 0);
+  const fromRegions = index.hasRegions;
+  const candidates = model.entities.filter((e) =>
+    fromRegions ? !isLowRisk(index, e) && index.regionsByEntity.has(e.id) : !isLowRisk(index, e) && entityScore(e) > 0,
+  );
+  // Fold members into their listed parent, so one Codable type doesn't fill the whole list.
   const listed = new Set(candidates.map((e) => e.id));
   const rootOf = (e: Entity): string => {
     let cur = e;
     while (cur.parent && listed.has(cur.parent)) cur = index.entities.get(cur.parent)!;
     return cur.id;
   };
-  const groups = new Map<string, StartItem>();
+  const groups = new Map<string, StartItem & { ranked: Array<{ risk: number; reasons: string[] }> }>();
   for (const e of candidates) {
     const root = rootOf(e);
-    const score = entityScore(e);
     let item = groups.get(root);
     if (!item) {
       const r = index.entities.get(root)!;
-      item = { id: root, entity: r, score: 0, reasons: [], members: [], source: "flags" };
+      item = { id: root, entity: r, focus: { type: "entity", id: root }, score: -1, reasons: [], members: [], regionCount: 0, source: fromRegions ? "regions" : "flags", ranked: [] };
       groups.set(root, item);
     }
     if (e.id !== root) item.members.push(e);
-    item.score = Math.max(item.score, score);
-    for (const f of e.contractFlags) if (!item.reasons.includes(f)) item.reasons.push(f);
+    if (fromRegions) {
+      for (const r of index.regionsByEntity.get(e.id)!) {
+        item.regionCount++;
+        item.ranked.push({ risk: regionRisk(r), reasons: r.reasons });
+        if (regionRisk(r) > item.score) {
+          item.score = regionRisk(r);
+          item.id = r.id;
+          item.focus = { type: "entity", id: r.entity, region: r.id };
+        }
+      }
+    } else {
+      item.score = Math.max(item.score, entityScore(e));
+      item.ranked.push({ risk: entityScore(e), reasons: e.contractFlags });
+    }
   }
   return [...groups.values()]
-    .map((g) => (g.reasons.length === 0 ? { ...g, reasons: [g.entity.change] } : g))
+    .map(({ ranked, ...g }) => {
+      const reasons: string[] = [];
+      let usage = 0;
+      for (const r of ranked.sort((a, b) => b.risk - a.risk)) {
+        for (const x of r.reasons) {
+          const used = /^used from (\d+) /.exec(x);
+          if (used) usage = Math.max(usage, Number(used[1]));
+          else if (!reasons.includes(x) && !FALLBACK_REASONS.has(x)) reasons.push(x);
+        }
+      }
+      if (usage) reasons.push(`used from ${usage} component${usage === 1 ? "" : "s"}`);
+      return { ...g, reasons: reasons.length ? reasons : [ranked[0]?.reasons[0] ?? g.entity.change] };
+    })
     .sort((a, b) => b.score - a.score || a.entity.qualifiedName.localeCompare(b.entity.qualifiedName))
     .slice(0, limit);
+}
+
+/** Where the region shortcuts go from the current focus: the next or previous region in risk order. */
+export function stepRegion(index: Index, focus: Focus, dir: 1 | -1): Focus {
+  const order = index.riskOrder;
+  if (order.length === 0) return focus;
+  let target: number;
+  const at = focus?.type === "entity" && focus.region ? order.findIndex((r) => r.id === focus.region) : -1;
+  const entityFirst = focus?.type === "entity" ? order.findIndex((r) => r.entity === focus.id) : -1;
+  if (at >= 0) target = at + dir;
+  // On an entity with no region in focus, next enters its riskiest region.
+  else if (entityFirst >= 0) target = dir === 1 ? entityFirst : entityFirst - 1;
+  else target = dir === 1 ? 0 : order.length - 1;
+  if (target < 0 || target >= order.length) return focus;
+  return toFocus(order[target]);
+}
+
+const toFocus = (r: Region): Focus => ({ type: "entity", id: r.entity, region: r.id });
+
+/** 1-based position of the focused region in risk order, or 0. */
+export function regionPosition(index: Index, focus: Focus): number {
+  if (focus?.type !== "entity" || !focus.region) return 0;
+  return index.riskOrder.findIndex((r) => r.id === focus.region) + 1;
 }
 
 /** Entities of a component for the side panel: interface changes first, cosmetic counted separately. */
@@ -268,7 +362,7 @@ export function componentEntities(index: Index, id: string): { shown: Entity[]; 
   const lowRisk = all.filter((e) => e.change !== "cosmetic" && isLowRisk(index, e)).length;
   const shown = all
     .filter((e) => e.change !== "cosmetic" && !isLowRisk(index, e))
-    .sort((a, b) => Number(b.isInterface) - Number(a.isInterface) || entityScore(b) - entityScore(a));
+    .sort((a, b) => Number(b.isInterface) - Number(a.isInterface) || entityRank(index, b) - entityRank(index, a));
   return { shown, cosmetic, lowRisk };
 }
 

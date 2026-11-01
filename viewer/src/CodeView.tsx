@@ -1,9 +1,21 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { foldRows } from "./diff";
 import { highlightFile, type Tok } from "./highlight";
 import type { Focus } from "./nav";
 import { getSource, sourceHint } from "./source";
 import type { Side } from "./types";
+
+/** A review or removed region, in shown-line indices (0 = startLine). */
+export interface CodeRegion {
+  id: string;
+  /** Review: the highlighted lines. */
+  from: number;
+  to: number;
+  /** Removed: the line index the removed lines follow (-1: before the first). */
+  at?: number;
+  kind: "review" | "removed";
+  focused?: boolean;
+}
 
 export interface CodeProps {
   side: Side;
@@ -28,6 +40,14 @@ export interface CodeProps {
   foldLabel?: string;
   /** Called once the text is loaded, with the shown lines. */
   onLines?: (lines: string[] | null) => void;
+  /** Regions to highlight. Their lines stay unfolded. */
+  regions?: CodeRegion[];
+  /** A label row above each region (reasons, actions). */
+  regionHead?: (r: CodeRegion) => ReactNode;
+  /** Content inline after a shown line (and its removed marker); -1 is before the first line. */
+  after?: (index: number) => ReactNode;
+  /** Shown-line indices that matter; with `keep`, everything else folds. */
+  keep?: number[];
 }
 
 export function useSource(side: Side, file: string) {
@@ -73,13 +93,24 @@ export function CodeView(p: CodeProps) {
 
   const rows = useMemo(() => {
     if (!lines) return [];
+    if (p.keep) return foldRows(lines.length, p.keep.filter((i) => i >= 0 && i < lines.length), 0, 0);
     const interesting: number[] = [];
     p.changed?.forEach((c, i) => c && interesting.push(i));
+    for (const r of p.regions ?? []) {
+      if (r.kind === "review") for (let i = Math.max(0, r.from); i <= Math.min(lines.length - 1, r.to); i++) interesting.push(i);
+    }
     for (const k of p.removed?.keys() ?? []) interesting.push(Math.max(0, Math.min(lines.length - 1, k)), Math.max(0, k + 1));
     if (p.focusLine) interesting.push(p.focusLine - from);
     if (interesting.length && p.focusLine === undefined) interesting.push(0); // keep the declaration line in view
     return foldRows(lines.length, interesting, p.context ?? 3);
-  }, [lines, p.changed, p.removed, p.focusLine, p.context, from]);
+  }, [lines, p.changed, p.removed, p.focusLine, p.context, from, p.regions, p.keep]);
+
+  const regionAt = useMemo(() => {
+    const m = new Map<number, CodeRegion>();
+    for (const r of p.regions ?? []) if (r.kind === "review") for (let i = r.from; i <= r.to; i++) m.set(i, r);
+    return m;
+  }, [p.regions]);
+  const removedRegionAt = useMemo(() => new Map((p.regions ?? []).filter((r) => r.kind === "removed").map((r) => [r.at ?? -1, r])), [p.regions]);
 
   if (loading) return <div className="code-msg muted">Loading {p.file}…</div>;
   if (!lines) return <div className="code-msg muted">{sourceHint()}</div>;
@@ -88,8 +119,13 @@ export function CodeView(p: CodeProps) {
     const rm = p.removed?.get(after);
     if (!rm?.length) return null;
     const open = openRemoved.has(after);
+    const region = removedRegionAt.get(after);
     return (
-      <div className="removed-block">
+      <div
+        className={`removed-block ${region ? "in-region" : ""} ${region?.focused ? "region-focus" : ""}`}
+        data-region={region?.id}
+      >
+        {region && p.regionHead?.(region)}
         <button
           className="removed-marker"
           onClick={() => setOpenRemoved((s) => new Set(open ? [...s].filter((x) => x !== after) : [...s, after]))}
@@ -113,8 +149,23 @@ export function CodeView(p: CodeProps) {
   const renderLine = (i: number) => {
     const n = from + i;
     const toks = tokens?.[n - 1];
-    const cls = ["cl", p.changed?.[i] ? "changed" : "", p.focusLine === n ? "focus" : ""].join(" ");
-    return (
+    const region = regionAt.get(i);
+    const cls = [
+      "cl",
+      p.changed?.[i] ? "changed" : "",
+      p.focusLine === n ? "focus" : "",
+      p.keep?.includes(i) ? "kept" : "",
+      region ? "in-region" : "",
+      region && region.from === i ? "region-first" : "",
+      region && region.to === i ? "region-last" : "",
+      region?.focused ? "region-focus" : "",
+    ].join(" ");
+    const head = region && region.from === i && p.regionHead ? (
+      <div key={`h${i}`} className={`region-head ${region.focused ? "region-focus" : ""}`} data-region={region.id}>
+        {p.regionHead(region)}
+      </div>
+    ) : null;
+    const line = (
       <div key={`l${i}`} className={cls}>
         <span className="ln">{n}</span>
         <span className="lc">
@@ -123,17 +174,27 @@ export function CodeView(p: CodeProps) {
         </span>
       </div>
     );
+    return head ? (
+      <Fragment key={`l${i}`}>
+        {head}
+        {line}
+      </Fragment>
+    ) : (
+      line
+    );
   };
 
   return (
     <div className={`code ${p.removedStyle ? "is-removed" : ""}`}>
       {removedMarker(-1)}
+      {p.after?.(-1)}
       <div className="code-lines">
         {rows.map((r) =>
           r.kind === "line" ? (
             <Fragment key={`r${r.index}`}>
               {renderLine(r.index)}
               {p.removed?.has(r.index) && r.index !== lines.length - 1 ? removedMarker(r.index) : null}
+              {r.index !== lines.length - 1 ? p.after?.(r.index) : null}
             </Fragment>
           ) : expanded.has(r.from) ? (
             <Fragment key={`f${r.from}`}>
@@ -147,6 +208,7 @@ export function CodeView(p: CodeProps) {
         )}
       </div>
       {removedMarker(lines.length - 1)}
+      {p.after?.(lines.length - 1)}
     </div>
   );
 }

@@ -1,12 +1,13 @@
 // Levels 2 and 3 of the viewer: a component's interface view, an entity's implementation view,
 // and a plain code location.
 
-import { useMemo, useState } from "react";
-import { CodeView, useSource } from "./CodeView";
+import { useEffect, useMemo, useState } from "react";
+import { CodeView, useSource, type CodeRegion } from "./CodeView";
 import { lineChanges } from "./diff";
-import { componentEdges, type Index } from "./graph";
+import { componentEdges, flagLabel, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
 import {
   dependsOnTarget,
+  findEntity,
   groupUsages,
   interfaceModel,
   lastName,
@@ -18,8 +19,9 @@ import {
 import type { Focus } from "./nav";
 import { EdgeList } from "./Sidebar";
 import { canOpenInXcode, openInXcode } from "./source";
-import type { Entity, Usage } from "./types";
-import { ChangeTag, Chips, Signature } from "./ui";
+import { setNote, useReview } from "./review";
+import type { Entity, Region, Usage } from "./types";
+import { ChangeTag, Chips, ReviewedBox, Signature } from "./ui";
 
 type Go = (f: Focus) => void;
 
@@ -138,6 +140,7 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
 function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
   return (
     <article className="card">
+      <ReviewedBox id={e.id} compact />
       <button className="card-title" onClick={() => go({ type: "entity", id: e.id })}>
         <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         <span className="chev">›</span>
@@ -150,9 +153,10 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
   );
 }
 
-const OneLiner = ({ e, go }: { e: Entity; go: Go }) => (
-  <li>
-    <button className="one-liner" onClick={() => go({ type: "entity", id: e.id })}>
+const OneLiner = ({ e, id, go }: { e: Entity; id?: string; go: Go }) => (
+  <li className="with-check">
+    <ReviewedBox id={id ?? e.id} compact />
+    <button className="one-liner" onClick={() => go({ type: "entity", id: id ?? e.id })}>
       <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
       {e.contractFlags.length > 0 && <span className="muted small"> · {e.contractFlags.length} flag{e.contractFlags.length === 1 ? "" : "s"}</span>}
     </button>
@@ -241,26 +245,34 @@ function bySymbol(usages: Usage[]): Array<{ symbol: string; usages: Usage[] }> {
 // ---------------------------------------------------------------------------
 // Level 3
 
-function XcodeButton({ file, line }: { file: string; line: number }) {
+function XcodeButton({ file, line, compact }: { file: string; line: number; compact?: boolean }) {
   const [msg, setMsg] = useState<string | null>(null);
   if (!canOpenInXcode()) return null;
   return (
     <span className="xcode">
-      <button className="btn" onClick={() => openInXcode(file, line).then(setMsg)} title={`${file}:${line} in your working copy`}>
-        Open in Xcode
+      <button className={compact ? "link small" : "btn"} onClick={() => openInXcode(file, line).then(setMsg)} title={`${file}:${line} in your working copy`}>
+        {compact ? "Xcode" : "Open in Xcode"}
       </button>
       {msg && <span className="muted small"> {msg}</span>}
     </span>
   );
 }
 
-export function EntityPage({ index, id, go }: { index: Index; id: string; go: Go }) {
+export function EntityPage({ index, id, region, go }: { index: Index; id: string; region?: string; go: Go }) {
   const e = index.entities.get(id);
   if (!e) return <div className="page-inner muted">No entity {id} in this change.</div>;
-  return <EntityPageInner key={id} index={index} e={e} go={go} />;
+  return <EntityPageInner key={id} index={index} e={e} region={region} go={go} />;
 }
 
-function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) {
+const RELATION_LABEL: Record<string, string> = {
+  definition: "definition",
+  caller: "caller",
+  conformer: "conformer",
+  override: "override",
+  state: "state",
+};
+
+function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; e: Entity; region?: string; go: Go }) {
   const nb = neighbors(index, e);
   const parent = e.parent ? index.entities.get(e.parent) : undefined;
   const parentName = e.parent?.split("::").slice(1).join("::");
@@ -271,17 +283,117 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
   const base = !isRemoved && e.change !== "added" ? e.baseLocation : undefined;
   const baseSrc = useSource("base", base?.file ?? "");
   const headSrc = useSource(loc.side, loc.file);
+  const review = useReview();
+  const [editing, setEditing] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
-  // Changed lines inside the entity, until the analyzer emits review regions (milestone 4).
+  const own = useMemo(() => index.regionsByEntity.get(e.id) ?? [], [index, e.id]);
+  const contexts = index.contextByEntity.get(e.id) ?? [];
+
+  // Removed lines inside the entity, as collapsed markers. Lines changed in place are marked only
+  // when the analyzer gave no regions for the entity.
   const changes = useMemo(() => {
     if (!base || baseSrc.text === null || headSrc.text === null) return undefined;
     const b = baseSrc.text.split("\n").slice(base.startLine - 1, base.endLine);
     const h = headSrc.text.split("\n").slice(loc.startLine - 1, loc.endLine);
-    return lineChanges(b, h);
-  }, [base, baseSrc.text, headSrc.text, loc]);
-  const firstChanged = changes ? changes.changed.findIndex(Boolean) : -1;
-  const changedCount = changes ? changes.changed.filter(Boolean).length : 0;
+    const lc = lineChanges(b, h);
+    // A removed region the line comparison placed elsewhere still gets its marker.
+    for (const r of own) {
+      if (r.kind !== "removed" || r.anchor === undefined) continue;
+      const at = r.anchor - loc.startLine;
+      if (!lc.removed.has(at)) lc.removed.set(at, baseSrc.text.split("\n").slice(r.startLine - 1, r.endLine));
+    }
+    return lc;
+  }, [base, baseSrc.text, headSrc.text, loc, own]);
+
+  const codeRegions = useMemo<CodeRegion[]>(
+    () =>
+      own.map((r) =>
+        r.kind === "removed" && r.anchor !== undefined
+          ? { id: r.id, kind: "removed", from: 0, to: 0, at: r.anchor - loc.startLine, focused: r.id === focusRegion }
+          : { id: r.id, kind: "review", from: r.startLine - loc.startLine, to: r.endLine - loc.startLine, focused: r.id === focusRegion },
+      ),
+    [own, loc.startLine, focusRegion],
+  );
+
+  // Each context region shows once, after the first region it supports.
+  const placement = useMemo(() => {
+    const byIndex = new Map<number, { regions: Region[]; contexts: Region[] }>();
+    const slot = (i: number) => {
+      if (!byIndex.has(i)) byIndex.set(i, { regions: [], contexts: [] });
+      return byIndex.get(i)!;
+    };
+    const endOf = new Map(codeRegions.map((r) => [r.id, r.kind === "removed" ? r.at ?? -1 : r.to]));
+    for (const r of own) slot(endOf.get(r.id) ?? loc.endLine - loc.startLine).regions.push(r);
+    const last = loc.endLine - loc.startLine;
+    for (const c of contexts) {
+      const ends = (c.supports ?? []).map((id) => endOf.get(id)).filter((x): x is number => x !== undefined);
+      slot(ends.length ? Math.min(...ends) : last).contexts.push(c);
+    }
+    return byIndex;
+  }, [own, contexts, codeRegions, loc]);
+
+  useEffect(() => {
+    if (!loaded || !focusRegion) return;
+    document.querySelector(`[data-region="${CSS.escape(focusRegion)}"]`)?.scrollIntoView({ block: "center" });
+  }, [loaded, focusRegion]);
+
+  const firstRegion = own.find((r) => r.kind === "review");
+  const fallbackChanged = own.length === 0 ? changes?.changed : undefined;
+  const firstChanged = fallbackChanged ? fallbackChanged.findIndex(Boolean) : firstRegion ? firstRegion.startLine - loc.startLine : -1;
   const removedCount = changes ? [...changes.removed.values()].reduce((s, l) => s + l.length, 0) : 0;
+  const pos = regionPosition(index, focusRegion ? { type: "entity", id: e.id, region: focusRegion } : null);
+  const total = index.riskOrder.length;
+  const label = e.qualifiedName;
+
+  const regionHead = (cr: CodeRegion) => {
+    const r = index.regions.get(cr.id);
+    if (!r) return null;
+    const risk = regionRisk(r);
+    return (
+      <div className="rh">
+        <span className={`risk risk-${riskTier(risk)}`} title={`risk ${risk.toFixed(2)}`}>
+          {risk.toFixed(2)}
+        </span>
+        <span className="rh-reasons">
+          {r.reasons.map((x) => (
+            <span key={x} className="reason">
+              {flagLabel(x)}
+            </span>
+          ))}
+        </span>
+        <span className="rh-actions">
+          {!review.notes[r.id] && editing !== r.id && (
+            <button className="link small" onClick={() => setEditing(r.id)}>
+              Note
+            </button>
+          )}
+          {r.side === "head" && <XcodeButton file={r.file} line={r.startLine} compact />}
+        </span>
+      </div>
+    );
+  };
+
+  const after = (i: number) => {
+    const p = placement.get(i);
+    if (!p) return null;
+    return (
+      <>
+        {p.regions.map((r) =>
+          editing === r.id || review.notes[r.id] ? (
+            <NoteBox key={r.id} r={r} label={label} editing={editing === r.id} setEditing={setEditing} />
+          ) : null,
+        )}
+        {p.contexts.length > 0 && (
+          <div className="ctx-list">
+            {p.contexts.map((c) => (
+              <ContextSnippet key={c.id} index={index} e={e} c={c} go={go} />
+            ))}
+          </div>
+        )}
+      </>
+    );
+  };
 
   return (
     <div className="page-inner">
@@ -306,6 +418,7 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
         </div>
         <h1 className="mono-title">{e.qualifiedName}</h1>
         <p className="tags">
+          <ReviewedBox id={e.id} />
           <ChangeTag change={e.change} />
           {(e.changes ?? []).filter((c) => c !== e.change).map((c) => (
             <ChangeTag key={c} change={c} />
@@ -320,20 +433,29 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
         <Signature e={e} />
         <Chips flags={e.contractFlags} />
         <div className="page-actions">
-          <span className="stepper">
+          {total > 0 && (
+            <span className="stepper" title="Regions across the change, highest risk first (keys j and k)">
+              <button className="btn" disabled={pos === 1} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, -1))}>
+                ‹
+              </button>
+              <span className="muted small">{pos ? `Region ${pos} of ${total}` : `${total} regions`} by risk</span>
+              <button className="btn" disabled={pos === total} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, 1))}>
+                ›
+              </button>
+            </span>
+          )}
+          <span className="stepper" title={`Entities in ${compName(index, e.component)}, in interface view order`}>
             <button className="btn" disabled={!nb.prev} onClick={() => nb.prev && go({ type: "entity", id: nb.prev.id })}>
-              ‹ Prev
+              ‹
             </button>
             <span className="muted small">
-              {nb.position} of {nb.total}
+              Entity {nb.position} of {nb.total}
             </span>
             <button className="btn" disabled={!nb.next} onClick={() => nb.next && go({ type: "entity", id: nb.next.id })}>
-              Next ›
+              ›
             </button>
           </span>
-          {!isRemoved && loc.side === "head" && (
-            <XcodeButton file={loc.file} line={loc.startLine + Math.max(0, firstChanged)} />
-          )}
+          {!isRemoved && loc.side === "head" && <XcodeButton file={loc.file} line={loc.startLine + Math.max(0, firstChanged)} />}
         </div>
       </header>
 
@@ -344,7 +466,7 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
           </h2>
           <ul className="one-liners">
             {members.map((m) => (
-              <OneLiner key={m.id} e={{ ...m, qualifiedName: lastName(m.qualifiedName) }} go={go} />
+              <OneLiner key={m.id} e={{ ...m, qualifiedName: lastName(m.qualifiedName) }} id={m.id} go={go} />
             ))}
           </ul>
         </section>
@@ -358,23 +480,33 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
           {loc.side === "base" ? " at base" : ""}
         </p>
         {isRemoved && <p className="muted small">This declaration no longer exists at head. Its code at base:</p>}
-        {e.change === "added" && <p className="muted small">New declaration.</p>}
-        {changes && (changedCount > 0 || removedCount > 0) && (
+        {own.length > 0 ? (
           <p className="muted small">
-            <span className="mark-sample" /> {changedCount} changed line{changedCount === 1 ? "" : "s"}
-            {removedCount > 0 ? `, ${removedCount} removed` : ""}. Unchanged code is folded.
+            <span className="mark-sample" /> {own.length} region{own.length === 1 ? "" : "s"} to review
+            {contexts.length > 0 ? `, ${contexts.length} context snippet${contexts.length === 1 ? "" : "s"}` : ""}
+            {removedCount > 0 ? `, ${removedCount} removed line${removedCount === 1 ? "" : "s"}` : ""}. Unchanged code is folded.
           </p>
+        ) : (
+          fallbackChanged && (
+            <p className="muted small">
+              <span className="mark-sample" /> {fallbackChanged.filter(Boolean).length} changed lines. Unchanged code is folded.
+            </p>
+          )
         )}
         <CodeView
           side={loc.side}
           file={loc.file}
           startLine={loc.startLine}
           endLine={loc.endLine}
-          changed={changes?.changed}
+          changed={fallbackChanged}
           removed={changes?.removed}
           removedStyle={isRemoved}
           symbols={symbols}
           go={go}
+          regions={codeRegions}
+          regionHead={regionHead}
+          after={after}
+          onLines={(l) => setLoaded(!!l)}
         />
       </section>
 
@@ -390,6 +522,74 @@ function EntityPageInner({ index, e, go }: { index: Index; e: Entity; go: Go }) 
           <Usages index={index} title="Depends on" usages={e.dependsOn!} target={(u) => dependsOnTarget(index, u)} go={go} limit={12} />
         </section>
       )}
+    </div>
+  );
+}
+
+/** Unchanged code that explains a region, as a one-line label that expands to the lines that matter. */
+function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Region; go: Go }) {
+  const [open, setOpen] = useState(false);
+  const where = c.component && c.component !== e.component ? ` in ${compName(index, c.component)}` : "";
+  const target = c.component ? findEntity(index, c.component, c.reasons[0]) : undefined;
+  const keep = c.lines?.map((l) => l - c.startLine);
+  return (
+    <div className={`ctx ${open ? "open" : ""}`}>
+      <button className="ctx-label" onClick={() => setOpen(!open)}>
+        <span className="ctx-chev">{open ? "▾" : "▸"}</span>
+        <span className="ctx-rel">
+          {RELATION_LABEL[c.relation ?? ""] ?? c.relation}
+          {where}
+        </span>{" "}
+        <span className="mono ctx-name">{c.reasons[0]}</span>{" "}
+        <span className="muted small">
+          {c.file.split("/").pop()}:{c.startLine}
+        </span>
+      </button>
+      {open && (
+        <div className="ctx-body">
+          <CodeView side={c.side} file={c.file} startLine={c.startLine} endLine={c.endLine} keep={keep} foldLabel="lines" go={go} symbols={symbolTargets(index)} />
+          <button
+            className="link small"
+            onClick={() => go(target ? { type: "entity", id: target.id } : { type: "location", side: c.side, file: c.file, line: c.lines?.[1] ?? c.startLine })}
+          >
+            {target ? "Open its changes ›" : "Open in file ›"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NoteBox({ r, label, editing, setEditing }: { r: Region; label: string; editing: boolean; setEditing: (id: string | null) => void }) {
+  const review = useReview();
+  const note = review.notes[r.id];
+  const [text, setText] = useState(note?.text ?? "");
+  if (!editing && note) {
+    return (
+      <div className="note">
+        <div className="note-text">{note.text}</div>
+        <span className="note-actions">
+          <button className="link small" onClick={() => { setText(note.text); setEditing(r.id); }}>
+            Edit
+          </button>
+          <button className="link small" onClick={() => setNote(r, label, null)}>
+            Delete
+          </button>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="note editing">
+      <textarea autoFocus rows={3} value={text} placeholder="A concern or question about this region" onChange={(ev) => setText(ev.target.value)} />
+      <span className="note-actions">
+        <button className="btn primary" onClick={() => { setNote(r, label, text); setEditing(null); }}>
+          Save
+        </button>
+        <button className="btn" onClick={() => setEditing(null)}>
+          Cancel
+        </button>
+      </span>
     </div>
   );
 }

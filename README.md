@@ -37,7 +37,9 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - **External packages**: `Package.resolved` pins that were added, removed, or bumped.
 - **Usage**: `usedBy` lists declarations in other components that reference an entity, and `dependsOn` lists what the entity references in other components. An entity is an interface when it's `public`/`open`/`package`, used from another non-test component, or a requirement or case of an interface type.
 
-Review regions, context regions, and risk scores are not implemented yet, so `regions` is empty.
+- **Review regions**: each non-cosmetic changed entity gets one region per run of changed lines (compared ignoring indentation, spacing, and blank lines). A run with head lines is a `review` region; a run that only deletes lines is a `removed` region on the base side, with `anchor` set to the head line it followed. A new or deleted declaration is one region, and a type's region covers only its header, since its members are entities of their own. Flags that a type carries for its members (a Codable shape, an enum case) put a region on its declaration line.
+- **Risk**: each region combines its signals as `1 - Π(1 - weight)`. High (0.6): a contract flag on an interface entity, a concurrency or persisted-model flag, an isolation annotation in code (`@MainActor` or `@Sendable` closures, `nonisolated(unsafe)`), or a removed check (`guard`, early return, `throw`, `precondition`, `assert`). Medium (0.3): other contract flags, a changed interface signature, a removed interface declaration, new crash points (force unwrap, `try!`, `as!`, `fatalError`), tasks, continuations, and locks added or removed, and changed control flow (branches, loops, `catch`, `try?`). Control flow in SwiftUI view code (a `View` type, `some View`, or a `ui` layer) counts 0.15. Every region adds 0.1, and an interface entity adds 0.05 per other component that uses it (up to 0.2). Test and generated code is scaled by 0.2. Checks inside a deleted declaration don't count. `reasons` lists the signals, most significant first.
+- **Context regions**: unchanged code that explains a review region, with `relation` and `supports` (the review regions it explains): `definition` (same-type members, and top-level declarations or members of mentioned types, when the name resolves to one declaration; up to 6 per entity), `caller` (usedBy first, then the entity's own component, tests last; up to 5, for interface entities and signature or flag changes), `conformer` (other conformers of a changed protocol, or their implementation of a changed requirement), `override` (overrides of a changed method, and the method a changed override overrides), and `state` (the stored properties of the enclosing type when a body changed). `lines` lists the lines that matter, such as the signature and the referencing lines. Test and generated code gets no context.
 
 ## Viewer
 
@@ -49,7 +51,8 @@ Review regions, context regions, and risk scores are not implemented yet, so `re
 - Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
 - By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
 - Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked.
-- **Start here** lists the highest-risk regions and opens them at level 3. Until the analyzer scores regions (milestone 4), it ranks changed entities by their contract flags and folds members into their type.
+- **Start here** lists the highest-risk entities, each scored by its riskiest region, with changed members folded into their type, and opens that region at level 3. "Review regions by risk" starts at the riskiest region. A model without regions is ranked by contract flags.
+- Each component shows a review progress bar.
 
 **Level 2, interface view**
 
@@ -58,11 +61,19 @@ Review regions, context regions, and risk scores are not implemented yet, so `re
 
 **Level 3, implementation view**
 
-- The entity's head code, highlighted. Until regions exist, changed lines inside the entity are marked and removed lines are collapsed markers. Unchanged code is folded. A removed entity shows its base code.
+- The entity's head code, highlighted. Review regions are tinted, with a label row above each that shows the risk, the reasons, a Note button, and Open in Xcode. Removed lines are collapsed markers that expand to the base lines; a removed region's label sits on its marker. Code outside regions is folded. A removed entity shows its base code.
+- Context regions appear after the region they support as one-line labels in a second color ("caller in Checkout", "definition", "state"). A label expands to the lines that matter, with the rest of the declaration folded, and links to the code.
+- Notes attach to a region and show under it.
 - Previous and Next step through the component's entities. Changed type names and dependencies in the code are links. Callers in unchanged code open as a code location.
 - **Open in Xcode** runs `xed --line` on the file in your working copy (macOS, local server only).
 
-The focus is kept in the URL, so browser back and forward move through it. Escape goes up one level.
+**Across levels**
+
+- Every entity has a reviewed checkbox at levels 2 and 3 and in the side panel. The overview shows progress and lists notes, with Copy as Markdown and Download for a GitHub review.
+- `j` or `]` moves to the next region in risk order, `k` or `[` to the previous one, from any level. Level 3 also has buttons for this.
+- With the local server, reviewed marks and notes are saved next to the model, as `change-model.review.json` for `change-model.json`, keyed by head commit. The single-file build keeps them in browser storage.
+
+The focus, including the region, is kept in the URL, so browser back and forward move through it. Escape goes up one level.
 
 To work on the viewer directly:
 
@@ -101,6 +112,7 @@ The schema is in `Sources/ReviewMapCore/Model.swift`. It follows the sketch in t
 - Edges: `symbolsAdded`, `symbolsRemoved`, `refCount`. `refs` is capped, with differing symbols listed first. A ref with `line: 0` comes from a manifest.
 - Entities: `changes`, `parent` (entity id, which may point to an unchanged declaration that isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Entity kinds also include `file` and `target`.
 - `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than entity ids, because the referring declaration usually didn't change and so has no entity.
+- Regions: `anchor` (removed regions), and `component` and `lines` (context regions). Region ids are `<entity id>/r<n>` for review and removed regions and `<entity id>/c<n>` for context. A context region's `reasons` holds the qualified name of the declaration shown.
 
 Fields that are `null` are omitted. Consumers should ignore fields they don't know.
 
@@ -114,7 +126,8 @@ swift test
 
 ## Known limits
 
-- Name-based resolution: member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy`. An exact index mode (IndexStoreDB) is planned.
+- Name-based resolution: member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy` and caller context. An exact index mode (IndexStoreDB) is planned.
+- Risk signals are syntactic: a changed line that contains an `if` counts as changed control flow even when only its body changed.
 - A declaration that moves between components shows up as removed plus added.
 - Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
 - Without `--dump-package`, manifests that build their targets with loops or helper functions are only partly read.

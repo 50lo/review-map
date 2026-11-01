@@ -9,7 +9,11 @@ public final class Cart {
     }
 
     public func total() -> Decimal {
-        items.reduce(0) { $0 + $1.price }
+        rounded(items.reduce(0) { $0 + $1.price })
+    }
+
+    public func first() -> Item {
+        items.first!
     }
 
     func price(for item: Item) -> Decimal { item.price }
@@ -18,4 +22,8 @@ public final class Cart {
     public func format(_ value: Int) -> String {
         return "\(value)"
     }
+}
+
+func rounded(_ value: Decimal) -> Decimal {
+    value
 }

@@ -10,8 +10,8 @@ export type Focus =
   | { type: "edge"; key: string }
   /** Level 2: one component's interface view. */
   | { type: "interface"; id: string }
-  /** Level 3: one entity's implementation view. */
-  | { type: "entity"; id: string }
+  /** Level 3: one entity's implementation view, optionally at one of its regions. */
+  | { type: "entity"; id: string; region?: string }
   /** Level 3: a code location that has no entity, such as a caller that didn't change. */
   | { type: "location"; side: Side; file: string; line: number }
   | null;
@@ -32,7 +32,7 @@ export function focusToHash(f: Focus): string {
     case "interface":
       return `i=${enc(f.id)}`;
     case "entity":
-      return `n=${enc(f.id)}`;
+      return f.region ? `n=${enc(f.id)}&r=${enc(f.region)}` : `n=${enc(f.id)}`;
     case "location":
       return `l=${f.side}:${f.line}:${enc(f.file)}`;
   }
@@ -47,7 +47,10 @@ export function hashToFocus(hash: string): Focus {
   const i = h.get("i");
   if (i) return { type: "interface", id: i };
   const n = h.get("n");
-  if (n) return { type: "entity", id: n };
+  if (n) {
+    const r = h.get("r");
+    return r ? { type: "entity", id: n, region: r } : { type: "entity", id: n };
+  }
   const l = h.get("l");
   if (l) {
     const m = /^(base|head):(\d+):(.+)$/.exec(l);

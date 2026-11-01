@@ -137,18 +137,35 @@ public struct Entity: Codable, Equatable {
     public var dependsOn: [Usage]
 }
 
+/// A line range the reviewer should read. `review` regions are changed head lines, `removed`
+/// regions are deleted base lines, and `context` regions are unchanged code that helps to
+/// understand the review regions they support.
 public struct Region: Codable, Equatable {
+    /// "<entity id>/r<n>" for review and removed regions, "<entity id>/c<n>" for context.
     public var id: String
+    /// The changed entity the region belongs to (for context: the entity it explains).
     public var entity: String
+    /// "review", "removed", or "context".
     public var kind: String
     public var file: String
     public var startLine: Int
     public var endLine: Int
     public var side: Side
+    /// 0..1, deterministic. Context regions are 0.
     public var risk: Double
+    /// Why the region is risky, most significant first (contract flags verbatim, or short phrases).
+    /// For context regions: the declaration shown.
     public var reasons: [String]
+    /// Context: the review regions it supports.
     public var supports: [String]?
+    /// Context: "definition", "caller", "conformer", "override", or "state".
     public var relation: String?
+    /// Context: the component the code belongs to.
+    public var component: String?
+    /// Context: the lines that matter (signature and referencing lines). Missing means all of them.
+    public var lines: [Int]?
+    /// Removed regions inside a changed entity: the head line the removed code followed.
+    public var anchor: Int?
 }
 
 public struct ExternalDepChange: Codable, Equatable {

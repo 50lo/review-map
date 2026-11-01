@@ -12,7 +12,8 @@ import {
   type Node as RFNode,
   type NodeProps,
 } from "@xyflow/react";
-import { edgeKey, externalChangeOf, isChanged, related, shortName, type Focus, type Index, type Visible } from "./graph";
+import { componentEntities, edgeKey, externalChangeOf, isChanged, related, shortName, type Focus, type Index, type Visible } from "./graph";
+import { useReview } from "./review";
 import { layout, type Placed } from "./layout";
 import type { Component, ExternalDepChange } from "./types";
 
@@ -30,6 +31,8 @@ interface NodeData extends Record<string, unknown> {
   changed: boolean;
   dim: boolean;
   selected: boolean;
+  /** Reviewed entities out of the ones the component's views list. */
+  progress?: { done: number; total: number };
 }
 
 const Handles = () => (
@@ -75,6 +78,11 @@ const ComponentNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         <Badges c={c} />
         {!data.changed && <span className="muted">unchanged</span>}
       </div>
+      {data.progress && data.progress.total > 0 && (
+        <div className="node-progress" title={`${data.progress.done} of ${data.progress.total} reviewed`}>
+          <span style={{ width: `${(100 * data.progress.done) / data.progress.total}%` }} />
+        </div>
+      )}
     </div>
   );
 });
@@ -145,6 +153,8 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
   }, [index, layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const rel = useMemo(() => related(index, vis.edges, focus), [index, vis.edges, focus]);
+  const { reviewed } = useReview();
+  const shownEntities = useMemo(() => new Map([...vis.nodes].map((id) => [id, componentEntities(index, id).shown])), [index, vis.nodes]);
 
   const nodes = useMemo<RFNode<NodeData>[]>(() => {
     if (!placed) return [];
@@ -171,10 +181,14 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
             changed: isChanged(index, comp),
             dim: !!rel && !rel.nodes.has(p.id),
             selected: focus?.type === "component" && focus.id === p.id,
+            progress: {
+              done: (shownEntities.get(p.id) ?? []).filter((e) => reviewed[e.id]).length,
+              total: shownEntities.get(p.id)?.length ?? 0,
+            },
           },
         };
       });
-  }, [placed, index, rel, focus]);
+  }, [placed, index, rel, focus, reviewed, shownEntities]);
 
   const edges = useMemo<RFEdge[]>(() => {
     if (!placed) return [];

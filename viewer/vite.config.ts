@@ -42,6 +42,41 @@ function modelServer(): Plugin {
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.end(result.message);
       });
+      // Reviewed marks and notes, in a file next to the model, keyed by head commit.
+      server.middlewares.use("/api/review", (req, res) => {
+        if (!modelPath) {
+          res.statusCode = 404;
+          res.end("REVIEWMAP_MODEL is not set");
+          return;
+        }
+        const file = modelPath.replace(/\.json$/, "") + ".review.json";
+        const read = () => {
+          try {
+            return JSON.parse(fs.readFileSync(file, "utf8"));
+          } catch {
+            return {};
+          }
+        };
+        if (req.method === "PUT") {
+          let body = "";
+          req.on("data", (c) => (body += c));
+          req.on("end", () => {
+            try {
+              const { headSha, state } = JSON.parse(body);
+              if (typeof headSha !== "string" || !state || typeof state !== "object") throw new Error("bad request");
+              fs.writeFileSync(file, JSON.stringify({ ...read(), [headSha]: state }, null, 2));
+              res.end("saved");
+            } catch (err) {
+              res.statusCode = 400;
+              res.end(String(err));
+            }
+          });
+          return;
+        }
+        res.setHeader("Content-Type", "application/json");
+        res.setHeader("Cache-Control", "no-store");
+        res.end(JSON.stringify(read()));
+      });
       server.middlewares.use("/api/model", (_req, res) => {
         if (!modelPath || !fs.existsSync(modelPath)) {
           res.statusCode = 404;

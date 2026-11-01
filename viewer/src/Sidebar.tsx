@@ -4,13 +4,17 @@ import {
   componentEntities,
   edgeKey,
   externalChangeOf,
+  isLowRisk,
+  riskTier,
   startHere,
+  stepRegion,
   type Focus,
   type Index,
   type StartItem,
 } from "./graph";
+import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
-import { ChangeTag, Chips, Signature, StatusDot } from "./ui";
+import { ChangeTag, Chips, ReviewedBox, Signature, StatusDot } from "./ui";
 
 interface Props {
   index: Index;
@@ -43,23 +47,44 @@ const Name = ({ index, id, setFocus }: { index: Index; id: string; setFocus: Pro
 function Overview({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
   const { model } = index;
   const items = startHere(index);
+  const review = useReview();
   const changedComponents = model.components.filter((c) => c.kind !== "external" && c.changedEntities > 0).length;
   const byStatus = (s: Edge["status"]) => model.edges.filter((e) => e.status === s).length;
   const [showWarnings, setShowWarnings] = useState(false);
+  const toReview = model.entities.filter((e) => !isLowRisk(index, e));
+  const done = toReview.filter((e) => review.reviewed[e.id]).length;
   return (
     <>
       <section>
         <h2>Start here</h2>
-        {items.length === 0 && <p className="muted">No changes that need review.</p>}
-        {items[0]?.source === "flags" && (
-          <p className="muted small">Ranked by contract flags until the analyzer scores risk regions.</p>
+        {index.riskOrder.length > 0 && (
+          <p className="small step-all">
+            <button className="btn primary" onClick={() => setFocus(stepRegion(index, null, 1))}>
+              Review {index.riskOrder.length} regions by risk ›
+            </button>{" "}
+            <span className="muted kbd-hint">or press j and k</span>
+          </p>
         )}
+        {items.length === 0 && <p className="muted">No changes that need review.</p>}
+        {items[0]?.source === "flags" && <p className="muted small">Ranked by contract flags: this model has no risk regions.</p>}
         <ol className="start">
           {items.map((it) => (
-            <StartRow key={it.id} index={index} it={it} setFocus={setFocus} />
+            <StartRow key={it.id} index={index} it={it} reviewed={!!review.reviewed[it.entity.id]} setFocus={setFocus} />
           ))}
         </ol>
       </section>
+      {toReview.length > 0 && (
+        <section>
+          <h2>Progress</h2>
+          <div className="progress" title={`${done} of ${toReview.length} reviewed`}>
+            <span style={{ width: `${(100 * done) / toReview.length}%` }} />
+          </div>
+          <p className="small muted">
+            {done} of {toReview.length} entities reviewed
+          </p>
+        </section>
+      )}
+      <NotesSection index={index} setFocus={setFocus} />
       <section>
         <h2>This change</h2>
         <ul className="facts">
@@ -125,22 +150,74 @@ function Overview({ index, setFocus }: { index: Index; setFocus: Props["setFocus
   );
 }
 
-function StartRow({ index, it, setFocus }: { index: Index; it: StartItem; setFocus: Props["setFocus"] }) {
+function StartRow({ index, it, reviewed, setFocus }: { index: Index; it: StartItem; reviewed: boolean; setFocus: Props["setFocus"] }) {
   const comp = index.components.get(it.entity.component);
   return (
-    <li>
-      <button className="row" onClick={() => setFocus({ type: "entity", id: it.entity.id })}>
+    <li className={reviewed ? "is-reviewed" : ""}>
+      <button className="row" onClick={() => setFocus(it.focus)}>
         <span className="row-main">
+          {it.source === "regions" && <span className={`risk risk-${riskTier(it.score)}`}>{it.score.toFixed(2)}</span>}{" "}
           <span className="kind">{it.entity.kind}</span> <span className="qname">{it.entity.qualifiedName}</span>
           {it.members.length > 0 && <span className="muted"> +{it.members.length} members</span>}
+          {reviewed && <span className="muted small"> · reviewed</span>}
         </span>
         <span className="row-sub muted">
           {comp?.name ?? it.entity.component} · {it.entity.change}
           {it.entity.isInterface ? " · interface" : ""}
+          {it.regionCount > 1 ? ` · ${it.regionCount} regions` : ""}
         </span>
-        <Chips flags={it.reasons.filter((r) => r !== it.entity.change)} />
+        <Chips flags={it.reasons.filter((r) => r !== it.entity.change).slice(0, 4)} />
       </button>
     </li>
+  );
+}
+
+/** Notes on regions, each leading back to its region, and the Markdown export. */
+function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
+  const review = useReview();
+  const [copied, setCopied] = useState(false);
+  const notes = Object.entries(review.notes).sort(([, a], [, b]) => a.file.localeCompare(b.file) || a.startLine - b.startLine);
+  if (notes.length === 0) return null;
+  const md = notesMarkdown(review.notes);
+  const download = () => {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
+    a.download = "review-notes.md";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+  return (
+    <section>
+      <h2>
+        Notes <span className="muted">{notes.length}</span>
+      </h2>
+      <ul className="notes-list">
+        {notes.map(([id, n]) => (
+          <li key={id}>
+            <button className="link mono small" onClick={() => setFocus(index.regions.has(id) ? { type: "entity", id: n.entity, region: id } : { type: "location", side: n.side, file: n.file, line: n.startLine })}>
+              {n.label}
+            </button>
+            <div className="small">{n.text}</div>
+          </li>
+        ))}
+      </ul>
+      <p className="small">
+        <button
+          className="btn"
+          onClick={() =>
+            navigator.clipboard?.writeText(md).then(
+              () => setCopied(true),
+              () => setCopied(false),
+            )
+          }
+        >
+          {copied ? "Copied" : "Copy as Markdown"}
+        </button>{" "}
+        <button className="btn" onClick={download}>
+          Download .md
+        </button>
+      </p>
+    </section>
   );
 }
 
@@ -212,7 +289,8 @@ const kindLabel = (k: string) =>
 
 function EntityRow({ e, setFocus }: { e: Entity; setFocus: Props["setFocus"] }) {
   return (
-    <li className={e.isInterface ? "iface" : ""}>
+    <li className={`with-check ${e.isInterface ? "iface" : ""}`}>
+      <ReviewedBox id={e.id} compact />
       <button className="entity-link" onClick={() => setFocus({ type: "entity", id: e.id })}>
         <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         {e.isInterface && <span className="muted small"> interface</span>}

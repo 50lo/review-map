@@ -18,6 +18,7 @@ interface ModelLike {
     baseLocation?: { file: string; side: "base" | "head" };
     usedBy?: Array<{ file: string }>;
   }>;
+  regions?: Array<{ file: string; side: "base" | "head"; kind: string }>;
 }
 
 /** The repo to read sources from: REVIEWMAP_REPO, or the root recorded in the model. */
@@ -59,7 +60,8 @@ function gitShowSync(repo: RepoInfo, side: "base" | "head", file: string): strin
 
 /**
  * Sources for the single-file build, keyed "side:file". Files the entities live in come
- * first; files of their callers are added while the total stays under `maxBytes`.
+ * first; files of their context regions and callers are added while the total stays under
+ * `maxBytes`.
  */
 export function collectSources(model: ModelLike, maxBytes: number): { sources: Record<string, string>; skipped: number } {
   const repo = repoInfo(model);
@@ -69,6 +71,9 @@ export function collectSources(model: ModelLike, maxBytes: number): { sources: R
   for (const e of model.entities ?? []) {
     if (e.location) primary.add(`${e.location.side}:${e.location.file}`);
     if (e.baseLocation) primary.add(`base:${e.baseLocation.file}`);
+  }
+  for (const r of model.regions ?? []) (r.kind === "context" ? secondary : primary).add(`${r.side}:${r.file}`);
+  for (const e of model.entities ?? []) {
     for (const u of e.usedBy ?? []) secondary.add(`head:${u.file}`);
   }
   const sources: Record<string, string> = {};

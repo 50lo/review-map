@@ -154,4 +154,58 @@ final class FixtureTests: XCTestCase {
         XCTAssertTrue(m.warnings.contains { $0.kind == "ambiguous-name" && $0.message.hasPrefix("Logger ") })
         XCTAssertFalse(m.entities.contains { $0.location.file == "Package.swift" && $0.kind != .target })
     }
+
+    func regions(_ m: ChangeModel, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
+        let e = try entity(m, qualifiedName)
+        return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
+    }
+
+    func testReviewRegions() throws {
+        let m = try model("basic")
+        XCTAssertEqual(Set(m.regions.map(\.id)).count, m.regions.count, "region ids are unique")
+        let removed = try regions(m, "Cart.add(_:)", kind: "removed")
+        XCTAssertEqual(removed.count, 1)
+        XCTAssertEqual(removed.first?.side, .base)
+        XCTAssertEqual(removed.first?.anchor, 7, "the guard sat after the declaration line")
+        XCTAssertTrue(removed.first?.reasons.contains { $0.contains("guard removed") } ?? false)
+        XCTAssertGreaterThanOrEqual(removed.first?.risk ?? 0, 0.6)
+
+        let first = try regions(m, "Cart.first()", kind: "review")
+        XCTAssertEqual(first.map { [$0.startLine, $0.endLine] }, [[15, 17]])
+        XCTAssertTrue(first[0].reasons.contains("new force unwrap"))
+
+        let refresh = try regions(m, "CheckoutViewModel.refresh()", kind: "review")
+        XCTAssertEqual(refresh.first?.reasons.first, "nonisolated-removed")
+        XCTAssertGreaterThanOrEqual(refresh.first?.risk ?? 0, 0.6)
+
+        let send = try regions(m, "Transport.send(_:)", kind: "review")
+        XCTAssertEqual(send.map { [$0.startLine, $0.endLine] }, [[18, 19]])
+        XCTAssertTrue(send[0].reasons.contains { $0.hasPrefix("control flow: ") })
+
+        let item = try regions(m, "Item", kind: "review")
+        XCTAssertEqual(item.map(\.startLine), [3], "flags from members sit on the declaration line")
+        XCTAssertTrue(item[0].reasons.contains("codable-shape"))
+
+        XCTAssertTrue(try regions(m, "CatalogView.title()").isEmpty, "cosmetic changes have no regions")
+        let testIds = Set(m.entities.filter { $0.tags.contains("test") }.map(\.id))
+        let test = m.regions.filter { testIds.contains($0.entity) }
+        XCTAssertTrue(test.allSatisfy { $0.kind != "context" && $0.risk < 0.2 }, "test code ranks low and gets no context")
+    }
+
+    func testContextRegions() throws {
+        let m = try model("basic")
+        let ids = Set(m.regions.map(\.id))
+        for r in m.regions where r.kind == "context" {
+            XCTAssertFalse(r.supports?.isEmpty ?? true, "\(r.id) supports a review region")
+            XCTAssertTrue(r.supports!.allSatisfy(ids.contains))
+        }
+        let total = try regions(m, "Cart.total()", kind: "context")
+        XCTAssertTrue(total.contains { $0.relation == "definition" && $0.reasons == ["rounded(_:)"] })
+        XCTAssertTrue(total.contains { $0.relation == "caller" && $0.reasons == ["CheckoutViewModel.refresh()"] && $0.component == "spm:Features/Checkout" })
+        let add = try regions(m, "Cart.add(_:)", kind: "context")
+        let state = try XCTUnwrap(add.first { $0.relation == "state" })
+        XCTAssertEqual(state.lines, [2, 3])
+        XCTAssertTrue(try regions(m, "CartRepository.items()", kind: "context").contains { $0.relation == "conformer" && $0.reasons == ["CartStore.items()"] })
+        XCTAssertTrue(try regions(m, "Transport.send(_:)", kind: "context").contains { $0.relation == "override" && $0.reasons == ["LoggingTransport.send(_:)"] })
+    }
 }

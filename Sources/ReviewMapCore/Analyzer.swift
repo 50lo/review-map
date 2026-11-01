@@ -296,7 +296,7 @@ struct ModelBuilder {
         }
     }
 
-    private func parentPair(_ l: Located, side s: Side) -> Int? {
+    func parentPair(_ l: Located, side s: Side) -> Int? {
         guard let pi = l.decl.parentIndex else { return nil }
         return pairOf[DeclKey(side: s, file: l.file, index: pi)]
     }
@@ -861,7 +861,7 @@ struct ModelBuilder {
             edges: edges,
             externalDeps: externalDeps,
             entities: entities,
-            regions: [],
+            regions: buildRegions(entities),
             warnings: sortedWarnings)
     }
 
