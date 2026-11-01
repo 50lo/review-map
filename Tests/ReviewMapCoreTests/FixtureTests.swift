@@ -1,0 +1,157 @@
+import Foundation
+import XCTest
+@testable import ReviewMapCore
+
+/// Builds a two-commit git repo from Fixtures/<name>/{base,head}, runs the analyzer, and
+/// compares the change model with Fixtures/<name>/expected.json.
+/// Set UPDATE_SNAPSHOTS=1 to rewrite the snapshot.
+final class FixtureTests: XCTestCase {
+    static var cached: [String: ChangeModel] = [:]
+
+    func model(_ name: String) throws -> ChangeModel {
+        if let m = Self.cached[name] { return m }
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: nil)).path
+        let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-fixture-\(UUID().uuidString)")
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(atPath: repo) }
+        func git(_ args: String...) throws {
+            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
+        }
+        func copyTree(_ side: String) throws {
+            for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" {
+                try fm.removeItem(atPath: repo + "/" + item)
+            }
+            let src = fixture + "/" + side
+            for item in try fm.contentsOfDirectory(atPath: src) {
+                try fm.copyItem(atPath: src + "/" + item, toPath: repo + "/" + item)
+            }
+        }
+        try git("init", "-q", "-b", "main")
+        try copyTree("base")
+        try git("add", "-A")
+        try git("commit", "-qm", "base")
+        try git("branch", "base")
+        try copyTree("head")
+        try git("add", "-A")
+        try git("commit", "-qm", "head")
+
+        var m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"))
+        m.repo.root = "<repo>"
+        m.repo.baseSha = "<base>"
+        m.repo.headSha = "<head>"
+        Self.cached[name] = m
+        return m
+    }
+
+    func entity(_ m: ChangeModel, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
+        try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName }, "no entity \(qualifiedName)", file: file, line: line)
+    }
+
+    func testSnapshot() throws {
+        let m = try model("basic")
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/basic", withExtension: nil)).path
+        let actual = try ChangeModelIO.encode(m)
+        // Write to the source tree, not the copied bundle.
+        let sourceSnapshot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/basic/expected.json")
+        if ProcessInfo.processInfo.environment["UPDATE_SNAPSHOTS"] == "1" {
+            try actual.write(to: sourceSnapshot)
+            return
+        }
+        let expected = try Data(contentsOf: URL(fileURLWithPath: fixture + "/expected.json"))
+        if actual != expected {
+            let out = (NSTemporaryDirectory() as NSString).appendingPathComponent("basic-actual.json")
+            try actual.write(to: URL(fileURLWithPath: out))
+            XCTFail("Snapshot differs. Actual written to \(out). Run with UPDATE_SNAPSHOTS=1 to accept.")
+        }
+    }
+
+    func testProtocolRequirements() throws {
+        let m = try model("basic")
+        XCTAssertEqual(try entity(m, "CartRepository.clear()").contractFlags, ["protocol-requirement-added"])
+        XCTAssertEqual(try entity(m, "CartRepository.items()").contractFlags, ["async-added", "protocol-requirement-changed"])
+        let proto = try entity(m, "CartRepository")
+        XCTAssertTrue(proto.contractFlags.contains("protocol-requirement-added"))
+        XCTAssertTrue(proto.isInterface)
+    }
+
+    func testDependencyEdges() throws {
+        let m = try model("basic")
+        let added = m.edges.first { $0.from == "spm:Features/Checkout" && $0.to == "spm:Networking" }
+        XCTAssertEqual(added?.status, .added)
+        XCTAssertEqual(added?.symbolsAdded.contains("PaymentClient"), true)
+        let removed = m.edges.first { $0.from == "spm:Features/Checkout" && $0.to == "spm:Persistence" }
+        XCTAssertEqual(removed?.status, .removed)
+        XCTAssertEqual(m.edges.first { $0.from == "spm:Features" && $0.to == "spm:Networking" }?.status, .added,
+                       "manifest dependency edge")
+        XCTAssertEqual(m.edges.first { $0.to == "ext:swift-collections" }?.status, .unchanged)
+    }
+
+    func testConcurrency() throws {
+        let m = try model("basic")
+        XCTAssertTrue(try entity(m, "CheckoutViewModel").contractFlags.contains("mainactor-added"))
+        XCTAssertEqual(try entity(m, "CheckoutViewModel.refresh()").contractFlags, ["nonisolated-removed"])
+        XCTAssertEqual(try entity(m, "PriceCache").contractFlags, ["kind-changed:class->actor"])
+    }
+
+    func testCodableShape() throws {
+        let m = try model("basic")
+        XCTAssertEqual(try entity(m, "Item.price").contractFlags, ["codable-shape"])
+        XCTAssertEqual(try entity(m, "Item.currency").change, .added)
+        XCTAssertTrue(try entity(m, "Item").contractFlags.contains("codable-shape"))
+        XCTAssertTrue(try entity(m, "Item.CodingKeys.currency").contractFlags.contains("codable-shape"))
+    }
+
+    func testBodyAccessCosmeticAndOverloads() throws {
+        let m = try model("basic")
+        XCTAssertEqual(try entity(m, "Cart.add(_:)").change, .body, "removed guard is a body change")
+        XCTAssertEqual(try entity(m, "Cart.format(_:)").contractFlags, ["access-changed:internal->public"])
+        XCTAssertEqual(try entity(m, "CatalogView.title()").change, .cosmetic)
+        let prices = m.entities.filter { $0.qualifiedName == "Cart.price(for:)" }
+        XCTAssertEqual(prices.count, 1, "only the changed overload is reported")
+        XCTAssertEqual(prices.first?.signature.head, "func price(for item: Item) -> Decimal")
+    }
+
+    func testEnumModelObservable() throws {
+        let m = try model("basic")
+        XCTAssertEqual(try entity(m, "PaymentMethod.applePay").contractFlags, ["enum-case-added"])
+        XCTAssertTrue(try entity(m, "PaymentMethod").contractFlags.contains("enum-case-added"))
+        XCTAssertEqual(try entity(m, "Order.placedAt").contractFlags, ["swiftdata-model-changed"])
+        XCTAssertTrue(try entity(m, "Order").contractFlags.contains("swiftdata-model-changed"))
+        XCTAssertEqual(try entity(m, "CheckoutViewModel.total").contractFlags, ["observable-state-changed"])
+        XCTAssertEqual(try entity(m, "CheckoutViewModel.client").contractFlags, [], "not @Published")
+        XCTAssertEqual(try entity(m, "PaymentClient.charge(_:method:)").contractFlags,
+                       ["access-changed:internal->public", "typed-throws-changed"])
+    }
+
+    func testNonCodeContractsAndPackages() throws {
+        let m = try model("basic")
+        XCTAssertEqual(try entity(m, "App/Info.plist").contractFlags, ["info-plist-changed", "url-schemes-changed"])
+        XCTAssertEqual(try entity(m, "App/Shop.entitlements").change, .added)
+        XCTAssertEqual(m.externalDeps, [ExternalDepChange(name: "swift-collections", change: "bumped", from: "1.1.0", to: "1.2.0")])
+    }
+
+    func testBuildSettingsAndConformanceMoves() throws {
+        let m = try model("basic")
+        let settings = try entity(m, "Features build settings")
+        XCTAssertEqual(settings.kind, .target)
+        XCTAssertEqual(settings.contractFlags, ["default-isolation-changed"])
+        XCTAssertEqual(settings.signature.head, "swiftSettings: .defaultIsolation(MainActor.self)")
+        XCTAssertFalse(m.entities.contains { $0.qualifiedName == "Banner" }, "conformance moved to an extension is not a change")
+        let ext = try entity(m, "extension Banner: Hashable")
+        XCTAssertEqual(ext.change, .added)
+        XCTAssertEqual(ext.contractFlags, [])
+    }
+
+    func testComponentsAndWarnings() throws {
+        let m = try model("basic")
+        let ids = Set(m.components.map(\.id))
+        XCTAssertTrue(ids.isSuperset(of: ["cfg:Core", "spm:Features", "spm:Features/Checkout", "spm:Features/Catalog", "spm:Networking"]))
+        XCTAssertFalse(ids.contains("spm:Core"), "config rule took over the Core module")
+        XCTAssertEqual(m.components.first { $0.id == "cfg:Core" }?.layer, "domain")
+        XCTAssertEqual(m.components.first { $0.id == "spm:Features/Checkout" }?.parent, "spm:Features")
+        XCTAssertTrue(m.warnings.contains { $0.kind == "ambiguous-name" && $0.message.hasPrefix("Logger ") })
+        XCTAssertFalse(m.entities.contains { $0.location.file == "Package.swift" && $0.kind != .target })
+    }
+}
