@@ -162,7 +162,7 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
           parentId: p.parent,
           draggable: false,
           connectable: false,
-          zIndex: p.isGroup ? 0 : 1,
+          zIndex: p.isGroup ? 0 : 3, // above edges (2), so a tap on a node never lands on an edge passing under it
           style: { width: p.width, height: p.height },
           data: {
             comp,

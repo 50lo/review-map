@@ -1,7 +1,10 @@
 // Pure logic for the component map: what is visible, what relates to the focus, and the
 // Start here ranking. Kept free of React so it can be unit tested against the fixture model.
 
+import type { Focus } from "./nav";
 import type { ChangeModel, Component, Edge, Entity, ExternalDepChange, Region } from "./types";
+
+export type { Focus } from "./nav";
 
 export interface MapOptions {
   /**
@@ -105,8 +108,6 @@ export function visible(index: Index, opts: MapOptions): Visible {
   return { nodes, edges, hiddenTests, hiddenUnrelated: Math.max(0, hiddenUnrelated) };
 }
 
-export type Focus = { type: "component"; id: string } | { type: "edge"; key: string } | null;
-
 export interface Related {
   nodes: Set<string>;
   edges: Set<string>;
@@ -114,6 +115,7 @@ export interface Related {
 
 /** What stays prominent around the focus. Null focus means everything is prominent. */
 export function related(index: Index, edges: Edge[], focus: Focus): Related | null {
+  focus = mapFocus(index, focus);
   if (!focus) return null;
   const nodes = new Set<string>();
   const keys = new Set<string>();
@@ -130,10 +132,11 @@ export function related(index: Index, edges: Edge[], focus: Focus): Related | nu
     const c = index.components.get(focus.id);
     if (c?.parent) nodes.add(c.parent);
     for (const child of index.children.get(focus.id) ?? []) nodes.add(child);
-  } else {
-    const e = edges.find((x) => edgeKey(x) === focus.key);
+  } else if (focus.type === "edge") {
+    const key = focus.key;
+    const e = edges.find((x) => edgeKey(x) === key);
     if (e) {
-      keys.add(focus.key);
+      keys.add(key);
       nodes.add(e.from);
       nodes.add(e.to);
     }
@@ -144,6 +147,20 @@ export function related(index: Index, edges: Edge[], focus: Focus): Related | nu
     if (p) nodes.add(p);
   }
   return { nodes, edges: keys };
+}
+
+/**
+ * The map's focus for any focus: the component of an interface or entity view, so the map
+ * still shows where you are when you go back to it.
+ */
+export function mapFocus(index: Index, focus: Focus): Focus {
+  if (focus?.type === "interface") return { type: "component", id: focus.id };
+  if (focus?.type === "entity") {
+    const e = index.entities.get(focus.id);
+    return e ? { type: "component", id: e.component } : null;
+  }
+  if (focus?.type === "location") return null;
+  return focus;
 }
 
 export interface ComponentEdges {

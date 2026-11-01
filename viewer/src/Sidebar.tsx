@@ -4,13 +4,13 @@ import {
   componentEntities,
   edgeKey,
   externalChangeOf,
-  flagLabel,
   startHere,
   type Focus,
   type Index,
   type StartItem,
 } from "./graph";
 import type { Component, Edge, Entity } from "./types";
+import { ChangeTag, Chips, Signature, StatusDot } from "./ui";
 
 interface Props {
   index: Index;
@@ -37,18 +37,6 @@ const Name = ({ index, id, setFocus }: { index: Index; id: string; setFocus: Pro
   </button>
 );
 
-const Chips = ({ flags }: { flags: string[] }) =>
-  flags.length ? (
-    <span className="chips">
-      {flags.map((f) => (
-        <span key={f} className="chip" title={f}>
-          {flagLabel(f)}
-        </span>
-      ))}
-    </span>
-  ) : null;
-
-const StatusDot = ({ status }: { status: string }) => <span className={`dot dot-${status}`} />;
 
 // ---------------------------------------------------------------------------
 
@@ -141,7 +129,7 @@ function StartRow({ index, it, setFocus }: { index: Index; it: StartItem; setFoc
   const comp = index.components.get(it.entity.component);
   return (
     <li>
-      <button className="row" onClick={() => setFocus({ type: "component", id: it.entity.component })}>
+      <button className="row" onClick={() => setFocus({ type: "entity", id: it.entity.id })}>
         <span className="row-main">
           <span className="kind">{it.entity.kind}</span> <span className="qname">{it.entity.qualifiedName}</span>
           {it.members.length > 0 && <span className="muted"> +{it.members.length} members</span>}
@@ -167,6 +155,11 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
     <>
       <section>
         <h2 className="title">{c.name}</h2>
+        {c.kind !== "external" && (
+          <button className="btn primary open-iface" onClick={() => setFocus({ type: "interface", id: c.id })}>
+            Open interface view ›
+          </button>
+        )}
         <p className="muted small">
           {[kindLabel(c.kind), c.module && c.module !== c.name ? `module ${c.module}` : null, c.layer, c.isTest ? "tests" : null, c.status]
             .filter(Boolean)
@@ -198,7 +191,7 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
           </h2>
           <ul className="entities">
             {shown.map((e) => (
-              <EntityRow key={e.id} e={e} />
+              <EntityRow key={e.id} e={e} setFocus={setFocus} />
             ))}
           </ul>
           {cosmetic + lowRisk > 0 && (
@@ -217,28 +210,21 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
 const kindLabel = (k: string) =>
   ({ spmTarget: "SPM target", xcodeTarget: "Xcode target", folder: "folder", external: "external package" })[k] ?? k;
 
-function EntityRow({ e }: { e: Entity }) {
-  const sigChanged = e.signature.base && e.signature.head && e.signature.base !== e.signature.head;
+function EntityRow({ e, setFocus }: { e: Entity; setFocus: Props["setFocus"] }) {
   return (
     <li className={e.isInterface ? "iface" : ""}>
-      <div>
-        <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span>{" "}
-        <span className={`change ch-${e.change}`}>{e.change}</span>
+      <button className="entity-link" onClick={() => setFocus({ type: "entity", id: e.id })}>
+        <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         {e.isInterface && <span className="muted small"> interface</span>}
-      </div>
-      {e.signature.head && (
-        <div className="sig mono small" title={sigChanged ? `base: ${e.signature.base}` : undefined}>
-          {e.signature.head}
-        </div>
-      )}
-      {!e.signature.head && e.signature.base && <div className="sig mono small removed-sig">{e.signature.base}</div>}
+      </button>
+      <Signature e={e} />
       <Chips flags={e.contractFlags} />
       {(e.usedBy?.length ?? 0) > 0 && <div className="muted small">used from {new Set(e.usedBy!.map((u) => u.component)).size} other component(s)</div>}
     </li>
   );
 }
 
-function EdgeList({
+export function EdgeList({
   title,
   index,
   byStatus,
