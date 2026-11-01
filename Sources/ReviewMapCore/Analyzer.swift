@@ -26,6 +26,11 @@ public struct AnalyzeOptions {
 public enum Analyzer {
     public static let version = "0.1.0"
 
+    /// The top-level directory of the git repo that contains `repo`.
+    public static func repoRoot(repo: String) throws -> String {
+        try Shell.string(["git", "-C", repo, "rev-parse", "--show-toplevel"])
+    }
+
     /// The branch checked out in the repo, or "HEAD" when it is detached or can't be read.
     public static func currentBranch(repo: String) -> String {
         (try? Shell.string(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"])).flatMap { $0.isEmpty ? nil : $0 } ?? "HEAD"

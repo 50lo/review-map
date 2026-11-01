@@ -35,7 +35,12 @@ public struct AnnotateOptions {
     }
 
     public static var defaultCacheDir: String {
-        (NSHomeDirectory() as NSString).appendingPathComponent(".reviewmap/cache")
+        (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/cache")
+    }
+
+    /// $HOME when set, so `~` means the same here as in the shell.
+    public static var home: String {
+        ProcessInfo.processInfo.environment["HOME"].flatMap { $0.isEmpty ? nil : $0 } ?? NSHomeDirectory()
     }
 }
 

@@ -12,16 +12,16 @@ cd /path/to/repo
 /path/to/review-map/.build/release/reviewmap
 ```
 
-With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. The first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). The first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
 
-The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate` runs the LLM annotator on an existing model, and `reviewmap view [change-model.json]` opens an existing model. Options for the default command and `analyze`:
+The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate [model]` runs the LLM annotator on an existing model, and `reviewmap view [model]` opens an existing model. Without a path, `annotate` and `view` use the model of the current branch of the repo in the current directory. Options for the default command and `analyze`:
 
 | Option | Meaning |
 | --- | --- |
 | `[repo]` | Path to the repo, or any directory inside it (default: the current directory). |
 | `--base`, `--head` | Any git refs (default: `main` and the current branch). The base is the merge-base of the two, which is what a PR shows. |
 | `--no-merge-base` | Compare against `--base` directly. |
-| `-o <file>` | Output path, or `-` for stdout. |
+| `-o <file>` | Output path, or `-` for stdout (default: `~/.reviewmap/models/<repo>/<head>/change-model.json`). |
 | `--config <file>` | A `reviewmap.yml`. By default it's read from the head of the repo, if one exists there. |
 | `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
 | `--max-refs <n>` | References kept per edge (default 50). |
@@ -36,7 +36,7 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `--llm-jobs <n>` | Batches run at the same time (default 4). |
 | `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
 
-`reviewmap annotate [change-model.json]` runs only the annotator on an existing model and writes it back (or to `-o`). It takes the same `--llm…` options.
+`reviewmap annotate [model]` runs only the annotator on an existing model and writes it back (or to `-o`). It takes the same `--llm…` options.
 
 The analyzer never writes to the target repo. Both trees are exported with `git archive` into a temporary directory, which is removed on exit.
 

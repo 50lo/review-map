@@ -60,8 +60,8 @@ struct ViewCommand: ParsableCommand {
         abstract: "Open an existing change-model.json in the browser viewer."
     )
 
-    @Argument(help: "Path to the change model.")
-    var model: String = "change-model.json"
+    @Argument(help: "Path to the change model (default: the model of the current branch of the repo in the current directory).")
+    var model: String?
 
     @Option(help: "Port for the local viewer server.")
     var port: Int = 5173
@@ -70,6 +70,6 @@ struct ViewCommand: ParsableCommand {
     var noOpen = false
 
     func run() throws {
-        try ViewerLauncher.run(model: model, port: port, open: !noOpen)
+        try ViewerLauncher.run(model: try model ?? ModelPath.current(), port: port, open: !noOpen)
     }
 }

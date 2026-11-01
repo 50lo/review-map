@@ -48,6 +48,7 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 
 - The annotator runs the `claude` or `codex` CLI, not the API, so it uses the local login. It runs by default and `--no-llm` skips it. `reviewmap annotate` re-runs it on an existing model.
 - `reviewmap` with no arguments reviews the current branch of the current directory against `main` and opens the viewer, the command used almost every time. `analyze`, `annotate`, and `view` keep one step each.
+- Models go to `~/.reviewmap/models/<repo>/<head>/` by default, so running inside the target repo writes nothing there and each branch keeps its own reviewed marks and notes. Two repos with the same folder name share a directory.
 - It has only run against `scripts/fake-llm.sh`, which fills the reply template with canned values. The real CLIs, prompt quality, cost, and time are still to be checked on a Mac. The exact flags for `codex exec` (`--output-last-message`, prompt on stdin with `-`) are untested.
 - Removal candidates are tagged on review regions, since every changed entity has at least one; a speculative abstraction is tagged on its declaration region.
 - The ranking toggle switches the whole LLM layer, not only the ranking: with it off the viewer shows no LLM notes, summaries, pruning, or removal candidates, so the evaluation compares the tool with and without the LLM.
