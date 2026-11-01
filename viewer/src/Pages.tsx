@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CodeView, useSource, type CodeRegion } from "./CodeView";
 import { lineChanges } from "./diff";
-import { componentEdges, flagLabel, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
+import { componentEdges, contextOf, flagLabel, llmOf, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
 import {
   dependsOnTarget,
   findEntity,
@@ -21,7 +21,7 @@ import { EdgeList } from "./Sidebar";
 import { canOpenInXcode, openInXcode } from "./source";
 import { setNote, useReview } from "./review";
 import type { Entity, Region, Usage } from "./types";
-import { ChangeTag, Chips, ReviewedBox, Signature } from "./ui";
+import { ChangeTag, Chips, Reveal, ReviewedBox, Signature } from "./ui";
 
 type Go = (f: Focus) => void;
 
@@ -61,6 +61,7 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
             </>
           )}
         </p>
+        {llmOf(index, c) && <Reveal label="LLM summary">{llmOf(index, c)!.summary}</Reveal>}
       </header>
 
       {children.length > 0 && (
@@ -147,6 +148,7 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
       </button>
       <Signature e={e} />
       <Chips flags={e.contractFlags} />
+      {llmOf(index, e) && <Reveal label="LLM summary">{llmOf(index, e)!.summary}</Reveal>}
       <Usages index={index} title="Used by" usages={e.usedBy ?? []} target={(u) => usedByTarget(index, u)} go={go} />
       <Usages index={index} title="Depends on" usages={e.dependsOn ?? []} target={(u) => dependsOnTarget(index, u)} go={go} />
     </article>
@@ -286,9 +288,10 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
   const review = useReview();
   const [editing, setEditing] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [llmOpen, setLLMOpen] = useState<Record<string, boolean>>({});
 
   const own = useMemo(() => index.regionsByEntity.get(e.id) ?? [], [index, e.id]);
-  const contexts = index.contextByEntity.get(e.id) ?? [];
+  const { shown: contexts, pruned } = useMemo(() => contextOf(index, e.id), [index, e.id]);
 
   // Removed lines inside the entity, as collapsed markers. Lines changed in place are marked only
   // when the analyzer gave no regions for the entity.
@@ -318,20 +321,22 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
 
   // Each context region shows once, after the first region it supports.
   const placement = useMemo(() => {
-    const byIndex = new Map<number, { regions: Region[]; contexts: Region[] }>();
+    const byIndex = new Map<number, { regions: Region[]; contexts: Region[]; pruned: Region[] }>();
     const slot = (i: number) => {
-      if (!byIndex.has(i)) byIndex.set(i, { regions: [], contexts: [] });
+      if (!byIndex.has(i)) byIndex.set(i, { regions: [], contexts: [], pruned: [] });
       return byIndex.get(i)!;
     };
     const endOf = new Map(codeRegions.map((r) => [r.id, r.kind === "removed" ? r.at ?? -1 : r.to]));
     for (const r of own) slot(endOf.get(r.id) ?? loc.endLine - loc.startLine).regions.push(r);
     const last = loc.endLine - loc.startLine;
-    for (const c of contexts) {
+    const place = (c: Region) => {
       const ends = (c.supports ?? []).map((id) => endOf.get(id)).filter((x): x is number => x !== undefined);
-      slot(ends.length ? Math.min(...ends) : last).contexts.push(c);
-    }
+      return slot(ends.length ? Math.min(...ends) : last);
+    };
+    for (const c of contexts) place(c).contexts.push(c);
+    for (const c of pruned) place(c).pruned.push(c);
     return byIndex;
-  }, [own, contexts, codeRegions, loc]);
+  }, [own, contexts, pruned, codeRegions, loc]);
 
   useEffect(() => {
     if (!loaded || !focusRegion) return;
@@ -349,13 +354,25 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
   const regionHead = (cr: CodeRegion) => {
     const r = index.regions.get(cr.id);
     if (!r) return null;
-    const risk = regionRisk(r);
+    const risk = regionRisk(index, r);
+    const ai = llmOf(index, r);
+    const scoredByLLM = ai?.risk !== undefined;
+    const open = !!llmOpen[r.id];
+    const toggle = () => setLLMOpen({ ...llmOpen, [r.id]: !open });
     return (
       <div className="rh">
-        <span className={`risk risk-${riskTier(risk)}`} title={`risk ${risk.toFixed(2)}`}>
+        <span
+          className={`risk risk-${riskTier(risk)} ${scoredByLLM ? "risk-llm" : ""}`}
+          title={scoredByLLM ? `LLM risk ${risk.toFixed(2)}, deterministic ${r.risk.toFixed(2)}` : `risk ${risk.toFixed(2)}`}
+        >
           {risk.toFixed(2)}
         </span>
         <span className="rh-reasons">
+          {ai?.removal && (
+            <button className="reason removal-tag" onClick={toggle} title="The LLM thinks this code could go">
+              removal candidate
+            </button>
+          )}
           {r.reasons.map((x) => (
             <span key={x} className="reason">
               {flagLabel(x)}
@@ -363,6 +380,11 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           ))}
         </span>
         <span className="rh-actions">
+          {ai?.note && (
+            <button className="link small" onClick={toggle}>
+              {open ? "Hide why" : "Why"}
+            </button>
+          )}
           {!review.notes[r.id] && editing !== r.id && (
             <button className="link small" onClick={() => setEditing(r.id)}>
               Note
@@ -370,6 +392,16 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           )}
           {r.side === "head" && <XcodeButton file={r.file} line={r.startLine} compact />}
         </span>
+        {open && ai && (
+          <div className="llm-text rh-llm">
+            {ai.note}
+            {ai.removal && (
+              <div>
+                <span className="muted">Removal candidate ({ai.removal.kind}):</span> {ai.removal.note}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -384,11 +416,12 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
             <NoteBox key={r.id} r={r} label={label} editing={editing === r.id} setEditing={setEditing} />
           ) : null,
         )}
-        {p.contexts.length > 0 && (
+        {(p.contexts.length > 0 || p.pruned.length > 0) && (
           <div className="ctx-list">
             {p.contexts.map((c) => (
               <ContextSnippet key={c.id} index={index} e={e} c={c} go={go} />
             ))}
+            {p.pruned.length > 0 && <PrunedContext index={index} e={e} items={p.pruned} go={go} />}
           </div>
         )}
       </>
@@ -432,13 +465,16 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
         </p>
         <Signature e={e} />
         <Chips flags={e.contractFlags} />
+        {llmOf(index, e) && <Reveal label="LLM summary">{llmOf(index, e)!.summary}</Reveal>}
         <div className="page-actions">
           {total > 0 && (
             <span className="stepper" title="Regions across the change, highest risk first (keys j and k)">
               <button className="btn" disabled={pos === 1} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, -1))}>
                 ‹
               </button>
-              <span className="muted small">{pos ? `Region ${pos} of ${total}` : `${total} regions`} by risk</span>
+              <span className="muted small">
+                {pos ? `Region ${pos} of ${total}` : `${total} regions`} by {index.llm ? "LLM " : ""}risk
+              </span>
               <button className="btn" disabled={pos === total} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, 1))}>
                 ›
               </button>
@@ -484,6 +520,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           <p className="muted small">
             <span className="mark-sample" /> {own.length} region{own.length === 1 ? "" : "s"} to review
             {contexts.length > 0 ? `, ${contexts.length} context snippet${contexts.length === 1 ? "" : "s"}` : ""}
+            {pruned.length > 0 ? ` (${pruned.length} left out by the LLM)` : ""}
             {removedCount > 0 ? `, ${removedCount} removed line${removedCount === 1 ? "" : "s"}` : ""}. Unchanged code is folded.
           </p>
         ) : (
@@ -557,6 +594,19 @@ function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Regio
         </div>
       )}
     </div>
+  );
+}
+
+/** Context the LLM left out, folded into a count that opens it. */
+function PrunedContext({ index, e, items, go }: { index: Index; e: Entity; items: Region[]; go: Go }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button className="link small ctx-pruned" onClick={() => setOpen(!open)}>
+        {open ? "Hide" : "Show"} {items.length} context snippet{items.length === 1 ? "" : "s"} left out by the LLM
+      </button>
+      {open && items.map((c) => <ContextSnippet key={c.id} index={index} e={e} c={c} go={go} />)}
+    </>
   );
 }
 

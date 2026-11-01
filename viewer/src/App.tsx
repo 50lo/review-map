@@ -58,6 +58,15 @@ function crumbs(index: Index, f: Focus): Crumb[] {
 }
 
 const OPTIONS_KEY = "reviewmap.options.v2";
+const LLM_KEY = "reviewmap.llm";
+
+function readLLM(): boolean {
+  try {
+    return localStorage.getItem(LLM_KEY) !== "off";
+  } catch {
+    return true;
+  }
+}
 
 function readOptions(): MapOptions & { showUnchanged: boolean } {
   const defaults: MapOptions & { showUnchanged: boolean } = { scope: "changed", showTests: false, showUnchanged: false };
@@ -125,8 +134,17 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
 }
 
 function Viewer({ model }: { model: ChangeModel }) {
-  const index = useMemo(() => buildIndex(model), [model]);
+  const [llm, setLLMState] = useState(readLLM);
+  const index = useMemo(() => buildIndex(model, { llm }), [model, llm]);
   const [opts, setOpts] = useState(readOptions);
+  const setLLM = useCallback((on: boolean) => {
+    setLLMState(on);
+    try {
+      localStorage.setItem(LLM_KEY, on ? "on" : "off");
+    } catch {
+      /* storage unavailable: the choice just doesn't persist */
+    }
+  }, []);
   const [focus, setFocusState] = useState<Focus>(readFocus);
 
   useEffect(() => {
@@ -253,7 +271,7 @@ function Viewer({ model }: { model: ChangeModel }) {
             </div>
           )}
         </section>
-        <Sidebar index={index} focus={focus} setFocus={setFocus} />
+        <Sidebar index={index} focus={focus} setFocus={setFocus} setLLM={setLLM} />
         {level > 1 && (
           <div className="page">
             {focus?.type === "interface" && <InterfacePage index={index} id={focus.id} go={setFocus} />}

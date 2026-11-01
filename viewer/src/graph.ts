@@ -32,11 +32,20 @@ export interface Index {
   regions: Map<string, Region>;
   /** Review and removed regions of entities in the default views, highest risk first. */
   riskOrder: Region[];
+  /** The model carries LLM annotations. */
+  hasLLM: boolean;
+  /** The LLM layer is on: ranking uses LLM risk, and LLM notes, summaries, and pruning are available. */
+  llm: boolean;
+}
+
+export interface IndexOptions {
+  /** Use the LLM layer when the model has it. Default true. */
+  llm?: boolean;
 }
 
 export const edgeKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`;
 
-export function buildIndex(model: ChangeModel): Index {
+export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
   const components = new Map(model.components.map((c) => [c.id, c]));
   const children = new Map<string, string[]>();
   for (const c of model.components) {
@@ -68,15 +77,42 @@ export function buildIndex(model: ChangeModel): Index {
     contextByEntity,
     regions: new Map(model.regions.map((r) => [r.id, r])),
     riskOrder: [],
+    hasLLM: hasLLM(model),
+    llm: false,
   };
+  index.llm = index.hasLLM && opts.llm !== false;
   const pos = new Map(model.entities.map((e, i) => [e.id, i]));
   index.riskOrder = model.regions
     .filter((r) => r.kind !== "context" && entities.has(r.entity) && !isLowRisk(index, entities.get(r.entity)!))
-    .sort((a, b) => regionRisk(b) - regionRisk(a) || pos.get(a.entity)! - pos.get(b.entity)! || a.startLine - b.startLine);
+    .sort((a, b) => regionRisk(index, b) - regionRisk(index, a) || pos.get(a.entity)! - pos.get(b.entity)! || a.startLine - b.startLine);
   return index;
 }
 
-export const regionRisk = (r: Region) => r.llm?.risk ?? r.risk;
+/** True when any region or summary came from the LLM annotator. */
+export const hasLLM = (m: ChangeModel) => !!m.llm && (m.regions.some((r) => r.llm) || m.entities.some((e) => e.llm));
+
+/** The risk a region ranks by: the LLM's when the LLM layer is on and it scored the region, else the deterministic one. */
+export const regionRisk = (index: Index, r: Region) => (index.llm ? r.llm?.risk ?? r.risk : r.risk);
+
+/** LLM content of a region, entity, or component, or nothing when the LLM layer is off. */
+export const llmOf = <T extends { llm?: unknown }>(index: Index, x: T | undefined): T["llm"] | undefined => (index.llm ? x?.llm : undefined);
+
+/**
+ * Context regions of an entity in display order. With the LLM layer on, kept regions come first in
+ * the LLM's rank and the ones it pruned are split off; otherwise every region shows, in analyzer order.
+ */
+export function contextOf(index: Index, entity: string): { shown: Region[]; pruned: Region[] } {
+  const all = index.contextByEntity.get(entity) ?? [];
+  if (!index.llm || !all.some((c) => c.llm?.keep !== undefined)) return { shown: all, pruned: [] };
+  const shown = all.filter((c) => c.llm?.keep !== false).sort((a, b) => (a.llm?.rank ?? 1e9) - (b.llm?.rank ?? 1e9));
+  return { shown, pruned: all.filter((c) => c.llm?.keep === false) };
+}
+
+/** Regions the LLM tagged as removal candidates, in risk order. Empty with the LLM layer off. */
+export function removalCandidates(index: Index): Region[] {
+  if (!index.llm) return [];
+  return index.riskOrder.filter((r) => r.llm?.removal);
+}
 
 /** Risk tier for display: high, medium, or low. */
 export const riskTier = (risk: number) => (risk >= 0.6 ? "high" : risk >= 0.3 ? "medium" : "low");
@@ -268,7 +304,7 @@ export function isLowRisk(index: Index, e: Entity): boolean {
 /** Highest region risk of an entity, or the contract-flag score before regions exist. */
 export function entityRank(index: Index, e: Entity): number {
   if (!index.hasRegions) return entityScore(e);
-  return Math.max(0, ...(index.regionsByEntity.get(e.id) ?? []).map(regionRisk));
+  return Math.max(0, ...(index.regionsByEntity.get(e.id) ?? []).map((r) => regionRisk(index, r)));
 }
 
 /**
@@ -302,9 +338,10 @@ export function startHere(index: Index, limit = 10): StartItem[] {
     if (fromRegions) {
       for (const r of index.regionsByEntity.get(e.id)!) {
         item.regionCount++;
-        item.ranked.push({ risk: regionRisk(r), reasons: r.reasons });
-        if (regionRisk(r) > item.score) {
-          item.score = regionRisk(r);
+        const risk = regionRisk(index, r);
+        item.ranked.push({ risk, reasons: r.reasons });
+        if (risk > item.score) {
+          item.score = risk;
           item.id = r.id;
           item.focus = { type: "entity", id: r.entity, region: r.id };
         }

@@ -1,0 +1,4081 @@
+{
+  "analyzer" : {
+    "resolution" : "name-based",
+    "version" : "0.1.0"
+  },
+  "components" : [
+    {
+      "changeScore" : 1,
+      "changedEntities" : 15,
+      "id" : "cfg:Core",
+      "interfaceChanges" : 12,
+      "isTest" : false,
+      "kind" : "folder",
+      "layer" : "domain",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "module" : "Core",
+      "name" : "Core",
+      "paths" : [
+        "Sources/Core"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "ext:swift-collections",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "external",
+      "name" : "swift-collections",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.164,
+      "changedEntities" : 2,
+      "id" : "folder:App",
+      "interfaceChanges" : 2,
+      "isTest" : false,
+      "kind" : "folder",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "name" : "App",
+      "paths" : [
+        "App"
+      ]
+    },
+    {
+      "changeScore" : 0.112,
+      "changedEntities" : 1,
+      "id" : "spm:Features",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "module" : "Features",
+      "name" : "Features",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.026,
+      "changedEntities" : 1,
+      "id" : "spm:Features/Catalog",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "folder",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "module" : "Features",
+      "name" : "Features/Catalog",
+      "parent" : "spm:Features",
+      "paths" : [
+        "Sources/Features/Catalog"
+      ]
+    },
+    {
+      "changeScore" : 0.397,
+      "changedEntities" : 10,
+      "id" : "spm:Features/Checkout",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "folder",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "module" : "Features",
+      "name" : "Features/Checkout",
+      "parent" : "spm:Features",
+      "paths" : [
+        "Sources/Features/Checkout"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "spm:FeaturesTests",
+      "interfaceChanges" : 0,
+      "isTest" : true,
+      "kind" : "spmTarget",
+      "module" : "FeaturesTests",
+      "name" : "FeaturesTests",
+      "paths" : [
+        "Tests/FeaturesTests"
+      ]
+    },
+    {
+      "changeScore" : 0.129,
+      "changedEntities" : 2,
+      "id" : "spm:Networking",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "module" : "Networking",
+      "name" : "Networking",
+      "paths" : [
+        "Sources/Networking"
+      ]
+    },
+    {
+      "changeScore" : 0.31,
+      "changedEntities" : 6,
+      "id" : "spm:Persistence",
+      "interfaceChanges" : 2,
+      "isTest" : false,
+      "kind" : "spmTarget",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "module" : "Persistence",
+      "name" : "Persistence",
+      "paths" : [
+        "Sources/Persistence"
+      ]
+    }
+  ],
+  "edges" : [
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Networking"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "dependency Networking"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Networking"
+    },
+    {
+      "from" : "spm:Features",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "base",
+          "symbol" : "dependency Persistence"
+        }
+      ],
+      "status" : "removed",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+        "dependency Persistence"
+      ],
+      "to" : "spm:Persistence"
+    },
+    {
+      "from" : "spm:Features/Catalog",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 4,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 5,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 2,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 10,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "side" : "head",
+          "symbol" : "PaymentMethod"
+        },
+        {
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 3,
+          "side" : "head",
+          "symbol" : "import Networking"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 8,
+          "side" : "head",
+          "symbol" : "PaymentClient"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "PaymentClient",
+        "import Networking"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Networking"
+    },
+    {
+      "from" : "spm:Features/Checkout",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 3,
+          "side" : "base",
+          "symbol" : "import Persistence"
+        },
+        {
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 7,
+          "side" : "base",
+          "symbol" : "CartStore"
+        }
+      ],
+      "status" : "removed",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+        "CartStore",
+        "import Persistence"
+      ],
+      "to" : "spm:Persistence"
+    },
+    {
+      "from" : "spm:FeaturesTests",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Features"
+        },
+        {
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Features"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Features"
+    },
+    {
+      "from" : "spm:FeaturesTests",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "CheckoutViewModel"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "spm:Features/Checkout"
+    },
+    {
+      "from" : "spm:Networking",
+      "refCount" : 6,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 5,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "PaymentError"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "PaymentMethod"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 10,
+          "side" : "head",
+          "symbol" : "PaymentError"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    },
+    {
+      "from" : "spm:Networking",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Collections"
+        },
+        {
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 2,
+          "side" : "head",
+          "symbol" : "import Collections"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "ext:swift-collections"
+    },
+    {
+      "from" : "spm:Persistence",
+      "refCount" : 6,
+      "refs" : [
+        {
+          "file" : "Package.swift",
+          "line" : 0,
+          "side" : "head",
+          "symbol" : "dependency Core"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 1,
+          "side" : "head",
+          "symbol" : "import Core"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 3,
+          "side" : "head",
+          "symbol" : "CartRepository"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 4,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "side" : "head",
+          "symbol" : "Item"
+        },
+        {
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 9,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "cfg:Core"
+    }
+  ],
+  "entities" : [
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.add(_:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.add(_:)",
+      "signature" : {
+        "base" : "func add(_ item: Item)",
+        "head" : "func add(_ item: Item)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 14,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 12
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.total()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 11
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.total()",
+      "signature" : {
+        "base" : "func total() -> Int",
+        "head" : "func total() -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 11,
+          "symbol" : "CheckoutViewModel.refresh()"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 13,
+          "symbol" : "CheckoutViewModel.refresh()"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.first()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 17,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 15
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.first()",
+      "signature" : {
+        "head" : "func first() -> Item"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 16,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 16
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.price(for:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 19,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 19
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.price(for:)",
+      "signature" : {
+        "base" : "func price(for item: Item) -> Int",
+        "head" : "func price(for item: Item) -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 21,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "base",
+        "startLine" : 19
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "access-changed:internal->public"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Cart.format(_:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 24,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 22
+      },
+      "parent" : "cfg:Core::Cart",
+      "qualifiedName" : "Cart.format(_:)",
+      "signature" : {
+        "base" : "func format(_ value: Int) -> String",
+        "head" : "func format(_ value: Int) -> String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "base",
+        "startLine" : 1
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "protocol-requirement-added",
+        "protocol-requirement-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository",
+      "isInterface" : true,
+      "kind" : "protocol",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "CartRepository",
+      "signature" : {
+        "base" : "protocol CartRepository",
+        "head" : "protocol CartRepository"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 3,
+          "symbol" : "CartStore"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 2,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "base",
+        "startLine" : 2
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "async-added",
+        "protocol-requirement-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository.items()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 2,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 2
+      },
+      "parent" : "cfg:Core::CartRepository",
+      "qualifiedName" : "CartRepository.items()",
+      "signature" : {
+        "base" : "func items() -> [Item]",
+        "head" : "func items() async -> [Item]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "protocol-requirement-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::CartRepository.clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/CartRepository.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "cfg:Core::CartRepository",
+      "qualifiedName" : "CartRepository.clear()",
+      "signature" : {
+        "head" : "func clear() async throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item",
+      "isInterface" : true,
+      "kind" : "struct",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "location" : {
+        "endLine" : 15,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "qualifiedName" : "Item",
+      "signature" : {
+        "base" : "struct Item: Codable, Equatable",
+        "head" : "struct Item: Codable, Equatable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Catalog",
+          "file" : "Sources/Features/Catalog/CatalogView.swift",
+          "line" : 4,
+          "symbol" : "CatalogView.items"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "symbol" : "PriceCache.price(for:)"
+        },
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 5,
+          "symbol" : "PaymentClient.queue"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 4,
+          "symbol" : "CartStore.storage"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "symbol" : "CartStore.items()"
+        },
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 9,
+          "symbol" : "CartStore.add(_:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.price",
+      "isInterface" : true,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 6,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 6
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.price",
+      "signature" : {
+        "base" : "var price: Int",
+        "head" : "var price: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 8,
+          "symbol" : "PriceCache.price(for:)"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 9,
+          "symbol" : "PriceCache.price(for:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.currency",
+      "isInterface" : true,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.currency",
+      "signature" : {
+        "head" : "var currency: String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 12,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "base",
+        "startLine" : 8
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.CodingKeys",
+      "isInterface" : false,
+      "kind" : "enum",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "cfg:Core::Item",
+      "qualifiedName" : "Item.CodingKeys",
+      "signature" : {
+        "base" : "enum CodingKeys: String, CodingKey",
+        "head" : "enum CodingKeys: String, CodingKey"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added",
+        "codable-shape"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::Item.CodingKeys.currency",
+      "isInterface" : false,
+      "kind" : "case",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 13,
+        "file" : "Sources/Core/Item.swift",
+        "side" : "head",
+        "startLine" : 13
+      },
+      "parent" : "cfg:Core::Item.CodingKeys",
+      "qualifiedName" : "Item.CodingKeys.currency",
+      "signature" : {
+        "head" : "case currency"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "base",
+        "startLine" : 1
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::PaymentMethod",
+      "isInterface" : true,
+      "kind" : "enum",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "PaymentMethod",
+      "signature" : {
+        "base" : "enum PaymentMethod: String, Codable",
+        "head" : "enum PaymentMethod: String, Codable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 14,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        },
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        },
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentClient.charge(_:method:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "cfg:Core",
+      "contractFlags" : [
+        "enum-case-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "cfg:Core::PaymentMethod.applePay",
+      "isInterface" : true,
+      "kind" : "case",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Core/PaymentMethod.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "cfg:Core::PaymentMethod",
+      "qualifiedName" : "PaymentMethod.applePay",
+      "signature" : {
+        "head" : "case applePay"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "folder:App",
+      "contractFlags" : [
+        "info-plist-changed",
+        "url-schemes-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "folder:App::App/Info.plist",
+      "isInterface" : true,
+      "kind" : "file",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 19,
+        "file" : "App/Info.plist",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "App/Info.plist",
+      "signature" : {
+
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "folder:App",
+      "contractFlags" : [
+        "entitlements-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "folder:App::App/Shop.entitlements",
+      "isInterface" : true,
+      "kind" : "file",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 11,
+        "file" : "App/Shop.entitlements",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "App/Shop.entitlements",
+      "signature" : {
+
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features",
+      "contractFlags" : [
+        "default-isolation-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features::build settings",
+      "isInterface" : true,
+      "kind" : "target",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "location" : {
+        "endLine" : 1,
+        "file" : "Package.swift",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "Features build settings",
+      "signature" : {
+        "head" : "swiftSettings: .defaultIsolation(MainActor.self)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Catalog",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Catalog::extension Banner: Hashable",
+      "isInterface" : false,
+      "kind" : "extension",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 5,
+        "file" : "Sources/Features/Catalog/Banner.swift",
+        "side" : "head",
+        "startLine" : 5
+      },
+      "qualifiedName" : "extension Banner: Hashable",
+      "signature" : {
+        "head" : "extension Banner: Hashable"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Features/Catalog/CatalogView.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "cosmetic",
+      "changes" : [
+        "cosmetic"
+      ],
+      "component" : "spm:Features/Catalog",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Catalog::CatalogView.title()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Features/Catalog/CatalogView.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Catalog::CatalogView",
+      "qualifiedName" : "CatalogView.title()",
+      "signature" : {
+        "base" : "func title() -> String",
+        "head" : "func title() -> String"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 18,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 5
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "mainactor-added",
+        "observable-state-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel",
+      "isInterface" : false,
+      "kind" : "class",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 19,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 5
+      },
+      "qualifiedName" : "CheckoutViewModel",
+      "signature" : {
+        "base" : "class CheckoutViewModel: ObservableObject",
+        "head" : "class CheckoutViewModel: ObservableObject"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 6,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "change" : "removed",
+      "changes" : [
+        "removed"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "spm:Persistence",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 7,
+          "symbol" : "CartStore"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.store",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.store",
+      "signature" : {
+        "base" : "let store"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 6,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "observable-state-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.total",
+      "signature" : {
+        "base" : "var total: Int",
+        "head" : "var total: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 8,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "spm:Networking",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 8,
+          "symbol" : "PaymentClient"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.client",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.client",
+      "signature" : {
+        "head" : "let client"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.logger",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Validates input before saving and returns early on bad values."
+      },
+      "location" : {
+        "endLine" : 9,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.logger",
+      "signature" : {
+        "head" : "let logger"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 12,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 10
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "nonisolated-removed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()",
+      "isInterface" : false,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 12
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.refresh()",
+      "signature" : {
+        "base" : "func refresh()",
+        "head" : "func refresh()"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:FeaturesTests",
+          "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+          "line" : 7,
+          "symbol" : "CheckoutTests.testTotal()"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 17,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "base",
+        "startLine" : 14
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "throws-added"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 16,
+          "symbol" : "PaymentMethod"
+        }
+      ],
+      "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)",
+      "isInterface" : false,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 18,
+        "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+        "side" : "head",
+        "startLine" : 16
+      },
+      "parent" : "spm:Features/Checkout::CheckoutViewModel",
+      "qualifiedName" : "CheckoutViewModel.pay(with:)",
+      "signature" : {
+        "base" : "func pay(with method: PaymentMethod)",
+        "head" : "func pay(with method: PaymentMethod) throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+        "kind-changed:class->actor"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::PriceCache",
+      "isInterface" : false,
+      "kind" : "actor",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 11,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "qualifiedName" : "PriceCache",
+      "signature" : {
+        "base" : "class PriceCache",
+        "head" : "actor PriceCache"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 4,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 4
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Features/Checkout::PriceCache.cache",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 4,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "parent" : "spm:Features/Checkout::PriceCache",
+      "qualifiedName" : "PriceCache.cache",
+      "signature" : {
+        "base" : "var cache: [String: Int]",
+        "head" : "var cache: [String: Decimal]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "base",
+        "startLine" : 6
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Features/Checkout",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "line" : 6,
+          "symbol" : "Item"
+        }
+      ],
+      "id" : "spm:Features/Checkout::PriceCache.price(for:)",
+      "isInterface" : false,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 10,
+        "file" : "Sources/Features/Checkout/PriceCache.swift",
+        "side" : "head",
+        "startLine" : 6
+      },
+      "parent" : "spm:Features/Checkout::PriceCache",
+      "qualifiedName" : "PriceCache.price(for:)",
+      "signature" : {
+        "base" : "func price(for item: Item) -> Int",
+        "head" : "func price(for item: Item) -> Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "base",
+        "startLine" : 9
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "modifiers"
+      ],
+      "component" : "spm:Networking",
+      "contractFlags" : [
+        "access-changed:internal->public",
+        "typed-throws-changed"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentError"
+        },
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 10,
+          "symbol" : "PaymentError"
+        },
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Networking/PaymentClient.swift",
+          "line" : 9,
+          "symbol" : "PaymentMethod"
+        }
+      ],
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 11,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "head",
+        "startLine" : 9
+      },
+      "parent" : "spm:Networking::PaymentClient",
+      "qualifiedName" : "PaymentClient.charge(_:method:)",
+      "signature" : {
+        "base" : "func charge(_ amount: Int, method: PaymentMethod) throws",
+        "head" : "func charge(_ amount: Decimal, method: PaymentMethod) throws(PaymentError)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 17,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 19,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "base",
+        "startLine" : 17
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "spm:Networking",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Networking::Transport.send(_:)",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 20,
+        "file" : "Sources/Networking/PaymentClient.swift",
+        "side" : "head",
+        "startLine" : 17
+      },
+      "parent" : "spm:Networking::Transport",
+      "qualifiedName" : "Transport.send(_:)",
+      "signature" : {
+        "base" : "func send(_ data: String) -> Bool",
+        "head" : "func send(_ data: String) -> Bool"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "base",
+        "startLine" : 8
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "async-added"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "cfg:Core",
+          "file" : "Sources/Persistence/CartStore.swift",
+          "line" : 8,
+          "symbol" : "Item"
+        }
+      ],
+      "id" : "spm:Persistence::CartStore.items()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Persistence::CartStore",
+      "qualifiedName" : "CartStore.items()",
+      "signature" : {
+        "base" : "func items() -> [Item]",
+        "head" : "func items() async -> [Item]"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "spm:Features/Checkout",
+          "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "line" : 15,
+          "symbol" : "CheckoutViewModel.pay(with:)"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::CartStore.clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "llm" : {
+        "summary" : "Runs on the main actor instead of a background queue."
+      },
+      "location" : {
+        "endLine" : 10,
+        "file" : "Sources/Persistence/CartStore.swift",
+        "side" : "head",
+        "startLine" : 10
+      },
+      "parent" : "spm:Persistence::CartStore",
+      "qualifiedName" : "CartStore.clear()",
+      "signature" : {
+        "head" : "func clear() async throws"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 11,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 3
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order",
+      "isInterface" : false,
+      "kind" : "class",
+      "llm" : {
+        "summary" : "Stores one more field and keeps older payloads readable."
+      },
+      "location" : {
+        "endLine" : 15,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 4
+      },
+      "qualifiedName" : "Order",
+      "signature" : {
+        "base" : "class Order",
+        "head" : "class Order"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 5,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 5
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.total",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 7,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.total",
+      "signature" : {
+        "base" : "var total: Int",
+        "head" : "var total: Decimal"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+        "swiftdata-model-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.placedAt",
+      "isInterface" : false,
+      "kind" : "var",
+      "llm" : {
+        "summary" : "Loads the data asynchronously and reports failures to the caller."
+      },
+      "location" : {
+        "endLine" : 8,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 8
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.placedAt",
+      "signature" : {
+        "head" : "var placedAt: Date"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 10,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "base",
+        "startLine" : 7
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "spm:Persistence",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "spm:Persistence::Order.init(id:total:placedAt:)",
+      "isInterface" : false,
+      "kind" : "init",
+      "llm" : {
+        "summary" : "Shows the new state in the list and hides the old placeholder."
+      },
+      "location" : {
+        "endLine" : 14,
+        "file" : "Sources/Persistence/Order.swift",
+        "side" : "head",
+        "startLine" : 10
+      },
+      "parent" : "spm:Persistence::Order",
+      "qualifiedName" : "Order.init(id:total:placedAt:)",
+      "signature" : {
+        "base" : "init(id: UUID, total: Int)",
+        "head" : "init(id: UUID, total: Decimal, placedAt: Date)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    }
+  ],
+  "externalDeps" : [
+    {
+      "change" : "bumped",
+      "from" : "1.1.0",
+      "name" : "swift-collections",
+      "to" : "1.2.0"
+    }
+  ],
+  "llm" : {
+    "batches" : 7,
+    "cached" : 0,
+    "command" : "fake-llm.sh",
+    "failed" : 0,
+    "promptVersion" : "1",
+    "reviewNotes" : true,
+    "tool" : "claude"
+  },
+  "regions" : [
+    {
+      "anchor" : 7,
+      "endLine" : 8,
+      "entity" : "cfg:Core::Cart.add(_:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.add(_:)/r1",
+      "kind" : "removed",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.6
+      },
+      "reasons" : [
+        "early return removed, guard removed",
+        "control flow: early return, guard"
+      ],
+      "risk" : 0.748,
+      "side" : "base",
+      "startLine" : 8
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 3,
+      "entity" : "cfg:Core::Cart.add(_:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.add(_:)/c1",
+      "kind" : "context",
+      "lines" : [
+        2,
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 2,
+      "supports" : [
+        "cfg:Core::Cart.add(_:)/r1"
+      ]
+    },
+    {
+      "endLine" : 12,
+      "entity" : "cfg:Core::Cart.total()",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.total()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
+        "risk" : 0.55
+      },
+      "reasons" : [
+        "interface signature changed",
+        "used from 1 component"
+      ],
+      "risk" : 0.402,
+      "side" : "head",
+      "startLine" : 11
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 29,
+      "entity" : "cfg:Core::Cart.total()",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.total()/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "rounded(_:)"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 27,
+      "supports" : [
+        "cfg:Core::Cart.total()/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 19,
+      "entity" : "cfg:Core::Cart.total()",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "cfg:Core::Cart.total()/c2",
+      "kind" : "context",
+      "lines" : [
+        5,
+        11
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "cfg:Core::Cart.total()/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 14,
+      "entity" : "cfg:Core::Cart.total()",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "cfg:Core::Cart.total()/c3",
+      "kind" : "context",
+      "lines" : [
+        12,
+        13
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "CheckoutViewModel.refresh()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "cfg:Core::Cart.total()/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 3,
+      "entity" : "cfg:Core::Cart.total()",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.total()/c4",
+      "kind" : "context",
+      "lines" : [
+        2,
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 3
+      },
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 2,
+      "supports" : [
+        "cfg:Core::Cart.total()/r1"
+      ]
+    },
+    {
+      "endLine" : 17,
+      "entity" : "cfg:Core::Cart.first()",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.first()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.72
+      },
+      "reasons" : [
+        "new force unwrap"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 15
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 15,
+      "entity" : "cfg:Core::Cart.first()",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Cart.first()/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Item"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "cfg:Core::Cart.first()/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 3,
+      "entity" : "cfg:Core::Cart.first()",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.first()/c2",
+      "kind" : "context",
+      "lines" : [
+        2,
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 2,
+      "supports" : [
+        "cfg:Core::Cart.first()/r1"
+      ]
+    },
+    {
+      "endLine" : 19,
+      "entity" : "cfg:Core::Cart.price(for:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.price(for:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.52
+      },
+      "reasons" : [
+        "interface signature changed",
+        "used from 1 component"
+      ],
+      "risk" : 0.402,
+      "side" : "head",
+      "startLine" : 19
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 15,
+      "entity" : "cfg:Core::Cart.price(for:)",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Cart.price(for:)/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Item"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "cfg:Core::Cart.price(for:)/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 18,
+      "entity" : "cfg:Core::Cart.price(for:)",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "cfg:Core::Cart.price(for:)/c2",
+      "kind" : "context",
+      "lines" : [
+        16
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel.pay(with:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 16,
+      "supports" : [
+        "cfg:Core::Cart.price(for:)/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 13,
+      "entity" : "cfg:Core::Cart.price(for:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.price(for:)/c3",
+      "kind" : "context",
+      "lines" : [
+        11,
+        12
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "Cart.total()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "cfg:Core::Cart.price(for:)/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 20,
+      "entity" : "cfg:Core::Cart.price(for:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.price(for:)/c4",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 3
+      },
+      "reasons" : [
+        "Cart.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "cfg:Core::Cart.price(for:)/r1"
+      ]
+    },
+    {
+      "endLine" : 22,
+      "entity" : "cfg:Core::Cart.format(_:)",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Cart.format(_:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "risk" : 0.68
+      },
+      "reasons" : [
+        "access-changed:internal->public"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 22
+    },
+    {
+      "endLine" : 1,
+      "entity" : "cfg:Core::CartRepository",
+      "file" : "Sources/Core/CartRepository.swift",
+      "id" : "cfg:Core::CartRepository/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "risk" : 0.14
+      },
+      "reasons" : [
+        "protocol-requirement-added",
+        "protocol-requirement-changed",
+        "used from 1 component"
+      ],
+      "risk" : 0.863,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 11,
+      "entity" : "cfg:Core::CartRepository",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "cfg:Core::CartRepository/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CartStore"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "cfg:Core::CartRepository/r1"
+      ]
+    },
+    {
+      "endLine" : 2,
+      "entity" : "cfg:Core::CartRepository.items()",
+      "file" : "Sources/Core/CartRepository.swift",
+      "id" : "cfg:Core::CartRepository.items()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
+        "risk" : 0.73
+      },
+      "reasons" : [
+        "async-added",
+        "protocol-requirement-changed"
+      ],
+      "risk" : 0.856,
+      "side" : "head",
+      "startLine" : 2
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 15,
+      "entity" : "cfg:Core::CartRepository.items()",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::CartRepository.items()/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Item"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "cfg:Core::CartRepository.items()/r1"
+      ]
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 8,
+      "entity" : "cfg:Core::CartRepository.items()",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "cfg:Core::CartRepository.items()/c2",
+      "kind" : "context",
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CartStore.items()"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 8,
+      "supports" : [
+        "cfg:Core::CartRepository.items()/r1"
+      ]
+    },
+    {
+      "endLine" : 4,
+      "entity" : "cfg:Core::CartRepository.clear()",
+      "file" : "Sources/Core/CartRepository.swift",
+      "id" : "cfg:Core::CartRepository.clear()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.48
+      },
+      "reasons" : [
+        "protocol-requirement-added"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 10,
+      "entity" : "cfg:Core::CartRepository.clear()",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "cfg:Core::CartRepository.clear()/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "CartStore.clear()"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 10,
+      "supports" : [
+        "cfg:Core::CartRepository.clear()/r1"
+      ]
+    },
+    {
+      "endLine" : 3,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Item/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.41
+      },
+      "reasons" : [
+        "codable-shape",
+        "used from 4 components"
+      ],
+      "risk" : 0.712,
+      "side" : "head",
+      "startLine" : 3
+    },
+    {
+      "component" : "spm:Features/Catalog",
+      "endLine" : 4,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Features/Catalog/CatalogView.swift",
+      "id" : "cfg:Core::Item/c1",
+      "kind" : "context",
+      "lines" : [
+        4
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CatalogView.items"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "cfg:Core::Item/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 10,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "cfg:Core::Item/c2",
+      "kind" : "context",
+      "lines" : [
+        6
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "PriceCache.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "cfg:Core::Item/r1"
+      ]
+    },
+    {
+      "component" : "spm:Networking",
+      "endLine" : 5,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "cfg:Core::Item/c3",
+      "kind" : "context",
+      "lines" : [
+        5
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "PaymentClient.queue"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "cfg:Core::Item/r1"
+      ]
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 4,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "cfg:Core::Item/c4",
+      "kind" : "context",
+      "lines" : [
+        4
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CartStore.storage"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "cfg:Core::Item/r1"
+      ]
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 8,
+      "entity" : "cfg:Core::Item",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "cfg:Core::Item/c5",
+      "kind" : "context",
+      "lines" : [
+        8
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 3
+      },
+      "reasons" : [
+        "CartStore.items()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 8,
+      "supports" : [
+        "cfg:Core::Item/r1"
+      ]
+    },
+    {
+      "endLine" : 6,
+      "entity" : "cfg:Core::Item.price",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Item.price/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.41
+      },
+      "reasons" : [
+        "codable-shape",
+        "used from 1 component"
+      ],
+      "risk" : 0.658,
+      "side" : "head",
+      "startLine" : 6
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 10,
+      "entity" : "cfg:Core::Item.price",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "cfg:Core::Item.price/c1",
+      "kind" : "context",
+      "lines" : [
+        6,
+        8,
+        9
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "PriceCache.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "cfg:Core::Item.price/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 13,
+      "entity" : "cfg:Core::Item.price",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Item.price/c2",
+      "kind" : "context",
+      "lines" : [
+        11,
+        12
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Cart.total()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "cfg:Core::Item.price/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 19,
+      "entity" : "cfg:Core::Item.price",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Item.price/c3",
+      "kind" : "context",
+      "lines" : [
+        19
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "Cart.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 19,
+      "supports" : [
+        "cfg:Core::Item.price/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 20,
+      "entity" : "cfg:Core::Item.price",
+      "file" : "Sources/Core/Cart.swift",
+      "id" : "cfg:Core::Item.price/c4",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "Cart.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "cfg:Core::Item.price/r1"
+      ]
+    },
+    {
+      "endLine" : 7,
+      "entity" : "cfg:Core::Item.currency",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Item.currency/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
+        "risk" : 0.69
+      },
+      "reasons" : [
+        "codable-shape"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 7
+    },
+    {
+      "endLine" : 9,
+      "entity" : "cfg:Core::Item.CodingKeys",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Item.CodingKeys/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.77
+      },
+      "reasons" : [
+        "enum-case-added"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 9
+    },
+    {
+      "endLine" : 13,
+      "entity" : "cfg:Core::Item.CodingKeys.currency",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "cfg:Core::Item.CodingKeys.currency/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.85
+      },
+      "reasons" : [
+        "codable-shape",
+        "enum-case-added"
+      ],
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 13
+    },
+    {
+      "endLine" : 1,
+      "entity" : "cfg:Core::PaymentMethod",
+      "file" : "Sources/Core/PaymentMethod.swift",
+      "id" : "cfg:Core::PaymentMethod/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "risk" : 0.44
+      },
+      "reasons" : [
+        "enum-case-added",
+        "used from 2 components"
+      ],
+      "risk" : 0.676,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 14,
+      "entity" : "cfg:Core::PaymentMethod",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "cfg:Core::PaymentMethod/c1",
+      "kind" : "context",
+      "lines" : [
+        12,
+        14
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel.refresh()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "cfg:Core::PaymentMethod/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 18,
+      "entity" : "cfg:Core::PaymentMethod",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "cfg:Core::PaymentMethod/c2",
+      "kind" : "context",
+      "lines" : [
+        16
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "CheckoutViewModel.pay(with:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 16,
+      "supports" : [
+        "cfg:Core::PaymentMethod/r1"
+      ]
+    },
+    {
+      "component" : "spm:Networking",
+      "endLine" : 11,
+      "entity" : "cfg:Core::PaymentMethod",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "cfg:Core::PaymentMethod/c3",
+      "kind" : "context",
+      "lines" : [
+        9
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "PaymentClient.charge(_:method:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 9,
+      "supports" : [
+        "cfg:Core::PaymentMethod/r1"
+      ]
+    },
+    {
+      "endLine" : 4,
+      "entity" : "cfg:Core::PaymentMethod.applePay",
+      "file" : "Sources/Core/PaymentMethod.swift",
+      "id" : "cfg:Core::PaymentMethod.applePay/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.84
+      },
+      "reasons" : [
+        "enum-case-added"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "endLine" : 19,
+      "entity" : "folder:App::App/Info.plist",
+      "file" : "App/Info.plist",
+      "id" : "folder:App::App/Info.plist/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.24
+      },
+      "reasons" : [
+        "url-schemes-changed",
+        "info-plist-changed"
+      ],
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "endLine" : 11,
+      "entity" : "folder:App::App/Shop.entitlements",
+      "file" : "App/Shop.entitlements",
+      "id" : "folder:App::App/Shop.entitlements/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.13
+      },
+      "reasons" : [
+        "entitlements-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "endLine" : 1,
+      "entity" : "spm:Features::build settings",
+      "file" : "Package.swift",
+      "id" : "spm:Features::build settings/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
+        "risk" : 0.27
+      },
+      "reasons" : [
+        "default-isolation-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "endLine" : 5,
+      "entity" : "spm:Features/Catalog::extension Banner: Hashable",
+      "file" : "Sources/Features/Catalog/Banner.swift",
+      "id" : "spm:Features/Catalog::extension Banner: Hashable/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "risk" : 0.14
+      },
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "endLine" : 5,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.05
+      },
+      "reasons" : [
+        "mainactor-added",
+        "observable-state-changed"
+      ],
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "component" : "spm:FeaturesTests",
+      "endLine" : 9,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel",
+      "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel/c1",
+      "kind" : "context",
+      "lines" : [
+        5,
+        6
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutTests.testTotal()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel/r1"
+      ]
+    },
+    {
+      "endLine" : 7,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.store",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.store/r1",
+      "kind" : "removed",
+      "llm" : {
+        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.19
+      },
+      "reasons" : [
+        "removed declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "base",
+      "startLine" : 7
+    },
+    {
+      "endLine" : 7,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "risk" : 0.64
+      },
+      "reasons" : [
+        "observable-state-changed"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 7
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 14,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total/c1",
+      "kind" : "context",
+      "lines" : [
+        12,
+        13
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "CheckoutViewModel.refresh()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.total/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 18,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total/c2",
+      "kind" : "context",
+      "lines" : [
+        16,
+        17
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel.pay(with:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 16,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.total/r1"
+      ]
+    },
+    {
+      "component" : "spm:FeaturesTests",
+      "endLine" : 9,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.total",
+      "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.total/c3",
+      "kind" : "context",
+      "lines" : [
+        5,
+        8
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "CheckoutTests.testTotal()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.total/r1"
+      ]
+    },
+    {
+      "endLine" : 8,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.client",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.client/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.11
+      },
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 8
+    },
+    {
+      "component" : "spm:Networking",
+      "endLine" : 12,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.client",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.client/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "PaymentClient"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.client/r1"
+      ]
+    },
+    {
+      "endLine" : 9,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.logger",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.logger/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.71
+      },
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 9
+    },
+    {
+      "endLine" : 12,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.refresh()",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
+        "risk" : 0.21
+      },
+      "reasons" : [
+        "nonisolated-removed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 12
+    },
+    {
+      "component" : "spm:FeaturesTests",
+      "endLine" : 9,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.refresh()",
+      "file" : "Tests/FeaturesTests/CheckoutTests.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()/c1",
+      "kind" : "context",
+      "lines" : [
+        5,
+        7
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "CheckoutTests.testTotal()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.refresh()/r1"
+      ]
+    },
+    {
+      "endLine" : 17,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "risk" : 0.46
+      },
+      "reasons" : [
+        "throws-added"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 16
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 5,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)",
+      "file" : "Sources/Core/PaymentMethod.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "PaymentMethod"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 1,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.pay(with:)/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 10,
+      "entity" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)/c2",
+      "kind" : "context",
+      "lines" : [
+        7,
+        8,
+        9,
+        10
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "stored properties of CheckoutViewModel"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 7,
+      "supports" : [
+        "spm:Features/Checkout::CheckoutViewModel.pay(with:)/r1"
+      ]
+    },
+    {
+      "endLine" : 3,
+      "entity" : "spm:Features/Checkout::PriceCache",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "spm:Features/Checkout::PriceCache/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.42
+      },
+      "reasons" : [
+        "kind-changed:class->actor"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 3
+    },
+    {
+      "endLine" : 4,
+      "entity" : "spm:Features/Checkout::PriceCache.cache",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "spm:Features/Checkout::PriceCache.cache/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "risk" : 0.52
+      },
+      "reasons" : [
+        "signature changed"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 10,
+      "entity" : "spm:Features/Checkout::PriceCache.cache",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "spm:Features/Checkout::PriceCache.cache/c1",
+      "kind" : "context",
+      "lines" : [
+        6,
+        7,
+        8
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "PriceCache.price(for:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "spm:Features/Checkout::PriceCache.cache/r1"
+      ]
+    },
+    {
+      "endLine" : 6,
+      "entity" : "spm:Features/Checkout::PriceCache.price(for:)",
+      "file" : "Sources/Features/Checkout/PriceCache.swift",
+      "id" : "spm:Features/Checkout::PriceCache.price(for:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "removal" : {
+          "kind" : "defensive",
+          "note" : "Handles a nil that the caller never passes."
+        },
+        "risk" : 0.46
+      },
+      "reasons" : [
+        "signature changed"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 6
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 15,
+      "entity" : "spm:Features/Checkout::PriceCache.price(for:)",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "spm:Features/Checkout::PriceCache.price(for:)/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Item"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "spm:Features/Checkout::PriceCache.price(for:)/r1"
+      ]
+    },
+    {
+      "endLine" : 9,
+      "entity" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Changes what is stored, so data written by the previous version may not decode.",
+        "risk" : 0.06
+      },
+      "reasons" : [
+        "access-changed:internal->public",
+        "typed-throws-changed",
+        "used from 1 component"
+      ],
+      "risk" : 0.863,
+      "side" : "head",
+      "startLine" : 9
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 9,
+      "entity" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "file" : "Sources/Core/PaymentMethod.swift",
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "PaymentError"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 7,
+      "supports" : [
+        "spm:Networking::PaymentClient.charge(_:method:)/r1"
+      ]
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 5,
+      "entity" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "file" : "Sources/Core/PaymentMethod.swift",
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)/c2",
+      "kind" : "context",
+      "llm" : {
+        "keep" : true,
+        "rank" : 2
+      },
+      "reasons" : [
+        "PaymentMethod"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 1,
+      "supports" : [
+        "spm:Networking::PaymentClient.charge(_:method:)/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 18,
+      "entity" : "spm:Networking::PaymentClient.charge(_:method:)",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Networking::PaymentClient.charge(_:method:)/c3",
+      "kind" : "context",
+      "lines" : [
+        16,
+        17
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel.pay(with:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 16,
+      "supports" : [
+        "spm:Networking::PaymentClient.charge(_:method:)/r1"
+      ]
+    },
+    {
+      "endLine" : 19,
+      "entity" : "spm:Networking::Transport.send(_:)",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "spm:Networking::Transport.send(_:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "removal" : {
+          "kind" : "speculative",
+          "note" : "A protocol with one conformer and no second use in sight."
+        },
+        "risk" : 0.32
+      },
+      "reasons" : [
+        "control flow: early return, if"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 18
+    },
+    {
+      "component" : "spm:Networking",
+      "endLine" : 26,
+      "entity" : "spm:Networking::Transport.send(_:)",
+      "file" : "Sources/Networking/PaymentClient.swift",
+      "id" : "spm:Networking::Transport.send(_:)/c1",
+      "kind" : "context",
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "LoggingTransport.send(_:)"
+      ],
+      "relation" : "override",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 24,
+      "supports" : [
+        "spm:Networking::Transport.send(_:)/r1"
+      ]
+    },
+    {
+      "endLine" : 8,
+      "entity" : "spm:Persistence::CartStore.items()",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "spm:Persistence::CartStore.items()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "risk" : 0.82
+      },
+      "reasons" : [
+        "async-added",
+        "used from 1 component"
+      ],
+      "risk" : 0.658,
+      "side" : "head",
+      "startLine" : 8
+    },
+    {
+      "component" : "cfg:Core",
+      "endLine" : 15,
+      "entity" : "spm:Persistence::CartStore.items()",
+      "file" : "Sources/Core/Item.swift",
+      "id" : "spm:Persistence::CartStore.items()/c1",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "Item"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "spm:Persistence::CartStore.items()/r1"
+      ]
+    },
+    {
+      "component" : "spm:Features/Checkout",
+      "endLine" : 19,
+      "entity" : "spm:Persistence::CartStore.items()",
+      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+      "id" : "spm:Persistence::CartStore.items()/c2",
+      "kind" : "context",
+      "lines" : [
+        5,
+        15
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "CheckoutViewModel"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "spm:Persistence::CartStore.items()/r1"
+      ]
+    },
+    {
+      "endLine" : 10,
+      "entity" : "spm:Persistence::CartStore.clear()",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "spm:Persistence::CartStore.clear()/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
+        "risk" : 0.57
+      },
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 10
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 4,
+      "entity" : "spm:Persistence::CartStore.clear()",
+      "file" : "Sources/Persistence/CartStore.swift",
+      "id" : "spm:Persistence::CartStore.clear()/c1",
+      "kind" : "context",
+      "lines" : [
+        4
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "stored properties of CartStore"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "spm:Persistence::CartStore.clear()/r1"
+      ]
+    },
+    {
+      "endLine" : 4,
+      "entity" : "spm:Persistence::Order",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
+        "risk" : 0.8
+      },
+      "reasons" : [
+        "swiftdata-model-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "endLine" : 7,
+      "entity" : "spm:Persistence::Order.total",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.total/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.05
+      },
+      "reasons" : [
+        "swiftdata-model-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 7
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 14,
+      "entity" : "spm:Persistence::Order.total",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.total/c1",
+      "kind" : "context",
+      "lines" : [
+        10,
+        12
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "Order.init(id:total:placedAt:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 10,
+      "supports" : [
+        "spm:Persistence::Order.total/r1"
+      ]
+    },
+    {
+      "endLine" : 8,
+      "entity" : "spm:Persistence::Order.placedAt",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.placedAt/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Callers that relied on the old behavior may now take a different path.",
+        "risk" : 0.05
+      },
+      "reasons" : [
+        "swiftdata-model-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 8
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 14,
+      "entity" : "spm:Persistence::Order.placedAt",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.placedAt/c1",
+      "kind" : "context",
+      "lines" : [
+        10,
+        13
+      ],
+      "llm" : {
+        "keep" : false
+      },
+      "reasons" : [
+        "Order.init(id:total:placedAt:)"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 10,
+      "supports" : [
+        "spm:Persistence::Order.placedAt/r1"
+      ]
+    },
+    {
+      "endLine" : 10,
+      "entity" : "spm:Persistence::Order.init(id:total:placedAt:)",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.init(id:total:placedAt:)/r1",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
+        "risk" : 0.39
+      },
+      "reasons" : [
+        "signature changed"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 10
+    },
+    {
+      "endLine" : 13,
+      "entity" : "spm:Persistence::Order.init(id:total:placedAt:)",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.init(id:total:placedAt:)/r2",
+      "kind" : "review",
+      "llm" : {
+        "note" : "Adds a new public entry point that other components can now call.",
+        "risk" : 0.4
+      },
+      "reasons" : [
+        "changed lines"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 13
+    },
+    {
+      "component" : "spm:Persistence",
+      "endLine" : 8,
+      "entity" : "spm:Persistence::Order.init(id:total:placedAt:)",
+      "file" : "Sources/Persistence/Order.swift",
+      "id" : "spm:Persistence::Order.init(id:total:placedAt:)/c1",
+      "kind" : "context",
+      "lines" : [
+        6,
+        7,
+        8
+      ],
+      "llm" : {
+        "keep" : true,
+        "rank" : 1
+      },
+      "reasons" : [
+        "stored properties of Order"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "spm:Persistence::Order.init(id:total:placedAt:)/r1",
+        "spm:Persistence::Order.init(id:total:placedAt:)/r2"
+      ]
+    }
+  ],
+  "repo" : {
+    "base" : "base",
+    "baseSha" : "<base>",
+    "head" : "main",
+    "headSha" : "<head>",
+    "root" : "<repo>",
+    "usesMergeBase" : true
+  },
+  "version" : 1,
+  "warnings" : [
+    {
+      "kind" : "ambiguous-name",
+      "message" : "Logger is declared in cfg:Core, spm:Networking; references to it were not resolved (head)."
+    }
+  ]
+}

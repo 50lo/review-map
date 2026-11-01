@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { flagLabel } from "./graph";
 import { signatureSegments } from "./diff";
 import { setReviewed, useReview } from "./review";
@@ -67,5 +67,39 @@ export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) 
       <input type="checkbox" checked={on} onChange={(ev) => setReviewed(id, ev.target.checked)} />
       {!compact && <span>Reviewed</span>}
     </label>
+  );
+}
+
+/** LLM text behind a link, so it shows only on demand. */
+export function Reveal({ label, children }: { label: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`reveal ${open ? "open" : ""}`}>
+      <button
+        className="link small reveal-toggle"
+        onClick={(ev) => {
+          ev.stopPropagation();
+          setOpen(!open);
+        }}
+      >
+        {open ? `Hide ${label}` : label}
+      </button>
+      {open && <div className="llm-text">{children}</div>}
+    </div>
+  );
+}
+
+/** Switches ranking, and every other LLM annotation, between the analyzer's scores and the LLM's. */
+export function RankingToggle({ on, setOn }: { on: boolean; setOn: (on: boolean) => void }) {
+  return (
+    <div className="ranking-toggle" role="group" aria-label="Ranking">
+      <span className="muted small">Ranking</span>
+      <button className={`seg ${on ? "" : "on"}`} aria-pressed={!on} onClick={() => setOn(false)}>
+        Deterministic
+      </button>
+      <button className={`seg ${on ? "on" : ""}`} aria-pressed={on} onClick={() => setOn(true)}>
+        LLM
+      </button>
+    </div>
   );
 }
