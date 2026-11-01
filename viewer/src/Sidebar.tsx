@@ -16,7 +16,7 @@ import {
 } from "./graph";
 import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
-import { ChangeTag, Chips, RankingToggle, Reveal, ReviewedBox, Signature, StatusDot } from "./ui";
+import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
 
 interface Props {
   index: Index;
@@ -327,7 +327,7 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
           </p>
         )}
         {ext && <p>{ext.change === "bumped" ? `Version ${ext.from} → ${ext.to}` : `Package ${ext.change}${ext.to ? ` at ${ext.to}` : ""}`}</p>}
-        {llmOf(index, c) && <Reveal label="LLM summary">{llmOf(index, c)!.summary}</Reveal>}
+        {llmOf(index, c) && <LLMSummary text={llmOf(index, c)!.summary} />}
       </section>
       {(shown.length > 0 || cosmetic + lowRisk > 0) && (
         <section>

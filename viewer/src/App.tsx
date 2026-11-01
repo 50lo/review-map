@@ -126,7 +126,7 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
       <p>Drop a change-model.json here, or choose one.</p>
       <input type="file" accept=".json,application/json" onChange={(e) => take(e.target.files?.[0])} />
       <p className="muted">
-        Or run <code>reviewmap &lt;repo&gt; --base main --head feature --view</code> to analyze a change and open it here.
+        Or run <code>reviewmap</code> in a repo to review its current branch against main here.
       </p>
       {error && <p className="error">{error}</p>}
     </div>

@@ -8,21 +8,25 @@ Requires the Swift 6.2 toolchain (Xcode 26) on macOS, and Node 20 or later for t
 
 ```sh
 swift build -c release
-.build/release/reviewmap /path/to/repo --base main --head feature-x --view
+cd /path/to/repo
+/path/to/review-map/.build/release/reviewmap
 ```
 
-That writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. The first run installs the viewer's npm dependencies. Without `--view` it only writes the file, and `reviewmap view [change-model.json]` opens an existing one. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it. Options:
+With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. The first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+
+The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate` runs the LLM annotator on an existing model, and `reviewmap view [change-model.json]` opens an existing model. Options for the default command and `analyze`:
 
 | Option | Meaning |
 | --- | --- |
-| `--base`, `--head` | Any git refs. By default the base is the merge-base of the two, which is what a PR shows. |
+| `[repo]` | Path to the repo, or any directory inside it (default: the current directory). |
+| `--base`, `--head` | Any git refs (default: `main` and the current branch). The base is the merge-base of the two, which is what a PR shows. |
 | `--no-merge-base` | Compare against `--base` directly. |
 | `-o <file>` | Output path, or `-` for stdout. |
 | `--config <file>` | A `reviewmap.yml`. By default it's read from the head of the repo, if one exists there. |
 | `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
 | `--max-refs <n>` | References kept per edge (default 50). |
 | `--summary` | Print a short summary to stderr. |
-| `--view` | Serve the result in the viewer and open the browser. Stop with Ctrl-C. |
+| `--view`, `--no-view` | Serve the result in the viewer and open the browser; stop it with Ctrl-C. On by default, off for `analyze`. |
 | `--port <n>` | Viewer port (default 5173). |
 | `--no-llm` | Skip the LLM annotator. |
 | `--llm <tool>` | CLI that runs the annotator: `claude` (default) or `codex`. |
@@ -94,7 +98,7 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 **LLM layer**
 
 - When the model has LLM annotations, Start here shows a **Ranking** toggle: Deterministic or LLM. It switches the risk that Start here, region order, `j`/`k`, and the risk badges use. The LLM layer is on by default, and the choice is kept in browser storage.
-- With the LLM layer on, everything else from the LLM shows only on demand: a region's note behind **Why** in its label row, entity and component summaries behind **LLM summary** (side panel, level 2, level 3), and removal candidates as a tag in the label row and as a list behind their count in the overview. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
+- With the LLM layer on, entity and component summaries show under their headers (side panel, level 2, level 3). The rest shows on demand: a region's note behind **Why** in its label row, and removal candidates as a tag in the label row and as a list behind their count in the overview. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
 - Context the LLM left out folds into a "Show N context snippets left out by the LLM" link after the kept ones, which follow the LLM's rank.
 - With the LLM layer off, the viewer shows only deterministic facts, as if the annotator hadn't run.
 - The overview names the CLI that scored the change and the batches that kept deterministic scores, which open their validation errors.

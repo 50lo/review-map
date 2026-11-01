@@ -21,7 +21,7 @@ import { EdgeList } from "./Sidebar";
 import { canOpenInXcode, openInXcode } from "./source";
 import { setNote, useReview } from "./review";
 import type { Entity, Region, Usage } from "./types";
-import { ChangeTag, Chips, Reveal, ReviewedBox, Signature } from "./ui";
+import { ChangeTag, Chips, LLMSummary, ReviewedBox, Signature } from "./ui";
 
 type Go = (f: Focus) => void;
 
@@ -61,7 +61,7 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
             </>
           )}
         </p>
-        {llmOf(index, c) && <Reveal label="LLM summary">{llmOf(index, c)!.summary}</Reveal>}
+        {llmOf(index, c) && <LLMSummary text={llmOf(index, c)!.summary} />}
       </header>
 
       {children.length > 0 && (
@@ -148,7 +148,7 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
       </button>
       <Signature e={e} />
       <Chips flags={e.contractFlags} />
-      {llmOf(index, e) && <Reveal label="LLM summary">{llmOf(index, e)!.summary}</Reveal>}
+      {llmOf(index, e) && <LLMSummary text={llmOf(index, e)!.summary} />}
       <Usages index={index} title="Used by" usages={e.usedBy ?? []} target={(u) => usedByTarget(index, u)} go={go} />
       <Usages index={index} title="Depends on" usages={e.dependsOn ?? []} target={(u) => dependsOnTarget(index, u)} go={go} />
     </article>
@@ -465,7 +465,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
         </p>
         <Signature e={e} />
         <Chips flags={e.contractFlags} />
-        {llmOf(index, e) && <Reveal label="LLM summary">{llmOf(index, e)!.summary}</Reveal>}
+        {llmOf(index, e) && <LLMSummary text={llmOf(index, e)!.summary} />}
         <div className="page-actions">
           {total > 0 && (
             <span className="stepper" title="Regions across the change, highest risk first (keys j and k)">

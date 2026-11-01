@@ -47,9 +47,10 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 ## Milestone 5 notes
 
 - The annotator runs the `claude` or `codex` CLI, not the API, so it uses the local login. It runs by default and `--no-llm` skips it. `reviewmap annotate` re-runs it on an existing model.
+- `reviewmap` with no arguments reviews the current branch of the current directory against `main` and opens the viewer, the command used almost every time. `analyze`, `annotate`, and `view` keep one step each.
 - It has only run against `scripts/fake-llm.sh`, which fills the reply template with canned values. The real CLIs, prompt quality, cost, and time are still to be checked on a Mac. The exact flags for `codex exec` (`--output-last-message`, prompt on stdin with `-`) are untested.
 - Removal candidates are tagged on review regions, since every changed entity has at least one; a speculative abstraction is tagged on its declaration region.
 - The ranking toggle switches the whole LLM layer, not only the ranking: with it off the viewer shows no LLM notes, summaries, pruning, or removal candidates, so the evaluation compares the tool with and without the LLM.
-- Summaries and notes show only on demand. Context the LLM leaves out folds into a count after the kept snippets.
+- Entity and component summaries are always shown when the LLM layer is on, because they were opened almost every time. Region notes and removal notes stay on demand. Context the LLM leaves out folds into a count after the kept snippets.
 - Test components, test and generated code, and cosmetic changes are not sent to the LLM.
 - On IceCubesApp's last 40 commits with the fake: 23 batches, the largest prompt about 79,000 characters, 13 seconds in all.

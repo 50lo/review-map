@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { flagLabel } from "./graph";
 import { signatureSegments } from "./diff";
 import { setReviewed, useReview } from "./review";
@@ -70,24 +70,12 @@ export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) 
   );
 }
 
-/** LLM text behind a link, so it shows only on demand. */
-export function Reveal({ label, children }: { label: string; children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className={`reveal ${open ? "open" : ""}`}>
-      <button
-        className="link small reveal-toggle"
-        onClick={(ev) => {
-          ev.stopPropagation();
-          setOpen(!open);
-        }}
-      >
-        {open ? `Hide ${label}` : label}
-      </button>
-      {open && <div className="llm-text">{children}</div>}
-    </div>
-  );
-}
+/** The LLM's one-line behavior summary of an entity or component. */
+export const LLMSummary = ({ text }: { text: string }) => (
+  <div className="llm-text llm-summary" title="Summary written by the LLM">
+    {text}
+  </div>
+);
 
 /** Switches ranking, and every other LLM annotation, between the analyzer's scores and the LLM's. */
 export function RankingToggle({ on, setOn }: { on: boolean; setOn: (on: boolean) => void }) {

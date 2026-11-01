@@ -6,25 +6,23 @@ struct ReviewMap: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reviewmap",
         abstract: "Structural review map for a Swift change.",
+        discussion: "With no subcommand, `reviewmap` reviews the current branch of the repo in the current directory against main and opens the viewer.",
         version: Analyzer.version,
-        subcommands: [Analyze.self, Annotate.self, ViewCommand.self],
-        defaultSubcommand: Analyze.self
+        subcommands: [Review.self, Analyze.self, Annotate.self, ViewCommand.self],
+        defaultSubcommand: Review.self
     )
 }
 
-struct Analyze: ParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Analyze the change between two git refs and write change-model.json."
-    )
-
+/// What to analyze and how; shared by `review` and `analyze`.
+struct AnalyzeArgs: ParsableArguments {
     @Argument(help: "Path to the git repository (any directory inside it).")
     var repo: String = "."
 
     @Option(help: "Base ref (branch, tag, or sha).")
     var base: String = "main"
 
-    @Option(help: "Head ref (branch, tag, or sha).")
-    var head: String = "HEAD"
+    @Option(help: "Head ref (branch, tag, or sha). Default: the current branch.")
+    var head: String?
 
     @Flag(name: .customLong("no-merge-base"), help: "Compare against base directly instead of the merge-base of base and head.")
     var noMergeBase = false
@@ -44,10 +42,7 @@ struct Analyze: ParsableCommand {
     @Flag(help: "Print a short summary to stderr.")
     var summary = false
 
-    @Flag(help: "After writing the model, serve it in the browser viewer and open it.")
-    var view = false
-
-    @Option(help: "Port for the viewer server (with --view).")
+    @Option(help: "Port for the viewer server.")
     var port: Int = 5173
 
     @Flag(name: .customLong("no-llm"), help: "Skip the LLM annotator.")
@@ -55,15 +50,12 @@ struct Analyze: ParsableCommand {
 
     @OptionGroup var llm: LLMOptions
 
-    func validate() throws {
+    func run(view: Bool) throws {
         if view && output == "-" {
-            throw ValidationError("--view needs a file, not stdout.")
+            throw ValidationError("The viewer needs a file, not stdout.")
         }
-    }
-
-    func run() throws {
         let start = Date()
-        let opts = AnalyzeOptions(repo: repo, base: base, head: head, useMergeBase: !noMergeBase,
+        let opts = AnalyzeOptions(repo: repo, base: base, head: head ?? Analyzer.currentBranch(repo: repo), useMergeBase: !noMergeBase,
                                   configPath: config, maxRefsPerEdge: maxRefs, dumpPackage: dumpPackage)
         var model = try Analyzer.run(opts, log: log)
         if !noLLM {
@@ -84,6 +76,36 @@ struct Analyze: ParsableCommand {
         if view {
             try ViewerLauncher.run(model: output, port: port, open: true)
         }
+    }
+}
+
+struct Review: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Analyze the change, write change-model.json, and open it in the viewer (the default command)."
+    )
+
+    @OptionGroup var args: AnalyzeArgs
+
+    @Flag(inversion: .prefixedNo, help: "Serve the result in the browser viewer and open it.")
+    var view = true
+
+    func run() throws {
+        try args.run(view: view)
+    }
+}
+
+struct Analyze: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        abstract: "Analyze the change between two git refs and write change-model.json."
+    )
+
+    @OptionGroup var args: AnalyzeArgs
+
+    @Flag(help: "After writing the model, serve it in the browser viewer and open it.")
+    var view = false
+
+    func run() throws {
+        try args.run(view: view)
     }
 }
 
