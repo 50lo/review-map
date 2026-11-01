@@ -4,14 +4,14 @@ A throwaway prototype that shows a Swift change as structure (components, depend
 
 ## Run it
 
-Requires the Swift 6.2 toolchain (Xcode 26) on macOS. It also builds and runs on Linux.
+Requires the Swift 6.2 toolchain (Xcode 26) on macOS, and Node 20 or later for the viewer. The analyzer also builds and runs on Linux.
 
 ```sh
 swift build -c release
-.build/release/reviewmap /path/to/repo --base main --head feature-x --summary
+.build/release/reviewmap /path/to/repo --base main --head feature-x --view
 ```
 
-That writes `change-model.json` in the current directory. Options:
+That writes `change-model.json` in the current directory, starts the viewer on it, and opens the browser. The first run installs the viewer's npm dependencies. Without `--view` it only writes the file, and `reviewmap view [change-model.json]` opens an existing one. Options:
 
 | Option | Meaning |
 | --- | --- |
@@ -22,6 +22,8 @@ That writes `change-model.json` in the current directory. Options:
 | `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
 | `--max-refs <n>` | References kept per edge (default 50). |
 | `--summary` | Print a short summary to stderr. |
+| `--view` | Serve the result in the viewer and open the browser. Stop with Ctrl-C. |
+| `--port <n>` | Viewer port (default 5173). |
 
 The analyzer never writes to the target repo. Both trees are exported with `git archive` into a temporary directory, which is removed on exit.
 
@@ -36,6 +38,29 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - **Usage**: `usedBy` lists declarations in other components that reference an entity, and `dependsOn` lists what the entity references in other components. An entity is an interface when it's `public`/`open`/`package`, used from another non-test component, or a requirement or case of an interface type.
 
 Review regions, context regions, and risk scores are not implemented yet, so `regions` is empty.
+
+## Viewer
+
+`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs). It has level 1 of the brief so far, the component map:
+
+- Nodes are components. Split folders are drawn inside their target. A badge shows changed entities and interface changes, and the tint follows `changeScore`. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
+- Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
+- By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
+- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities with contract flags and its dependencies. Unchanged dependencies are folded into a count. Clicking an edge lists the references that create it, with added and removed symbols marked.
+- **Start here** lists the highest-risk regions. Until the analyzer scores regions (milestone 4), it ranks changed entities by their contract flags and folds members into their type.
+- The focus is kept in the URL, so browser back and forward (and the arrows in the top bar) move through it. Escape returns to the map.
+
+To work on the viewer directly:
+
+```sh
+cd viewer
+npm ci
+REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model at /api/model
+npm test                                                  # logic tests against the analyzer fixture
+REVIEWMAP_MODEL=/path/to/change-model.json npm run build:single
+```
+
+`build:single` writes `dist/index.html`, one self-contained file with the model embedded, which opens in any browser without a server. Without a model the page asks for a file, and `?model=<url>` loads one from a URL.
 
 ## reviewmap.yml
 

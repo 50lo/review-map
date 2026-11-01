@@ -7,7 +7,7 @@ struct ReviewMap: ParsableCommand {
         commandName: "reviewmap",
         abstract: "Structural review map for a Swift change.",
         version: Analyzer.version,
-        subcommands: [Analyze.self],
+        subcommands: [Analyze.self, ViewCommand.self],
         defaultSubcommand: Analyze.self
     )
 }
@@ -44,6 +44,18 @@ struct Analyze: ParsableCommand {
     @Flag(help: "Print a short summary to stderr.")
     var summary = false
 
+    @Flag(help: "After writing the model, serve it in the browser viewer and open it.")
+    var view = false
+
+    @Option(help: "Port for the viewer server (with --view).")
+    var port: Int = 5173
+
+    func validate() throws {
+        if view && output == "-" {
+            throw ValidationError("--view needs a file, not stdout.")
+        }
+    }
+
     func run() throws {
         let start = Date()
         let opts = AnalyzeOptions(repo: repo, base: base, head: head, useMergeBase: !noMergeBase,
@@ -63,6 +75,9 @@ struct Analyze: ParsableCommand {
             lines += ChangeModelIO.summary(model)
         }
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
+        if view {
+            try ViewerLauncher.run(model: output, port: port, open: true)
+        }
     }
 }
 
