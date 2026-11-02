@@ -3,20 +3,27 @@ import Foundation
 
 /// Starts the browser viewer (viewer/, a Vite app) on a change model and opens it.
 enum ViewerLauncher {
-    /// The viewer directory: $REVIEWMAP_VIEWER, or viewer/ in the checkout this binary was built from.
+    /// The viewer directory: $REVIEWMAP_VIEWER, then share/reviewmap/viewer next to the installed
+    /// binary (scripts/install.sh), then viewer/ in the checkout this binary was built from.
     static func directory() throws -> URL {
         if let env = ProcessInfo.processInfo.environment["REVIEWMAP_VIEWER"], !env.isEmpty {
             return URL(fileURLWithPath: env)
         }
-        let root = URL(fileURLWithPath: #filePath)
+        var candidates: [URL] = []
+        if let exe = Bundle.main.executableURL?.resolvingSymlinksInPath() {
+            candidates.append(exe.deletingLastPathComponent().deletingLastPathComponent()
+                .appendingPathComponent("share/reviewmap/viewer"))
+        }
+        candidates.append(URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent() // reviewmap
             .deletingLastPathComponent() // Sources
             .deletingLastPathComponent()
-        let dir = root.appendingPathComponent("viewer")
-        guard FileManager.default.fileExists(atPath: dir.appendingPathComponent("package.json").path) else {
-            throw ValidationError("Can't find the viewer at \(dir.path). Set REVIEWMAP_VIEWER to the viewer directory.")
+            .appendingPathComponent("viewer"))
+        if let dir = candidates.first(where: { FileManager.default.fileExists(atPath: $0.appendingPathComponent("package.json").path) }) {
+            return dir
         }
-        return dir
+        throw ValidationError("Can't find the viewer (looked in \(candidates.map(\.path).joined(separator: " and "))). "
+            + "Run scripts/install.sh again, or set REVIEWMAP_VIEWER to the viewer directory.")
     }
 
     /// Runs until the server is stopped (Ctrl-C).

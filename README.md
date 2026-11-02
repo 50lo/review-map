@@ -4,15 +4,20 @@ A throwaway prototype that shows a Swift change as structure (components, depend
 
 ## Run it
 
-Requires the Swift 6.2 toolchain (Xcode 26) on macOS, and Node 20 or later for the viewer. The analyzer also builds and runs on Linux.
+Requires the Swift 6.2 toolchain (Xcode 26) on macOS, Node 20 or later for the viewer, and git. The analyzer also builds and runs on Linux.
 
 ```sh
-swift build -c release
+git clone https://github.com/50lo/review-map.git
+review-map/scripts/install.sh
 cd /path/to/repo
-/path/to/review-map/.build/release/reviewmap
+reviewmap
 ```
 
-With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). The first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+`scripts/install.sh` builds the release binary and installs it to `~/.local/bin/reviewmap`, with the viewer and its npm dependencies in `~/.local/share/reviewmap/viewer`. `PREFIX=/some/dir` installs under another prefix. If the `bin` directory isn't on your `PATH`, the script prints the line to add to your shell profile. Run it again after pulling to update; it reinstalls npm dependencies only when they changed. `scripts/install.sh --uninstall` removes both. The installed copy doesn't use the checkout, which can be moved or deleted. `REVIEWMAP_VIEWER` points the binary at another viewer directory.
+
+Without installing, `swift build -c release` and `.build/release/reviewmap` work too, using the viewer in the checkout.
+
+With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
 
 The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate [model]` runs the LLM annotator on an existing model, and `reviewmap view [model]` opens an existing model. Without a path, `annotate` and `view` use the model of the current branch of the repo in the current directory. Options for the default command and `analyze`:
 
