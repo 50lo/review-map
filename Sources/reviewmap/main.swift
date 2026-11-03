@@ -50,6 +50,8 @@ struct AnalyzeArgs: ParsableArguments {
 
     @OptionGroup var llm: LLMOptions
 
+    @OptionGroup var indexArgs: IndexArgs
+
     func run(view: Bool) throws {
         if view && output == "-" {
             throw ValidationError("The viewer needs a file, not stdout.")
@@ -58,7 +60,7 @@ struct AnalyzeArgs: ParsableArguments {
         let head = self.head ?? Analyzer.currentBranch(repo: repo)
         let output = try self.output ?? ModelPath.default(repo: repo, head: head)
         let opts = AnalyzeOptions(repo: repo, base: base, head: head, useMergeBase: !noMergeBase,
-                                  configPath: config, maxRefsPerEdge: maxRefs, dumpPackage: dumpPackage)
+                                  configPath: config, maxRefsPerEdge: maxRefs, dumpPackage: dumpPackage, index: indexArgs.options)
         var model = try Analyzer.run(opts, log: log)
         if !noLLM {
             model = try Annotator.run(model, options: llm.options, log: log)
@@ -108,6 +110,34 @@ struct Analyze: ParsableCommand {
 
     func run() throws {
         try args.run(view: view)
+    }
+}
+
+struct IndexArgs: ParsableArguments {
+    @Flag(inversion: .prefixedNo, help: "Resolve references exactly from a build's index store instead of by name. Builds base and head once per commit (default: index.enabled in reviewmap.yml).")
+    var index: Bool?
+
+    @Option(name: .customLong("index-builder"), help: "xcodebuild or swift (default: xcodebuild where it exists, else swift).")
+    var builder: String?
+
+    @Option(name: .customLong("index-project"), help: "The .xcworkspace, .xcodeproj, or package directory to build, relative to the repo root.")
+    var project: String?
+
+    @Option(name: .customLong("index-scheme"), help: "xcodebuild scheme (default: the only one, or the one named after the project).")
+    var scheme: String?
+
+    @Option(name: .customLong("index-destination"), help: "xcodebuild destination (default: generic/platform=iOS Simulator).")
+    var destination: String?
+
+    @Option(name: .customLong("index-cache"), help: "Directory for built index stores (default: ~/.reviewmap/index).")
+    var cache: String?
+
+    @Flag(name: .customLong("rebuild-index"), help: "Build again even when the index of a commit is cached.")
+    var rebuild = false
+
+    var options: IndexOptions {
+        IndexOptions(enabled: index, builder: builder, project: project, scheme: scheme, destination: destination,
+                     cacheDir: cache ?? IndexOptions.defaultCacheDir, rebuild: rebuild)
     }
 }
 
@@ -175,7 +205,7 @@ enum ModelPath {
             throw ValidationError("\(repo == "." ? "The current directory" : repo) is not inside a git repository. Pass a repo or model path.")
         }
         let dir = (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/models")
-            + "/" + slug((root as NSString).lastPathComponent) + "/" + slug(head)
+            + "/" + Paths.slug((root as NSString).lastPathComponent) + "/" + Paths.slug(head)
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir + "/change-model.json"
     }
@@ -187,13 +217,6 @@ enum ModelPath {
             throw ValidationError("No change model at \(path). Run reviewmap first, or pass a model path.")
         }
         return path
-    }
-
-    /// "feature/login" → "feature-login"; anything outside letters, digits, dot, dash, and underscore becomes a dash.
-    static func slug(_ s: String) -> String {
-        let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-        let out = String(s.map { allowed.contains($0) ? $0 : "-" })
-        return out.isEmpty || out.allSatisfy({ $0 == "." }) ? "-" : out
     }
 }
 

@@ -350,7 +350,27 @@ private final class RegionBuilder {
         // Definitions of what the changed lines reference.
         var definitions = 0
         let parsed = b.head.files[hd.file]
-        for r in reviewRegions where definitions < 6 {
+        // Index mode: the exact declarations the changed lines reference.
+        if let refs = b.index[.head]?.refs[hd.file] {
+            for r in reviewRegions where definitions < 6 {
+                var perRegion = 0
+                for ref in refs where ref.line >= r.startLine && ref.line <= r.endLine && perRegion < 4 && definitions < 6 {
+                    guard let comp = b.head.layout.fileComponent[ref.targetFile],
+                          let t = b.declAt(.head, file: ref.targetFile, line: ref.targetLine, name: ref.name) else { continue }
+                    let x = Indexed(component: comp, file: ref.targetFile, index: t.index, decl: t.decl)
+                    // Not the entity or its own parts, nothing that changed (it has its own entity), and no
+                    // stored properties of the same type (state context shows those).
+                    if x.file == hd.file && x.decl.startLine >= d.startLine && x.decl.endLine <= d.endLine { continue }
+                    if x.file == hd.file && d.startLine >= x.decl.startLine && d.endLine <= x.decl.endLine { continue }
+                    if changedHead.contains(DeclKey(side: .head, file: x.file, index: x.index)) { continue }
+                    if x.decl.kind == .var && x.decl.isStored && x.decl.scope != nil && x.decl.scope == d.scope { continue }
+                    let before = items.count
+                    add(declItem(x, relation: "definition", supports: [r.id]))
+                    if items.count > before { perRegion += 1; definitions += 1 }
+                }
+            }
+        }
+        for r in reviewRegions where definitions < 6 && b.index[.head]?.refs[hd.file] == nil {
             var names: [(String, Bool)] = []
             var seen = Set<String>()
             let refs = ((parsed?.typeRefs ?? []).map { ($0, false) } + (parsed?.memberRefs ?? []).map { ($0, true) })
@@ -488,9 +508,14 @@ private final class RegionBuilder {
             }
             if !byDecl[key]!.lines.contains(line) { byDecl[key]!.lines.append(line) }
         }
-        for u in e.usedBy { note(u.component, u.file, u.line) }
+        // Index mode: every exact reference, in any component.
+        if !b.index.isEmpty, let pi = b.pairOf[DeclKey(side: .head, file: hd.file, index: hd.index)] {
+            for u in b.indexCallers[pi] ?? [] { note(u.component, u.file, u.line) }
+        } else {
+            for u in e.usedBy { note(u.component, u.file, u.line) }
+        }
         // Same-component references by name; members only count in files that mention their type.
-        if !d.isContainer && d.name.count >= 4 && d.name != "init" {
+        if b.index.isEmpty && !d.isContainer && d.name.count >= 4 && d.name != "init" {
             // The innermost type must be named in the file, or the reference must come from inside that type.
             let owner = d.scope.map { String($0.split(separator: ".").last ?? "") }
             for (path, file) in b.head.files.sorted(by: { $0.key < $1.key }) where b.head.layout.fileComponent[path] == e.component {

@@ -9,7 +9,7 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 | 3 | Interface and implementation views: levels 2 and 3, navigation, Open in Xcode | Done |
 | 4 | Regions and context: deterministic risk scoring and context collection | Done |
 | 5 | LLM annotator: ranking, summaries, removal candidates, cache, ranking toggle | Built; real CLI run pending |
-| 6 | Index mode: IndexStoreDB resolution, only if name-based edges prove too noisy | Not started |
+| 6 | Index mode: IndexStoreDB resolution, only if name-based edges prove too noisy | Built; xcodebuild path untested |
 
 ## Milestone 1 notes
 
@@ -55,3 +55,13 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 - Entity and component summaries are always shown when the LLM layer is on, because they were opened almost every time. Region notes and removal notes stay on demand. Context the LLM leaves out folds into a count after the kept snippets.
 - Test components, test and generated code, and cosmetic changes are not sent to the LLM.
 - On IceCubesApp's last 40 commits with the fake: 23 batches, the largest prompt about 79,000 characters, 13 seconds in all.
+
+## Milestone 6 notes
+
+- Started because name-based edges were too noisy in one of the target repos.
+- `--index` (or `index.enabled` in `reviewmap.yml`) builds base and head once per commit and reads their index stores with IndexStoreDB. The stores are cached in `~/.reviewmap/index`, so the base of several branches is built once.
+- Index mode drives edges, `usedBy`, `dependsOn`, caller context, and definition context. Conformers and overrides still come from inheritance clauses.
+- If either side doesn't build, both sides fall back to name matching with a warning, because comparing an index-resolved side with a name-resolved one would show differences that aren't in the change.
+- Edge references keep the referenced top-level declaration as their symbol, so an edge changes when the set of used types changes, as in name mode, but now exactly.
+- Tested with `swift build` on Linux against `Fixtures/indexed`. The xcodebuild path (project and scheme detection, the simulator build, `Index.noindex/DataStore`) has not run yet; it needs a Mac with Xcode.
+- The overview says whether references were resolved exactly or matched by name.

@@ -40,6 +40,13 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `--llm-cache <dir>` | Cache directory (default `~/.reviewmap/cache`). It must be outside the target repo. |
 | `--llm-jobs <n>` | Batches run at the same time (default 4). |
 | `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
+| `--index`, `--no-index` | Resolve references exactly from a build's index store (see Index mode). Default: `index.enabled` in `reviewmap.yml`, else off. |
+| `--index-builder <b>` | `xcodebuild` or `swift` (default: `xcodebuild` where it exists, else `swift build`). |
+| `--index-project <path>` | The `.xcworkspace`, `.xcodeproj`, or package directory to build, relative to the repo root. |
+| `--index-scheme <name>` | xcodebuild scheme (default: the only one, the one named after the project, or a package's `-Package` scheme). |
+| `--index-destination <d>` | xcodebuild destination (default `generic/platform=iOS Simulator`). |
+| `--index-cache <dir>` | Where built index stores are kept (default `~/.reviewmap/index`). |
+| `--rebuild-index` | Build again even when a commit's index is cached. |
 
 `reviewmap annotate [model]` runs only the annotator on an existing model and writes it back (or to `-o`). It takes the same `--llm…` options.
 
@@ -48,7 +55,7 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 ## What it extracts
 
 - **Components**: SPM targets (from every `Package.swift`, including local packages), Xcode native targets (with XcodeProj: build-phase files and Xcode 16 synchronized folders), and top-level folders for any remaining files. A target with more than 30 Swift files is split by folder, recursively, up to depth 3. Split folders keep a `parent` pointing to their target. Third-party packages become `external` components.
-- **Dependency edges**: `import` statements, target dependencies in manifests, and type-level references, resolved by name against a table of top-level declarations. A reference only counts when the referring file can see the declaring module (same module or imported). Ambiguous names are recorded in `warnings` and not resolved. Each edge is `added`, `removed`, `changed` (the set of referenced symbols changed), or `unchanged`, and keeps its references.
+- **Dependency edges**: `import` statements, target dependencies in manifests, and type-level references. By default references are resolved by name against a table of top-level declarations; a reference only counts when the referring file can see the declaring module (same module or imported), and ambiguous names are recorded in `warnings` and not resolved. Index mode resolves every reference exactly instead. `analyzer.resolution` records which was used. Each edge is `added`, `removed`, `changed` (the set of referenced symbols changed), or `unchanged`, and keeps its references.
 - **Entities**: types, extensions, functions, initializers, properties, enum cases, and typealiases, matched between base and head by component, scope, name, and kind. Overloads are paired by exact signature, then by argument labels. The change kinds are `added`, `removed`, `signature`, `body`, `modifiers`, and `cosmetic` (trivia only). `changes` lists every aspect that changed. A type appears as an entity only when its own header changed or it carries contract flags; its members are reported one by one.
 - **Contract flags**: `protocol-requirement-added|removed|changed`, `conformance-added|removed:<P>` (compared per type, across its extensions), `conformance-isolation-changed:<P>`, `access-changed:<a>-><b>`, `async-…`, `throws-…`, `typed-throws-changed`, `mainactor-…`, `nonisolated-…`, `sendable-…`, `kind-changed:class->actor`, `enum-case-added|removed|changed`, `codable-shape`, `swiftdata-model-changed`, `observable-state-changed`, `observable-added|removed`.
 - **Non-code contracts**: `Info.plist` (plus `url-schemes-changed`), entitlements, `PrivacyInfo.xcprivacy`, and Core Data models appear as `file` entities. Target build settings appear as `target` entities: Package.swift `swiftSettings`, and Xcode settings such as `SWIFT_DEFAULT_ACTOR_ISOLATION`, `SWIFT_STRICT_CONCURRENCY`, and `SWIFT_VERSION`. Their flags include `default-isolation-changed`, `strict-concurrency-changed`, `swift-features-changed`, `swift-version-changed`, and `deployment-target-changed`.
@@ -58,6 +65,18 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 - **Review regions**: each non-cosmetic changed entity gets one region per run of changed lines (compared ignoring indentation, spacing, and blank lines). A run with head lines is a `review` region; a run that only deletes lines is a `removed` region on the base side, with `anchor` set to the head line it followed. A new or deleted declaration is one region, and a type's region covers only its header, since its members are entities of their own. Flags that a type carries for its members (a Codable shape, an enum case) put a region on its declaration line.
 - **Risk**: each region combines its signals as `1 - Π(1 - weight)`. High (0.6): a contract flag on an interface entity, a concurrency or persisted-model flag, an isolation annotation in code (`@MainActor` or `@Sendable` closures, `nonisolated(unsafe)`), or a removed check (`guard`, early return, `throw`, `precondition`, `assert`). Medium (0.3): other contract flags, a changed interface signature, a removed interface declaration, new crash points (force unwrap, `try!`, `as!`, `fatalError`), tasks, continuations, and locks added or removed, and changed control flow (branches, loops, `catch`, `try?`). Control flow in SwiftUI view code (a `View` type, `some View`, or a `ui` layer) counts 0.15. Every region adds 0.1, and an interface entity adds 0.05 per other component that uses it (up to 0.2). Test and generated code is scaled by 0.2. Checks inside a deleted declaration don't count. `reasons` lists the signals, most significant first.
 - **Context regions**: unchanged code that explains a review region, with `relation` and `supports` (the review regions it explains): `definition` (same-type members, and top-level declarations or members of mentioned types, when the name resolves to one declaration; up to 6 per entity), `caller` (usedBy first, then the entity's own component, tests last; up to 5, for interface entities and signature or flag changes), `conformer` (other conformers of a changed protocol, or their implementation of a changed requirement), `override` (overrides of a changed method, and the method a changed override overrides), and `state` (the stored properties of the enclosing type when a body changed). `lines` lists the lines that matter, such as the signature and the referencing lines. Test and generated code gets no context.
+
+## Index mode
+
+Name matching is fast and needs no build, but it guesses: a common member name (`load()`, `id`) counts as a use of every changed declaration with that name in files that mention its type, and a type name declared in two modules isn't resolved. Index mode replaces the guess with the compiler's own answer.
+
+- **Building**: each side's exported tree is built once with indexing on: `xcodebuild build` for the workspace, project, or package at the repo root (or `--index-project`), with `-destination generic/platform=iOS Simulator` and code signing off, or `swift build --enable-index-store` for a package where there is no Xcode. Builds run outside the target repo, and resolved packages are shared in `~/.reviewmap/index/.packages`.
+- **Cache**: the index store is kept per repo and commit in `~/.reviewmap/index/<repo>/<sha>/`, with the build log. A base shared by several branches is built once, and running again on the same head builds nothing. `--rebuild-index` builds again; the old store stays until the new build succeeds.
+- **Reading**: IndexStoreDB, with `libIndexStore` from the same toolchain (`xcrun --find swift`, or `swift` on the `PATH`; `REVIEWMAP_LIBINDEXSTORE` overrides it), gives every reference in a file and the declaration it points at.
+- **What it changes**: edge references (named by the referenced top-level declaration, as before), `usedBy` and `dependsOn` (exact, members included), caller context (every reference in any component, instead of usedBy plus a name search in the entity's own component), and definition context (the declarations the changed lines reference). Conformer and override context still come from inheritance clauses.
+- **Fallback**: if either side can't be built or read, both sides are matched by name, so the two sides never mix methods, and an `index-unavailable` warning gives the reason and the build log. Files the index doesn't cover (not part of the built scheme, for example) are matched by name, with an `index-partial` warning. Test files are matched by name when the scheme doesn't build their targets, without a warning.
+
+To keep it on for a repo, add `index: {enabled: true}` to its `reviewmap.yml`, with `scheme` and `project` if the defaults don't pick the right ones.
 
 ## LLM annotator
 
@@ -142,6 +161,12 @@ split:
   maxDepth: 3
 exclude: ["**/Vendor/**"]
 generated: ["**/*.generated.swift"]   # tagged "generated"
+index:                 # index mode; the CLI flags win
+  enabled: true
+  project: App.xcworkspace
+  scheme: App
+  destination: "generic/platform=iOS Simulator"
+  builder: xcodebuild  # or swift
 ```
 
 ## change-model.json
@@ -164,11 +189,11 @@ Fields that are `null` are omitted. Consumers should ignore fields they don't kn
 swift test
 ```
 
-`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. The annotator tests run `scripts/fake-llm.sh` on the same fixture, cover validation, retries, the cache, and both CLIs, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
+`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. `Fixtures/indexed` is a package that builds anywhere; the index tests build it with `swift build`, compare index mode with name matching on a common member name and a type declared in two modules, and check the cache and the fallback. They are skipped when the toolchain has no `libIndexStore`. The annotator tests run `scripts/fake-llm.sh` on the basic fixture, cover validation, retries, the cache, and both CLIs, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
 
 ## Known limits
 
-- Name-based resolution: member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy` and caller context. An exact index mode (IndexStoreDB) is planned.
+- Name-based resolution (the default): member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy` and caller context. Index mode resolves them exactly but needs both sides to build.
 - Risk signals are syntactic: a changed line that contains an `if` counts as changed control flow even when only its body changed.
 - A declaration that moves between components shows up as removed plus added.
 - Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
