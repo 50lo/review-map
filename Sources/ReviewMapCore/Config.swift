@@ -17,6 +17,7 @@ import Yams
 ///       project: App.xcworkspace
 ///       scheme: App
 ///       destination: "generic/platform=iOS Simulator"
+///       targets: ["//ios:App"]   # Bazel
 public struct Config: Codable, Equatable {
     public struct ComponentRule: Codable, Equatable {
         public var name: String
@@ -33,6 +34,10 @@ public struct Config: Codable, Equatable {
         public var project: String?
         public var scheme: String?
         public var destination: String?
+        /// Bazel targets to build (default: top_level_targets of the repo's rules_xcodeproj `xcodeproj` rule).
+        public var targets: [String]?
+        /// Extra arguments for `bazel build`, such as a config: ["--config=sim"].
+        public var bazelArgs: [String]?
     }
 
     public var components: [ComponentRule]?

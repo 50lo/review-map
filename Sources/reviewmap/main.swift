@@ -117,8 +117,11 @@ struct IndexArgs: ParsableArguments {
     @Flag(inversion: .prefixedNo, help: "Resolve references exactly from a build's index store instead of by name. Builds base and head once per commit (default: index.enabled in reviewmap.yml).")
     var index: Bool?
 
-    @Option(name: .customLong("index-builder"), help: "xcodebuild or swift (default: xcodebuild where it exists, else swift).")
+    @Option(name: .customLong("index-builder"), help: "bazel, xcodebuild, or swift (default: bazel for a Bazel workspace with targets, else xcodebuild where it exists, else swift).")
     var builder: String?
+
+    @Option(name: .customLong("index-target"), help: "Bazel target to build; repeat for several (default: top_level_targets of the repo's rules_xcodeproj rule).")
+    var targets: [String] = []
 
     @Option(name: .customLong("index-project"), help: "The .xcworkspace, .xcodeproj, or package directory to build, relative to the repo root.")
     var project: String?
@@ -137,6 +140,7 @@ struct IndexArgs: ParsableArguments {
 
     var options: IndexOptions {
         IndexOptions(enabled: index, builder: builder, project: project, scheme: scheme, destination: destination,
+                     targets: targets.isEmpty ? nil : targets,
                      cacheDir: cache ?? IndexOptions.defaultCacheDir, rebuild: rebuild,
                      workingDirectory: FileManager.default.currentDirectoryPath)
     }
