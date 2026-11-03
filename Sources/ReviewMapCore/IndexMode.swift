@@ -2,7 +2,7 @@ import Foundation
 import IndexStoreDB
 
 // Index mode: exact references from the compiler's index store instead of name matching.
-// Each side's exported tree is built once (xcodebuild on macOS, swift build elsewhere) with
+// Each side's exported tree is built once (Bazel, xcodebuild, or swift build) with
 // indexing on; the resulting store is cached per commit, so a base shared by several branches
 // is built once. IndexStoreDB then gives, for every reference in a file, the declaration it
 // points at. If either build fails, both sides fall back to name matching, so the two sides
@@ -11,7 +11,8 @@ import IndexStoreDB
 public struct IndexOptions: Equatable {
     /// Nil follows `index.enabled` in reviewmap.yml.
     public var enabled: Bool?
-    /// "xcodebuild" or "swift". Nil picks xcodebuild where it exists (macOS), swift build elsewhere.
+    /// "bazel", "xcodebuild", or "swift". Nil picks Bazel for a Bazel workspace with targets (given or from a
+    /// rules_xcodeproj rule), else xcodebuild where it exists (macOS), else swift build.
     public var builder: String?
     /// The .xcworkspace, .xcodeproj, or package directory to build: relative to the repo root, relative to
     /// `workingDirectory`, or absolute inside the repo.
@@ -19,6 +20,10 @@ public struct IndexOptions: Equatable {
     public var scheme: String?
     /// xcodebuild destination (default "generic/platform=iOS Simulator").
     public var destination: String?
+    /// Bazel targets to build.
+    public var targets: [String]?
+    /// Extra arguments for `bazel build`.
+    public var bazelArgs: [String]?
     /// Where built index stores are kept, one per repo and commit.
     public var cacheDir: String
     /// Build again even when a store for the commit is cached.
@@ -28,13 +33,15 @@ public struct IndexOptions: Equatable {
     public var workingDirectory: String?
 
     public init(enabled: Bool? = nil, builder: String? = nil, project: String? = nil, scheme: String? = nil,
-                destination: String? = nil, cacheDir: String = IndexOptions.defaultCacheDir, rebuild: Bool = false,
-                workingDirectory: String? = nil) {
+                destination: String? = nil, targets: [String]? = nil, bazelArgs: [String]? = nil,
+                cacheDir: String = IndexOptions.defaultCacheDir, rebuild: Bool = false, workingDirectory: String? = nil) {
         self.enabled = enabled
         self.builder = builder
         self.project = project
         self.scheme = scheme
         self.destination = destination
+        self.targets = targets
+        self.bazelArgs = bazelArgs
         self.cacheDir = cacheDir
         self.rebuild = rebuild
         self.workingDirectory = workingDirectory
@@ -53,6 +60,8 @@ public struct IndexOptions: Equatable {
         o.project = o.project ?? c.project
         o.scheme = o.scheme ?? c.scheme
         o.destination = o.destination ?? c.destination
+        o.targets = o.targets ?? c.targets
+        o.bazelArgs = o.bazelArgs ?? c.bazelArgs
         return o
     }
 }
@@ -95,8 +104,9 @@ enum IndexBuilder {
     struct BuiltStore {
         var storePath: String
         var databasePath: String
-        /// The directory the sources were built in; index paths start with it.
-        var sourceRoot: String
+        /// Directories index paths may start with: where the sources were built, and Bazel's execution root.
+        /// Each line is a directory, optionally followed by a tab and the repo-relative directory it stands for.
+        var sourceRoots: [String]
     }
 
     // MARK: Building
@@ -105,9 +115,10 @@ enum IndexBuilder {
         let fm = FileManager.default
         let storeDir = cache + "/store"
         let rootFile = cache + "/root.txt"
-        if !options.rebuild, fm.fileExists(atPath: storeDir), let root = try? String(contentsOfFile: rootFile, encoding: .utf8) {
+        if !options.rebuild, fm.fileExists(atPath: storeDir), let roots = try? String(contentsOfFile: rootFile, encoding: .utf8) {
             log("Index for \(side.rawValue) \(sha.prefix(8)): cached.")
-            return BuiltStore(storePath: storeDir, databasePath: cache + "/db", sourceRoot: root)
+            return BuiltStore(storePath: storeDir, databasePath: cache + "/db",
+                              sourceRoots: roots.split(separator: "\n").map(String.init).filter { !$0.isEmpty })
         }
         try fm.createDirectory(atPath: cache, withIntermediateDirectories: true)
         let logPath = cache + "/build.log"
@@ -117,33 +128,62 @@ enum IndexBuilder {
                                       packageCache: (options.cacheDir as NSString).appendingPathComponent(".packages"))
         log("Building \(side.rawValue) \(sha.prefix(8)) for the index (\(plan.summary)); this runs once per commit…")
         let start = Date()
+        defer { plan.cleanup() }
         let status = try run(plan.command, cwd: plan.cwd, logPath: logPath)
         guard status == 0 else {
             throw IndexError("The \(side.rawValue) build failed (\(plan.summary)). Log: \(logPath)")
         }
-        guard let built = findStore(plan.storeSearchRoot) else {
-            throw IndexError("The \(side.rawValue) build produced no index store under \(plan.storeSearchRoot). Log: \(logPath)")
+        let located = try plan.locate()
+        guard let built = located.store else {
+            throw IndexError("The \(side.rawValue) build produced no index store (\(plan.summary)). Log: \(logPath)")
         }
         // Replace an earlier store (and its database) only once the new build succeeded.
         try? fm.removeItem(atPath: storeDir)
         try? fm.removeItem(atPath: cache + "/db")
         try fm.moveItem(atPath: built, toPath: storeDir)
-        try srcDir.write(toFile: rootFile, atomically: true, encoding: .utf8)
+        let roots = [srcDir] + located.extraRoots
+        try roots.joined(separator: "\n").write(toFile: rootFile, atomically: true, encoding: .utf8)
         log("Built \(side.rawValue) in \(Int(Date().timeIntervalSince(start)))s.")
-        return BuiltStore(storePath: storeDir, databasePath: cache + "/db", sourceRoot: srcDir)
+        return BuiltStore(storePath: storeDir, databasePath: cache + "/db", sourceRoots: roots)
     }
 
     struct BuildPlan {
         var command: [String]
         var cwd: String
-        var storeSearchRoot: String
         var summary: String
+        /// After a successful build: the index store, and other directories its paths may start with.
+        var locate: () throws -> (store: String?, extraRoots: [String])
+        /// Runs after the build, whatever its outcome.
+        var cleanup: () -> Void = {}
+
+        init(command: [String], cwd: String, storeSearchRoot: String, summary: String) {
+            self.command = command
+            self.cwd = cwd
+            self.summary = summary
+            self.locate = { (IndexBuilder.findStore(storeSearchRoot), []) }
+        }
+
+        init(command: [String], cwd: String, summary: String, locate: @escaping () throws -> (store: String?, extraRoots: [String]),
+             cleanup: @escaping () -> Void) {
+            self.command = command
+            self.cwd = cwd
+            self.summary = summary
+            self.locate = locate
+            self.cleanup = cleanup
+        }
 
         static func make(options: IndexOptions, srcDir: String, repoRoot: String, scratch: String, packageCache: String) throws -> BuildPlan {
             let fm = FileManager.default
+            let cwdRel = options.workingDirectory.flatMap { repoRelative($0, repoRoot: repoRoot) }
+            let workspace = bazelWorkspace(srcDir, under: cwdRel)
+            if options.builder == "bazel" || (options.builder == nil && workspace != nil && (options.targets != nil || !xcodeprojTargets(srcDir, workspace: workspace!).isEmpty)) {
+                guard let workspace else {
+                    throw IndexError("There is no Bazel workspace (MODULE.bazel or WORKSPACE) in the repo for the bazel builder.")
+                }
+                return try bazel(options: options, srcDir: srcDir, workspace: workspace, scratch: scratch, cacheDir: options.cacheDir)
+            }
             let hasXcodebuild = (try? Shell.string(["which", "xcodebuild"])).map { !$0.isEmpty } ?? false
             let builder = options.builder ?? (hasXcodebuild ? "xcodebuild" : "swift")
-            let cwdRel = options.workingDirectory.flatMap { repoRelative($0, repoRoot: repoRoot) }
             let project = try options.project.map { try resolveProject($0, srcDir: srcDir, repoRoot: repoRoot, workingDirectory: options.workingDirectory) }
                 ?? findProject(srcDir, builder: builder, under: cwdRel)
             let projectPath = project == "." ? srcDir : (srcDir as NSString).appendingPathComponent(project)
@@ -177,8 +217,94 @@ enum IndexBuilder {
                 return BuildPlan(command: cmd, cwd: cwd, storeSearchRoot: scratch + "/Index.noindex",
                                  summary: "xcodebuild \(project), scheme \(scheme)")
             default:
-                throw IndexError("Unknown index builder \(builder). Use xcodebuild or swift.")
+                throw IndexError("Unknown index builder \(builder). Use bazel, xcodebuild, or swift.")
             }
+        }
+
+        // MARK: Bazel
+
+        /// The Bazel workspace to build: the nearest directory with MODULE.bazel or WORKSPACE, from the directory
+        /// the command ran in up to the repo root. Repo-relative ("." for the root), or nil.
+        static func bazelWorkspace(_ root: String, under cwdRel: String?) -> String? {
+            var dir = cwdRel ?? ""
+            while true {
+                let abs = dir.isEmpty ? root : root + "/" + dir
+                if ["MODULE.bazel", "WORKSPACE", "WORKSPACE.bazel"].contains(where: { FileManager.default.fileExists(atPath: abs + "/" + $0) }) {
+                    return dir.isEmpty ? "." : dir
+                }
+                if dir.isEmpty { return nil }
+                dir = (dir as NSString).deletingLastPathComponent
+            }
+        }
+
+        /// `top_level_targets` of the rules_xcodeproj `xcodeproj` rules in the workspace's root BUILD file, as labels.
+        static func xcodeprojTargets(_ root: String, workspace: String) -> [String] {
+            let dir = workspace == "." ? root : root + "/" + workspace
+            for name in ["BUILD.bazel", "BUILD"] {
+                if let text = try? String(contentsOfFile: dir + "/" + name, encoding: .utf8) {
+                    return xcodeprojTargets(buildFile: text)
+                }
+            }
+            return []
+        }
+
+        static func xcodeprojTargets(buildFile text: String) -> [String] {
+            var labels: [String] = []
+            var rest = Substring(text)
+            while let r = rest.range(of: "top_level_targets") {
+                rest = rest[r.upperBound...]
+                guard let open = rest.firstIndex(of: "[") else { break }
+                // Only an assignment: `top_level_targets = [`.
+                guard rest[rest.startIndex..<open].allSatisfy({ $0 == " " || $0 == "=" || $0 == "\n" || $0 == "\t" }) else { continue }
+                var depth = 0
+                var end = open
+                for i in rest[open...].indices {
+                    if rest[i] == "[" { depth += 1 } else if rest[i] == "]" { depth -= 1; if depth == 0 { end = i; break } }
+                }
+                let list = rest[open...end]
+                var i = list.startIndex
+                while let q = list[i...].firstIndex(of: "\"") {
+                    guard let close = list[list.index(after: q)...].firstIndex(of: "\"") else { break }
+                    let s = String(list[list.index(after: q)..<close])
+                    if s.hasPrefix("//") || s.hasPrefix("@") { labels.append(s) } else if s.hasPrefix(":") { labels.append("/" + "/" + s) }
+                    i = list.index(after: close)
+                }
+                rest = rest[end...]
+            }
+            var seen = Set<String>()
+            return labels.filter { seen.insert($0).inserted }
+        }
+
+        /// `bazel build` with rules_swift's global index store, in a temporary output base that is expunged
+        /// afterwards. Downloads and action results are shared through Bazel's repository cache and a disk cache.
+        static func bazel(options: IndexOptions, srcDir: String, workspace: String, scratch: String, cacheDir: String) throws -> BuildPlan {
+            let dir = workspace == "." ? srcDir : srcDir + "/" + workspace
+            let targets = options.targets ?? xcodeprojTargets(srcDir, workspace: workspace)
+            guard !targets.isEmpty else {
+                throw IndexError("No Bazel targets to build. Set index.targets in reviewmap.yml or pass --index-target //path:target.")
+            }
+            let hasBazel = (try? Shell.string(["which", "bazel"])).map { !$0.isEmpty } ?? false
+            let exe = hasBazel ? "bazel" : "bazelisk"
+            let startup = [exe, "--output_base=\(scratch)/output_base", "--max_idle_secs=300"]
+            let cmd = startup + ["build", "--features=swift.index_while_building", "--features=swift.use_global_index_store",
+                                 "--disk_cache=\((cacheDir as NSString).appendingPathComponent(".bazel-disk-cache"))"]
+                + (options.bazelArgs ?? []) + ["--"] + targets
+            let locate = { () throws -> (store: String?, extraRoots: [String]) in
+                let info = String(decoding: try Shell.run(startup + ["info", "output_path", "execution_root"], cwd: dir), as: UTF8.self)
+                var values: [String: String] = [:]
+                for line in info.split(separator: "\n") {
+                    guard let colon = line.firstIndex(of: ":") else { continue }
+                    values[String(line[..<colon])] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                }
+                guard let out = values["output_path"] else { return (nil, []) }
+                // The execution root mirrors the Bazel workspace, which may be a subdirectory of the repo.
+                let roots = values["execution_root"].map { ["\($0)\t\(workspace == "." ? "" : workspace)"] } ?? []
+                if let global = IndexBuilder.findStore(out + "/_global_index_store") { return (global, roots) }
+                return (IndexBuilder.mergeStores(under: out, into: scratch + "/merged-store"), roots)
+            }
+            let cleanup = { _ = try? Shell.run(startup + ["clean", "--expunge"], cwd: dir) }
+            let summary = "\(exe) build \(targets.joined(separator: " "))\(workspace == "." ? "" : " in \(workspace)")"
+            return BuildPlan(command: cmd, cwd: dir, summary: summary, locate: locate, cleanup: cleanup)
         }
 
         /// `path` relative to the repo root, when it is inside the repo (symlinks resolved).
@@ -207,6 +333,11 @@ enum IndexBuilder {
                    let hit = accept(rel) { return hit }
                 let rel = URL(fileURLWithPath: p, relativeTo: URL(fileURLWithPath: "/")).standardizedFileURL.path.dropFirst()
                 if let hit = accept(String(rel)) { return hit }
+            }
+            // On disk but not in the commit: generated (rules_xcodeproj, XcodeGen, Tuist) or ignored.
+            if let rel = tried.first(where: { FileManager.default.fileExists(atPath: $0 == "." ? repoRoot : repoRoot + "/" + $0) }) {
+                throw IndexError("\(rel) is in your working copy but not tracked by git, so it isn't in the commits being built (is it generated?). "
+                    + "For a rules_xcodeproj project, build with Bazel: --index-builder bazel, with the targets from --index-target or index.targets in reviewmap.yml.")
             }
             throw IndexError("--index-project \(given) is not in the repo at this commit (looked for \(tried.isEmpty ? p : tried.joined(separator: ", ")) "
                 + "from the repo root). Give the path relative to the repo root or to the current directory.")
@@ -253,9 +384,11 @@ enum IndexBuilder {
         }
     }
 
-    /// The index store a build wrote: a "DataStore" directory (Xcode) or "index/store" (SwiftPM).
+    /// The index store a build wrote: `root` itself, or a "DataStore" directory (Xcode) or "index/store" (SwiftPM) under it.
     static func findStore(_ root: String) -> String? {
-        guard let e = FileManager.default.enumerator(atPath: root) else { return nil }
+        let fm = FileManager.default
+        if fm.fileExists(atPath: root + "/v5") || fm.fileExists(atPath: root + "/v6") { return root }
+        guard let e = fm.enumerator(atPath: root) else { return nil }
         while let rel = e.nextObject() as? String {
             if rel.hasSuffix("DataStore") || rel.hasSuffix("index/store") {
                 let path = root + "/" + rel
@@ -265,6 +398,36 @@ enum IndexBuilder {
             }
         }
         return nil
+    }
+
+    /// Per-target `.indexstore` directories (rules_swift without a global store) copied into one store.
+    /// Unit and record file names are content hashes, so stores merge by copying.
+    static func mergeStores(under root: String, into dest: String) -> String? {
+        let fm = FileManager.default
+        guard let e = fm.enumerator(atPath: root) else { return nil }
+        var stores: [String] = []
+        while let rel = e.nextObject() as? String {
+            if rel.hasSuffix(".indexstore") {
+                stores.append(root + "/" + rel)
+                e.skipDescendants()
+            }
+        }
+        var merged = false
+        for store in stores {
+            for version in ["v5", "v6"] {
+                let src = store + "/" + version
+                guard let files = fm.enumerator(atPath: src) else { continue }
+                while let rel = files.nextObject() as? String {
+                    var isDir: ObjCBool = false
+                    guard fm.fileExists(atPath: src + "/" + rel, isDirectory: &isDir), !isDir.boolValue else { continue }
+                    let target = dest + "/" + version + "/" + rel
+                    if fm.fileExists(atPath: target) { continue }
+                    try? fm.createDirectory(atPath: (target as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+                    if (try? fm.copyItem(atPath: src + "/" + rel, toPath: target)) != nil { merged = true }
+                }
+            }
+        }
+        return merged ? dest : nil
     }
 
     static func run(_ args: [String], cwd: String, logPath: String) throws -> Int32 {
@@ -305,17 +468,9 @@ enum IndexBuilder {
     static func read(store: BuiltStore, library: IndexStoreLibrary, files: [String], log: (String) -> Void, side: Side) throws -> SideIndex {
         let db = try IndexStoreDB(storePath: store.storePath, databasePath: store.databasePath, library: library,
                                   waitUntilDoneInitializing: true, listenToUnitEvents: true)
-        // Index paths start with the directory that was built; on macOS it may appear with or without /private.
-        let real = URL(fileURLWithPath: store.sourceRoot).resolvingSymlinksInPath().path
-        var roots = [store.sourceRoot, real]
-        for r in [store.sourceRoot, real] {
-            if r.hasPrefix("/private/") { roots.append(String(r.dropFirst("/private".count))) } else { roots.append("/private" + r) }
-        }
-        roots = Array(Set(roots)).sorted { $0.count > $1.count }
-        func relative(_ path: String) -> String? {
-            for r in roots where path.hasPrefix(r + "/") { return String(path.dropFirst(r.count + 1)) }
-            return nil
-        }
+        let roots = expandRoots(store.sourceRoots)
+        let known = Set(files)
+        func relative(_ path: String) -> String? { relativePath(path, roots: roots, known: known) }
         var definitions: [String: (file: String, line: Int)?] = [:]
         func definition(of usr: String) -> (file: String, line: Int)? {
             if let hit = definitions[usr] { return hit }
@@ -327,8 +482,8 @@ enum IndexBuilder {
         var refs: [String: [IndexedRef]] = [:]
         for file in files {
             var occurrences: [SymbolOccurrence] = []
-            for r in roots {
-                occurrences = db.symbolOccurrences(inFilePath: r + "/" + file)
+            for path in storedPaths(file, roots: roots) {
+                occurrences = db.symbolOccurrences(inFilePath: path)
                 if !occurrences.isEmpty { break }
             }
             if occurrences.isEmpty { continue }
@@ -340,6 +495,57 @@ enum IndexBuilder {
             refs[file] = out.sorted { ($0.line, $0.targetFile, $0.targetLine) < ($1.line, $1.targetFile, $1.targetLine) }
         }
         return SideIndex(refs: refs)
+    }
+
+    /// A build root and the repo-relative directory it stands for ("" for the repo root).
+    struct Root: Hashable {
+        var path: String
+        var prefix: String
+    }
+
+    /// The build roots, also with symlinks resolved and with and without /private (macOS), longest first.
+    static func expandRoots(_ sourceRoots: [String]) -> [Root] {
+        var roots = Set<Root>()
+        for line in sourceRoots {
+            let parts = line.split(separator: "\t", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            let root = parts[0], prefix = parts.count > 1 ? parts[1] : ""
+            let real = URL(fileURLWithPath: root).resolvingSymlinksInPath().path
+            for r in [root, real] {
+                roots.insert(Root(path: r, prefix: prefix))
+                roots.insert(Root(path: r.hasPrefix("/private/") ? String(r.dropFirst("/private".count)) : "/private" + r, prefix: prefix))
+            }
+        }
+        return roots.sorted { ($0.path.count, $0.path) > ($1.path.count, $1.path) }
+    }
+
+    /// A path from the index as a repo-relative path. Absolute paths start with a build root; Bazel may also
+    /// record paths relative to its execution root ("Sources/App.swift" or "./Sources/App.swift").
+    static func relativePath(_ path: String, roots: [Root], known: Set<String>) -> String? {
+        for r in roots where path.hasPrefix(r.path + "/") { return join(r.prefix, String(path.dropFirst(r.path.count + 1))) }
+        if path.hasPrefix("/") { return nil }
+        let rel = path.hasPrefix("./") ? String(path.dropFirst(2)) : path
+        for prefix in Set(roots.map(\.prefix)).sorted(by: { $0.count > $1.count }) where known.contains(join(prefix, rel)) {
+            return join(prefix, rel)
+        }
+        return nil
+    }
+
+    /// The forms a repo-relative file may have in the index, most likely first.
+    static func storedPaths(_ file: String, roots: [Root]) -> [String] {
+        var out: [String] = []
+        var relative: [String] = [file]
+        for r in roots {
+            if r.prefix.isEmpty {
+                out.append(r.path + "/" + file)
+            } else if file.hasPrefix(r.prefix + "/") {
+                let inner = String(file.dropFirst(r.prefix.count + 1))
+                out.append(r.path + "/" + inner)
+                relative.append(inner)
+            }
+        }
+        for rel in relative { out += [rel, "./" + rel] }
+        var seen = Set<String>()
+        return out.filter { seen.insert($0).inserted }
     }
 }
 

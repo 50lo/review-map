@@ -191,3 +191,145 @@ final class IndexProjectTests: XCTestCase {
         }
     }
 }
+
+/// The Bazel builder: target discovery from a rules_xcodeproj rule, path mapping, and the build flow with a
+/// stand-in `bazel` that answers build, info, and clean the way Bazel does (building with SwiftPM).
+final class IndexBazelTests: XCTestCase {
+    typealias Plan = IndexBuilder.BuildPlan
+
+    static let buildFile = """
+    load("@rules_xcodeproj//xcodeproj:defs.bzl", "top_level_target", "xcodeproj")
+
+    xcodeproj(
+        name = "xcodeproj",
+        project_name = "App-Bazel",
+        tags = ["manual"],
+        top_level_targets = [
+            top_level_target("//ios:App", target_environments = ["simulator", "device"]),
+            "//ios:AppTests",
+            ":Tool",
+        ],
+    )
+    """
+
+    func testTargetsComeFromTheXcodeprojRule() {
+        XCTAssertEqual(Plan.xcodeprojTargets(buildFile: Self.buildFile), ["//ios:App", "//ios:AppTests", "//:Tool"])
+        XCTAssertEqual(Plan.xcodeprojTargets(buildFile: "swift_library(name = \"A\")"), [])
+    }
+
+    func testWorkspaceIsTheNearestOneUp() throws {
+        let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-bazel-ws-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        try FileManager.default.createDirectory(atPath: root + "/mobile/ios", withIntermediateDirectories: true)
+        XCTAssertNil(Plan.bazelWorkspace(root, under: "mobile/ios"))
+        FileManager.default.createFile(atPath: root + "/MODULE.bazel", contents: Data())
+        XCTAssertEqual(Plan.bazelWorkspace(root, under: "mobile/ios"), ".")
+        FileManager.default.createFile(atPath: root + "/mobile/WORKSPACE", contents: Data())
+        XCTAssertEqual(Plan.bazelWorkspace(root, under: "mobile/ios"), "mobile")
+        XCTAssertEqual(Plan.bazelWorkspace(root, under: nil), ".")
+    }
+
+    func testIndexPathsMapToRepoPaths() {
+        let roots = IndexBuilder.expandRoots(["/tmp/export", "/ob/execroot/_main\tmobile"])
+        let known: Set<String> = ["mobile/ios/App.swift", "web/x.swift"]
+        XCTAssertEqual(IndexBuilder.relativePath("/tmp/export/web/x.swift", roots: roots, known: known), "web/x.swift")
+        XCTAssertEqual(IndexBuilder.relativePath("/ob/execroot/_main/ios/App.swift", roots: roots, known: known), "mobile/ios/App.swift")
+        XCTAssertEqual(IndexBuilder.relativePath("ios/App.swift", roots: roots, known: known), "mobile/ios/App.swift")
+        XCTAssertEqual(IndexBuilder.relativePath("./ios/App.swift", roots: roots, known: known), "mobile/ios/App.swift")
+        XCTAssertNil(IndexBuilder.relativePath("external/lib/Lib.swift", roots: roots, known: known))
+        XCTAssertNil(IndexBuilder.relativePath("/elsewhere/ios/App.swift", roots: roots, known: known))
+        let stored = IndexBuilder.storedPaths("mobile/ios/App.swift", roots: roots)
+        XCTAssertTrue(stored.contains("/ob/execroot/_main/ios/App.swift"))
+        XCTAssertTrue(stored.contains("ios/App.swift"))
+        XCTAssertTrue(stored.contains("./ios/App.swift"))
+    }
+
+    static let fakeBazel = """
+    #!/bin/sh
+    # Stand-in for bazel: build compiles the package with SwiftPM and puts its index store where
+    # rules_swift's global index store would be; info and clean answer like Bazel.
+    ob=""; cmd=""
+    for a in "$@"; do
+      case "$a" in
+        --output_base=*) ob="${a#--output_base=}" ;;
+        build|info|clean) [ -z "$cmd" ] && cmd="$a" ;;
+      esac
+    done
+    echo "fake bazel $*" >&2
+    case "$cmd" in
+      build)
+        swift build --package-path . --scratch-path "$ob/swiftpm" --enable-index-store >&2 || exit 1
+        mkdir -p "$ob/out"
+        cp -R "$(find "$ob/swiftpm" -type d -path '*index/store' | head -1)" "$ob/out/_global_index_store" ;;
+      info) echo "output_path: $ob/out"; echo "execution_root: $PWD" ;;
+      clean) rm -rf "$ob" ;;
+    esac
+    """
+
+    func testBazelBuildFlow() throws {
+        do { _ = try IndexBuilder.libraryPath() } catch { throw XCTSkip("No libIndexStore in this toolchain: \(error)") }
+        let fm = FileManager.default
+        let tmp = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-bazel-\(UUID().uuidString)")
+        defer { try? fm.removeItem(atPath: tmp) }
+        // A bazel on the PATH.
+        try fm.createDirectory(atPath: tmp + "/bin", withIntermediateDirectories: true)
+        try Self.fakeBazel.write(toFile: tmp + "/bin/bazel", atomically: true, encoding: .utf8)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tmp + "/bin/bazel")
+        let oldPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
+        setenv("PATH", tmp + "/bin:" + oldPath, 1)
+        defer { setenv("PATH", oldPath, 1) }
+
+        // Fixtures/indexed as a Bazel workspace whose xcodeproj rule names the targets.
+        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/indexed", withExtension: nil)).path
+        let repo = tmp + "/repo"
+        try fm.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        func git(_ args: String...) throws {
+            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
+        }
+        func copyTree(_ side: String) throws {
+            for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" { try fm.removeItem(atPath: repo + "/" + item) }
+            for item in try fm.contentsOfDirectory(atPath: fixture + "/" + side) {
+                try fm.copyItem(atPath: fixture + "/" + side + "/" + item, toPath: repo + "/" + item)
+            }
+            fm.createFile(atPath: repo + "/MODULE.bazel", contents: Data())
+            try Self.buildFile.replacingOccurrences(of: "\"//ios:AppTests\",\n", with: "").replacingOccurrences(of: ":Tool", with: ":Feed")
+                .replacingOccurrences(of: "//ios:App", with: "//Sources:Storage")
+                .write(toFile: repo + "/BUILD.bazel", atomically: true, encoding: .utf8)
+        }
+        try git("init", "-q", "-b", "main")
+        try copyTree("base")
+        try git("add", "-A")
+        try git("commit", "-qm", "base")
+        try git("branch", "base")
+        try copyTree("head")
+        try git("add", "-A")
+        try git("commit", "-qm", "head")
+
+        let cache = tmp + "/cache"
+        let m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main", index: IndexOptions(enabled: true, cacheDir: cache)))
+        XCTAssertEqual(m.analyzer.resolution, "index", "\(m.warnings)")
+        XCTAssertEqual(try XCTUnwrap(m.entities.first { $0.qualifiedName == "Store.load()" }).usedBy.map(\.symbol), ["Feed.items()"])
+        let logs = try fm.subpathsOfDirectory(atPath: cache).filter { $0.hasSuffix("build.log") }
+        XCTAssertEqual(logs.count, 2)
+        let log = try String(contentsOfFile: cache + "/" + logs[0], encoding: .utf8)
+        XCTAssertTrue(log.contains("--features=swift.use_global_index_store"), log)
+        XCTAssertTrue(log.contains("-- //Sources:Storage //:Feed"), log)
+        // The temporary output bases were expunged.
+        let leftovers = try fm.contentsOfDirectory(atPath: NSTemporaryDirectory()).filter { $0.hasPrefix("reviewmap-build-") }
+        for dir in leftovers {
+            XCTAssertFalse(fm.fileExists(atPath: NSTemporaryDirectory() + "/" + dir + "/output_base"), dir)
+        }
+    }
+}
+
+extension IndexProjectTests {
+    func testUntrackedProjectIsExplained() throws {
+        // The project exists in the working copy (repoRoot) but not in the exported commit (srcDir).
+        let src = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-src-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(atPath: src, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: src) }
+        XCTAssertThrowsError(try Plan.resolveProject("apps/ios/App.xcodeproj", srcDir: src, repoRoot: root, workingDirectory: nil)) { error in
+            XCTAssertTrue("\(error)".contains("not tracked by git"), "\(error)")
+        }
+    }
+}

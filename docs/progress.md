@@ -65,3 +65,4 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 - Edge references keep the referenced top-level declaration as their symbol, so an edge changes when the set of used types changes, as in name mode, but now exactly.
 - Tested with `swift build` on Linux against `Fixtures/indexed`. The xcodebuild path (project and scheme detection, the simulator build, `Index.noindex/DataStore`) has not run yet; it needs a Mac with Xcode.
 - The overview says whether references were resolved exactly or matched by name.
+- A generated Xcode project (rules_xcodeproj, XcodeGen, Tuist) isn't in git, so it isn't in the commits being built. For Bazel repos, index mode builds the `top_level_targets` of the rules_xcodeproj rule with Bazel and reads rules_swift's global index store; index paths relative to Bazel's execution root are mapped back to repo paths. Tested with a stand-in `bazel`; not yet with real Bazel and rules_swift.
