@@ -147,3 +147,47 @@ final class IndexTests: XCTestCase {
         XCTAssertEqual(off.analyzer.resolution, "name-based", "--no-index wins over reviewmap.yml")
     }
 }
+
+/// Finding the project to build in a monorepo, without building anything.
+final class IndexProjectTests: XCTestCase {
+    var root = ""
+
+    override func setUpWithError() throws {
+        root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-mono-\(UUID().uuidString)")
+        for dir in ["apps/ios/App.xcodeproj", "apps/ios/Pods/Pods.xcodeproj", "tools/Tool.xcodeproj", "web/src"] {
+            try FileManager.default.createDirectory(atPath: root + "/" + dir, withIntermediateDirectories: true)
+        }
+    }
+
+    override func tearDown() {
+        try? FileManager.default.removeItem(atPath: root)
+    }
+
+    typealias Plan = IndexBuilder.BuildPlan
+
+    func testProjectsInSubdirectoriesAreFound() throws {
+        XCTAssertThrowsError(try Plan.findProject(root, builder: "xcodebuild")) { error in
+            XCTAssertTrue("\(error)".contains("apps/ios/App.xcodeproj, tools/Tool.xcodeproj"), "\(error)")
+        }
+        XCTAssertEqual(try Plan.findProject(root, builder: "xcodebuild", under: "apps/ios"), "apps/ios/App.xcodeproj")
+        try FileManager.default.removeItem(atPath: root + "/tools")
+        XCTAssertEqual(try Plan.findProject(root, builder: "xcodebuild"), "apps/ios/App.xcodeproj", "Pods is skipped")
+    }
+
+    func testWorkspaceWinsOverProject() throws {
+        try FileManager.default.createDirectory(atPath: root + "/apps/ios/App.xcworkspace", withIntermediateDirectories: true)
+        XCTAssertEqual(try Plan.findProject(root, builder: "xcodebuild"), "apps/ios/App.xcworkspace")
+    }
+
+    func testGivenProjectPathForms() throws {
+        let resolve = { (p: String, wd: String?) in try Plan.resolveProject(p, srcDir: self.root, repoRoot: self.root, workingDirectory: wd) }
+        XCTAssertEqual(try resolve("apps/ios/App.xcodeproj", nil), "apps/ios/App.xcodeproj")
+        XCTAssertEqual(try resolve("apps/ios/App.xcodeproj/", root + "/web"), "apps/ios/App.xcodeproj", "repo-relative, trailing slash")
+        XCTAssertEqual(try resolve("App.xcodeproj", root + "/apps/ios"), "apps/ios/App.xcodeproj", "relative to the current directory")
+        XCTAssertEqual(try resolve("./App.xcodeproj/", root + "/apps/ios"), "apps/ios/App.xcodeproj")
+        XCTAssertEqual(try resolve(root + "/tools/Tool.xcodeproj", nil), "tools/Tool.xcodeproj", "absolute")
+        XCTAssertThrowsError(try resolve("Missing.xcodeproj", root + "/apps/ios")) { error in
+            XCTAssertTrue("\(error)".contains("apps/ios/Missing.xcodeproj"), "\(error)")
+        }
+    }
+}

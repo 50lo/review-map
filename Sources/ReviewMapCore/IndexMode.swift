@@ -13,7 +13,8 @@ public struct IndexOptions: Equatable {
     public var enabled: Bool?
     /// "xcodebuild" or "swift". Nil picks xcodebuild where it exists (macOS), swift build elsewhere.
     public var builder: String?
-    /// The .xcworkspace, .xcodeproj, or package directory to build, relative to the repo root.
+    /// The .xcworkspace, .xcodeproj, or package directory to build: relative to the repo root, relative to
+    /// `workingDirectory`, or absolute inside the repo.
     public var project: String?
     public var scheme: String?
     /// xcodebuild destination (default "generic/platform=iOS Simulator").
@@ -22,9 +23,13 @@ public struct IndexOptions: Equatable {
     public var cacheDir: String
     /// Build again even when a store for the commit is cached.
     public var rebuild: Bool
+    /// Where the command was run. A relative --index-project may be relative to it, and auto-detection
+    /// prefers projects under it.
+    public var workingDirectory: String?
 
     public init(enabled: Bool? = nil, builder: String? = nil, project: String? = nil, scheme: String? = nil,
-                destination: String? = nil, cacheDir: String = IndexOptions.defaultCacheDir, rebuild: Bool = false) {
+                destination: String? = nil, cacheDir: String = IndexOptions.defaultCacheDir, rebuild: Bool = false,
+                workingDirectory: String? = nil) {
         self.enabled = enabled
         self.builder = builder
         self.project = project
@@ -32,6 +37,7 @@ public struct IndexOptions: Equatable {
         self.destination = destination
         self.cacheDir = cacheDir
         self.rebuild = rebuild
+        self.workingDirectory = workingDirectory
     }
 
     public static var defaultCacheDir: String {
@@ -80,7 +86,7 @@ enum IndexBuilder {
         var out: [Side: SideIndex] = [:]
         for s in sides {
             let dir = (repoDir as NSString).appendingPathComponent(s.sha)
-            let store = try buildIfNeeded(options: options, side: s.side, sha: s.sha, srcDir: s.dir, cache: dir, log: log)
+            let store = try buildIfNeeded(options: options, side: s.side, sha: s.sha, srcDir: s.dir, repoRoot: repoRoot, cache: dir, log: log)
             out[s.side] = try read(store: store, library: library, files: s.files, log: log, side: s.side)
         }
         return out
@@ -95,7 +101,7 @@ enum IndexBuilder {
 
     // MARK: Building
 
-    static func buildIfNeeded(options: IndexOptions, side: Side, sha: String, srcDir: String, cache: String, log: (String) -> Void) throws -> BuiltStore {
+    static func buildIfNeeded(options: IndexOptions, side: Side, sha: String, srcDir: String, repoRoot: String, cache: String, log: (String) -> Void) throws -> BuiltStore {
         let fm = FileManager.default
         let storeDir = cache + "/store"
         let rootFile = cache + "/root.txt"
@@ -107,7 +113,7 @@ enum IndexBuilder {
         let logPath = cache + "/build.log"
         let scratch = (NSTemporaryDirectory() as NSString).appendingPathComponent("reviewmap-build-\(UUID().uuidString)")
         defer { try? fm.removeItem(atPath: scratch) }
-        let plan = try BuildPlan.make(options: options, srcDir: srcDir, scratch: scratch,
+        let plan = try BuildPlan.make(options: options, srcDir: srcDir, repoRoot: repoRoot, scratch: scratch,
                                       packageCache: (options.cacheDir as NSString).appendingPathComponent(".packages"))
         log("Building \(side.rawValue) \(sha.prefix(8)) for the index (\(plan.summary)); this runs once per commit…")
         let start = Date()
@@ -133,14 +139,16 @@ enum IndexBuilder {
         var storeSearchRoot: String
         var summary: String
 
-        static func make(options: IndexOptions, srcDir: String, scratch: String, packageCache: String) throws -> BuildPlan {
+        static func make(options: IndexOptions, srcDir: String, repoRoot: String, scratch: String, packageCache: String) throws -> BuildPlan {
             let fm = FileManager.default
             let hasXcodebuild = (try? Shell.string(["which", "xcodebuild"])).map { !$0.isEmpty } ?? false
             let builder = options.builder ?? (hasXcodebuild ? "xcodebuild" : "swift")
-            let project = try options.project ?? findProject(srcDir, builder: builder)
+            let cwdRel = options.workingDirectory.flatMap { repoRelative($0, repoRoot: repoRoot) }
+            let project = try options.project.map { try resolveProject($0, srcDir: srcDir, repoRoot: repoRoot, workingDirectory: options.workingDirectory) }
+                ?? findProject(srcDir, builder: builder, under: cwdRel)
             let projectPath = project == "." ? srcDir : (srcDir as NSString).appendingPathComponent(project)
             guard fm.fileExists(atPath: projectPath) else {
-                throw IndexError("\(project) does not exist in the repo.")
+                throw IndexError("\(project) does not exist in the repo at this commit.")
             }
             switch builder {
             case "swift":
@@ -173,22 +181,62 @@ enum IndexBuilder {
             }
         }
 
-        /// The workspace, project, or package at the repo root, in that order of preference.
-        static func findProject(_ root: String, builder: String) throws -> String {
-            let items = ((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).sorted()
-            let workspaces = items.filter { $0.hasSuffix(".xcworkspace") }
-            let projects = items.filter { $0.hasSuffix(".xcodeproj") }
-            let hasPackage = items.contains("Package.swift")
+        /// `path` relative to the repo root, when it is inside the repo (symlinks resolved).
+        static func repoRelative(_ path: String, repoRoot: String) -> String? {
+            let real = { (p: String) in URL(fileURLWithPath: p).standardizedFileURL.resolvingSymlinksInPath().path }
+            let p = real(path), root = real(repoRoot)
+            if p == root { return "" }
+            return p.hasPrefix(root + "/") ? String(p.dropFirst(root.count + 1)) : nil
+        }
+
+        /// A user-given project path as a repo-relative path that exists in the exported tree. It may be
+        /// relative to the directory the command ran in, relative to the repo root, or absolute.
+        static func resolveProject(_ given: String, srcDir: String, repoRoot: String, workingDirectory: String?) throws -> String {
+            var p = (given as NSString).expandingTildeInPath
+            while p.count > 1 && p.hasSuffix("/") { p.removeLast() }
+            var tried: [String] = []
+            func accept(_ rel: String) -> String? {
+                let r = rel.isEmpty ? "." : rel
+                if !tried.contains(r) { tried.append(r) }
+                return FileManager.default.fileExists(atPath: r == "." ? srcDir : srcDir + "/" + r) ? r : nil
+            }
+            if p.hasPrefix("/") {
+                if let rel = repoRelative(p, repoRoot: repoRoot), let hit = accept(rel) { return hit }
+            } else {
+                if let wd = workingDirectory, let rel = repoRelative((wd as NSString).appendingPathComponent(p), repoRoot: repoRoot),
+                   let hit = accept(rel) { return hit }
+                let rel = URL(fileURLWithPath: p, relativeTo: URL(fileURLWithPath: "/")).standardizedFileURL.path.dropFirst()
+                if let hit = accept(String(rel)) { return hit }
+            }
+            throw IndexError("--index-project \(given) is not in the repo at this commit (looked for \(tried.isEmpty ? p : tried.joined(separator: ", ")) "
+                + "from the repo root). Give the path relative to the repo root or to the current directory.")
+        }
+
+        /// The workspace, project, or package to build when none is given. Workspaces win over projects, and
+        /// projects over packages. Anywhere in the repo counts (Pods, build folders, and the like are skipped);
+        /// when there are several, the ones under the directory the command ran in are preferred.
+        static func findProject(_ root: String, builder: String, under cwdRel: String? = nil) throws -> String {
+            let scope = (cwdRel ?? "").isEmpty ? nil : cwdRel!
+            func narrow(_ found: [String]) -> [String] {
+                guard let scope else { return found }
+                let inside = found.filter { $0 == scope || $0.hasPrefix(scope + "/") }
+                return inside.isEmpty ? found : inside
+            }
+            let fm = FileManager.default
+            let packageDirs = [scope, "."].compactMap { $0 }.filter { fm.fileExists(atPath: ($0 == "." ? root : root + "/" + $0) + "/Package.swift") }
             if builder == "swift" {
-                if hasPackage { return "." }
-                throw IndexError("There is no Package.swift at the repo root for swift build. Pass --index-project <package dir>.")
+                if let dir = packageDirs.first { return dir }
+                throw IndexError("There is no Package.swift at the repo root or in the current directory for swift build. Pass --index-project <package dir>.")
             }
-            for group in [workspaces, projects] where !group.isEmpty {
-                if group.count == 1 { return group[0] }
-                throw IndexError("The repo root has \(group.joined(separator: ", ")). Pass --index-project to pick one.")
+            for suffix in [".xcworkspace", ".xcodeproj"] {
+                let found = narrow(ComponentBuilder.findDirs(root: root, suffix: suffix))
+                if found.count == 1 { return found[0] }
+                if found.count > 1 {
+                    throw IndexError("The repo has \(found.joined(separator: ", ")). Pass --index-project to pick one, or run from the directory that holds it.")
+                }
             }
-            if hasPackage { return "." }
-            throw IndexError("No .xcworkspace, .xcodeproj, or Package.swift at the repo root. Pass --index-project.")
+            if let dir = packageDirs.first { return dir }
+            throw IndexError("No .xcworkspace, .xcodeproj, or Package.swift found in the repo. Pass --index-project.")
         }
 
         /// The only scheme, or the one named after the project, or a package's "-Package" scheme.
