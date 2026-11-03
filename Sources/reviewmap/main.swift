@@ -137,7 +137,8 @@ struct IndexArgs: ParsableArguments {
 
     var options: IndexOptions {
         IndexOptions(enabled: index, builder: builder, project: project, scheme: scheme, destination: destination,
-                     cacheDir: cache ?? IndexOptions.defaultCacheDir, rebuild: rebuild)
+                     cacheDir: cache ?? IndexOptions.defaultCacheDir, rebuild: rebuild,
+                     workingDirectory: FileManager.default.currentDirectoryPath)
     }
 }
 

@@ -42,7 +42,7 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
 | `--index`, `--no-index` | Resolve references exactly from a build's index store (see Index mode). Default: `index.enabled` in `reviewmap.yml`, else off. |
 | `--index-builder <b>` | `xcodebuild` or `swift` (default: `xcodebuild` where it exists, else `swift build`). |
-| `--index-project <path>` | The `.xcworkspace`, `.xcodeproj`, or package directory to build, relative to the repo root. |
+| `--index-project <path>` | The `.xcworkspace`, `.xcodeproj`, or package directory to build: relative to the current directory or the repo root, or absolute. |
 | `--index-scheme <name>` | xcodebuild scheme (default: the only one, the one named after the project, or a package's `-Package` scheme). |
 | `--index-destination <d>` | xcodebuild destination (default `generic/platform=iOS Simulator`). |
 | `--index-cache <dir>` | Where built index stores are kept (default `~/.reviewmap/index`). |
@@ -70,7 +70,7 @@ The analyzer never writes to the target repo. Both trees are exported with `git 
 
 Name matching is fast and needs no build, but it guesses: a common member name (`load()`, `id`) counts as a use of every changed declaration with that name in files that mention its type, and a type name declared in two modules isn't resolved. Index mode replaces the guess with the compiler's own answer.
 
-- **Building**: each side's exported tree is built once with indexing on: `xcodebuild build` for the workspace, project, or package at the repo root (or `--index-project`), with `-destination generic/platform=iOS Simulator` and code signing off, or `swift build --enable-index-store` for a package where there is no Xcode. Builds run outside the target repo, and resolved packages are shared in `~/.reviewmap/index/.packages`.
+- **Building**: each side's exported tree is built once with indexing on: `xcodebuild build` for the workspace, project, or package (or `--index-project`), with `-destination generic/platform=iOS Simulator` and code signing off, or `swift build --enable-index-store` for a package where there is no Xcode. Builds run outside the target repo, and resolved packages are shared in `~/.reviewmap/index/.packages`. Without `--index-project`, the whole repo is searched (skipping `Pods`, build folders, and the like): a workspace wins over a project, and a project over a `Package.swift`. When there are several, the ones under the directory you run from are preferred, so in a monorepo running from the app's directory picks its project.
 - **Cache**: the index store is kept per repo and commit in `~/.reviewmap/index/<repo>/<sha>/`, with the build log. A base shared by several branches is built once, and running again on the same head builds nothing. `--rebuild-index` builds again; the old store stays until the new build succeeds.
 - **Reading**: IndexStoreDB, with `libIndexStore` from the same toolchain (`xcrun --find swift`, or `swift` on the `PATH`; `REVIEWMAP_LIBINDEXSTORE` overrides it), gives every reference in a file and the declaration it points at.
 - **What it changes**: edge references (named by the referenced top-level declaration, as before), `usedBy` and `dependsOn` (exact, members included), caller context (every reference in any component, instead of usedBy plus a name search in the entity's own component), and definition context (the declarations the changed lines reference). Conformer and override context still come from inheritance clauses.
