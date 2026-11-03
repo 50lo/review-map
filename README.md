@@ -15,7 +15,7 @@ reviewmap
 
 `scripts/install.sh` builds the release binary and installs it to `~/.local/bin/reviewmap`, with the viewer and its npm dependencies in `~/.local/share/reviewmap/viewer`. `PREFIX=/some/dir` installs under another prefix. If the `bin` directory isn't on your `PATH`, the script prints the line to add to your shell profile. Run it again after pulling to update; it reinstalls npm dependencies only when they changed. `scripts/install.sh --uninstall` removes both. The installed copy doesn't use the checkout, which can be moved or deleted. `REVIEWMAP_VIEWER` points the binary at another viewer directory.
 
-Without installing, `swift build -c release` and `.build/release/reviewmap` work too, using the viewer in the checkout.
+Without installing, `swift build -c release` and `.build/release/reviewmap` work too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); the install script and CI do this.
 
 With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
 
