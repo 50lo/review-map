@@ -221,12 +221,22 @@ final class IndexBazelTests: XCTestCase {
         let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-bazel-ws-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(atPath: root) }
         try FileManager.default.createDirectory(atPath: root + "/mobile/ios", withIntermediateDirectories: true)
-        XCTAssertNil(Plan.bazelWorkspace(root, under: "mobile/ios"))
+        try FileManager.default.createDirectory(atPath: root + "/web", withIntermediateDirectories: true)
+        XCTAssertNil(try Plan.bazelWorkspace(root, under: "mobile/ios"))
+        XCTAssertNil(try Plan.bazelWorkspace(root, under: nil))
+        // Below the current directory: run from the repo root, the workspace is in a subdirectory.
+        FileManager.default.createFile(atPath: root + "/mobile/ios/MODULE.bazel", contents: Data())
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: nil), "mobile/ios")
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: "mobile/ios"), "mobile/ios")
+        FileManager.default.createFile(atPath: root + "/web/MODULE.bazel", contents: Data())
+        XCTAssertThrowsError(try Plan.bazelWorkspace(root, under: nil), "two workspaces, none above")
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: "mobile"), "mobile/ios")
+        try Self.buildFile.write(toFile: root + "/mobile/ios/BUILD.bazel", atomically: true, encoding: .utf8)
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: nil, withTargets: true), "mobile/ios", "only one has an xcodeproj rule")
+        // Above the current directory wins.
         FileManager.default.createFile(atPath: root + "/MODULE.bazel", contents: Data())
-        XCTAssertEqual(Plan.bazelWorkspace(root, under: "mobile/ios"), ".")
-        FileManager.default.createFile(atPath: root + "/mobile/WORKSPACE", contents: Data())
-        XCTAssertEqual(Plan.bazelWorkspace(root, under: "mobile/ios"), "mobile")
-        XCTAssertEqual(Plan.bazelWorkspace(root, under: nil), ".")
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: "mobile/ios"), "mobile/ios")
+        XCTAssertEqual(try Plan.bazelWorkspace(root, under: "mobile"), ".")
     }
 
     func testIndexPathsMapToRepoPaths() {
@@ -267,6 +277,15 @@ final class IndexBazelTests: XCTestCase {
     """
 
     func testBazelBuildFlow() throws {
+        try bazelFlow(subdir: "")
+    }
+
+    /// The workspace in ios/ of a monorepo, with reviewmap run from the repo root.
+    func testBazelWorkspaceInSubdirectory() throws {
+        try bazelFlow(subdir: "ios")
+    }
+
+    func bazelFlow(subdir: String) throws {
         do { _ = try IndexBuilder.libraryPath() } catch { throw XCTSkip("No libIndexStore in this toolchain: \(error)") }
         let fm = FileManager.default
         let tmp = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-bazel-\(UUID().uuidString)")
@@ -286,15 +305,18 @@ final class IndexBazelTests: XCTestCase {
         func git(_ args: String...) throws {
             try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
         }
+        let ws = subdir.isEmpty ? repo : repo + "/" + subdir
         func copyTree(_ side: String) throws {
             for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" { try fm.removeItem(atPath: repo + "/" + item) }
+            try fm.createDirectory(atPath: ws, withIntermediateDirectories: true)
             for item in try fm.contentsOfDirectory(atPath: fixture + "/" + side) {
-                try fm.copyItem(atPath: fixture + "/" + side + "/" + item, toPath: repo + "/" + item)
+                try fm.copyItem(atPath: fixture + "/" + side + "/" + item, toPath: ws + "/" + item)
             }
-            fm.createFile(atPath: repo + "/MODULE.bazel", contents: Data())
+            try "# web app\n".write(toFile: repo + "/README.md", atomically: true, encoding: .utf8)
+            fm.createFile(atPath: ws + "/MODULE.bazel", contents: Data())
             try Self.buildFile.replacingOccurrences(of: "\"//ios:AppTests\",\n", with: "").replacingOccurrences(of: ":Tool", with: ":Feed")
                 .replacingOccurrences(of: "//ios:App", with: "//Sources:Storage")
-                .write(toFile: repo + "/BUILD.bazel", atomically: true, encoding: .utf8)
+                .write(toFile: ws + "/BUILD.bazel", atomically: true, encoding: .utf8)
         }
         try git("init", "-q", "-b", "main")
         try copyTree("base")
@@ -314,6 +336,7 @@ final class IndexBazelTests: XCTestCase {
         let log = try String(contentsOfFile: cache + "/" + logs[0], encoding: .utf8)
         XCTAssertTrue(log.contains("--features=swift.use_global_index_store"), log)
         XCTAssertTrue(log.contains("-- //Sources:Storage //:Feed"), log)
+        XCTAssertFalse(m.warnings.contains { $0.kind == "index-partial" }, "\(m.warnings)")
         // The temporary output bases were expunged.
         let leftovers = try fm.contentsOfDirectory(atPath: NSTemporaryDirectory()).filter { $0.hasPrefix("reviewmap-build-") }
         for dir in leftovers {

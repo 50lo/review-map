@@ -175,7 +175,7 @@ enum IndexBuilder {
         static func make(options: IndexOptions, srcDir: String, repoRoot: String, scratch: String, packageCache: String) throws -> BuildPlan {
             let fm = FileManager.default
             let cwdRel = options.workingDirectory.flatMap { repoRelative($0, repoRoot: repoRoot) }
-            let workspace = bazelWorkspace(srcDir, under: cwdRel)
+            let workspace = try bazelWorkspace(srcDir, under: cwdRel, withTargets: options.targets == nil)
             if options.builder == "bazel" || (options.builder == nil && workspace != nil && (options.targets != nil || !xcodeprojTargets(srcDir, workspace: workspace!).isEmpty)) {
                 guard let workspace else {
                     throw IndexError("There is no Bazel workspace (MODULE.bazel or WORKSPACE) in the repo for the bazel builder.")
@@ -223,18 +223,36 @@ enum IndexBuilder {
 
         // MARK: Bazel
 
-        /// The Bazel workspace to build: the nearest directory with MODULE.bazel or WORKSPACE, from the directory
-        /// the command ran in up to the repo root. Repo-relative ("." for the root), or nil.
-        static func bazelWorkspace(_ root: String, under cwdRel: String?) -> String? {
+        static let bazelWorkspaceFiles = ["MODULE.bazel", "WORKSPACE", "WORKSPACE.bazel"]
+
+        /// The Bazel workspace to build, repo-relative ("." for the root), or nil: the nearest directory with
+        /// MODULE.bazel or WORKSPACE from the directory the command ran in up to the repo root, or else the
+        /// one workspace below it (with `withTargets`, one whose rules_xcodeproj rule names targets).
+        static func bazelWorkspace(_ root: String, under cwdRel: String?, withTargets: Bool = false) throws -> String? {
+            let fm = FileManager.default
             var dir = cwdRel ?? ""
             while true {
                 let abs = dir.isEmpty ? root : root + "/" + dir
-                if ["MODULE.bazel", "WORKSPACE", "WORKSPACE.bazel"].contains(where: { FileManager.default.fileExists(atPath: abs + "/" + $0) }) {
+                if bazelWorkspaceFiles.contains(where: { fm.fileExists(atPath: abs + "/" + $0) }) {
                     return dir.isEmpty ? "." : dir
                 }
-                if dir.isEmpty { return nil }
+                if dir.isEmpty { break }
                 dir = (dir as NSString).deletingLastPathComponent
             }
+            // In a monorepo the workspace may sit in a subdirectory, such as ios/.
+            var found: [String] = []
+            ComponentBuilder.walk(root: root, rel: cwdRel ?? "") { rel, name, isDir in
+                if !isDir && bazelWorkspaceFiles.contains(name) {
+                    let ws = (rel as NSString).deletingLastPathComponent
+                    if !found.contains(ws) { found.append(ws) }
+                }
+                return !name.hasPrefix("bazel-")
+            }
+            if withTargets { found = found.filter { !xcodeprojTargets(root, workspace: $0).isEmpty } }
+            if found.count > 1 {
+                throw IndexError("The repo has several Bazel workspaces (\(found.joined(separator: ", "))). Run reviewmap from the one to index, or pass --index-builder.")
+            }
+            return found.first
         }
 
         /// `top_level_targets` of the rules_xcodeproj `xcodeproj` rules in the workspace's root BUILD file, as labels.
