@@ -1,5 +1,5 @@
 {
-  "originHash" : "8617c5e48f2e5f1333801a58301e0ec46f81836cc118ced40bfb061b9fb7f1e5",
+  "originHash" : "91093a3457168859a47ec0f81dae19f60e09a4e2f87bebb72a8dbc76c7b6ae01",
   "pins" : [
     {
       "identity" : "aexml",
@@ -8,6 +8,14 @@
       "state" : {
         "revision" : "dd9206de0717d658daec6a064992894fdab8ae17",
         "version" : "4.7.3"
+      }
+    },
+    {
+      "identity" : "indexstore-db",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/indexstore-db.git",
+      "state" : {
+        "revision" : "cf29ef4e5e5243a3b6f518d72c6e527b5290375a"
       }
     },
     {
@@ -35,6 +43,15 @@
       "state" : {
         "revision" : "6a52f3251125d74daf04fcbd5e6f08a75d074382",
         "version" : "1.8.2"
+      }
+    },
+    {
+      "identity" : "swift-lmdb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-lmdb.git",
+      "state" : {
+        "branch" : "release/6.2",
+        "revision" : "1ad9a2d80b6fcde498c2242f509bd1be7d667ff8"
       }
     },
     {

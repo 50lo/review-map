@@ -10,9 +10,11 @@ public struct AnalyzeOptions {
     public var maxRefsPerEdge: Int
     /// Evaluate Package.swift with `swift package dump-package` (runs repository code) instead of parsing its syntax.
     public var dumpPackage: Bool
+    /// Exact references from a build's index store instead of name matching.
+    public var index: IndexOptions
 
     public init(repo: String, base: String, head: String, useMergeBase: Bool = true,
-                configPath: String? = nil, maxRefsPerEdge: Int = 50, dumpPackage: Bool = false) {
+                configPath: String? = nil, maxRefsPerEdge: Int = 50, dumpPackage: Bool = false, index: IndexOptions = IndexOptions()) {
         self.repo = repo
         self.base = base
         self.head = head
@@ -20,6 +22,7 @@ public struct AnalyzeOptions {
         self.configPath = configPath
         self.maxRefsPerEdge = maxRefsPerEdge
         self.dumpPackage = dumpPackage
+        self.index = index
     }
 }
 
@@ -66,8 +69,23 @@ public enum Analyzer {
         let baseSide = try SideData.load(side: .base, dir: baseDir, blobs: baseBlobs, config: &config, parser: parser, dumpPackage: options.dumpPackage)
         let headSide = try SideData.load(side: .head, dir: headDir, blobs: headBlobs, config: &config, parser: parser, dumpPackage: options.dumpPackage)
 
-        log("Comparing…")
         var builder = ModelBuilder(base: baseSide, head: headSide, options: options)
+        let indexOptions = options.index.merged(with: config.index)
+        if indexOptions.enabled == true {
+            do {
+                builder.index = try IndexBuilder.load(
+                    options: indexOptions, repoRoot: root,
+                    sides: [(.head, headSha, headDir, headSide.files.keys.sorted()), (.base, baseSha, baseDir, baseSide.files.keys.sorted())],
+                    log: log)
+                builder.noteIndexCoverage()
+            } catch {
+                log("Index mode is off for this run: \(error)")
+                builder.warnings.insert(Warning(kind: "index-unavailable",
+                    message: "References were matched by name because the index could not be built: \(error)"))
+            }
+        }
+
+        log("Comparing…")
         builder.diffExternalDeps(baseBlobs: baseBlobs, headBlobs: headBlobs, baseDir: baseDir, headDir: headDir)
         builder.matchEntities()
         builder.resolveReferences()
@@ -193,6 +211,10 @@ struct ModelBuilder {
     var externalDeps: [ExternalDepChange] = []
     /// Package identities pinned on either side (Package.resolved).
     var pinnedPackages = Set<String>()
+    /// Exact references per side, when index mode built both sides.
+    var index: [Side: SideIndex] = [:]
+    /// Index mode: every head reference to a changed declaration, same component included (for caller context).
+    var indexCallers: [Int: [Usage]] = [:]
 
     init(base: SideData, head: SideData, options: AnalyzeOptions) {
         self.base = base
@@ -517,6 +539,72 @@ struct ModelBuilder {
         return id
     }
 
+    /// Records how much of each side the index covers; uncovered files fall back to name matching. Test files
+    /// are left out of the count, because a scheme's build action often doesn't build test targets.
+    mutating func noteIndexCoverage() {
+        for s in [Side.base, .head] {
+            guard let idx = index[s] else { continue }
+            let layout = side(s).layout
+            let all = side(s).files.keys.filter { path in
+                guard !side(s).generated.contains(path), let c = layout.fileComponent[path] else { return false }
+                return layout.components[c]?.isTest != true && !ComponentBuilder.isTestPath(path)
+            }
+            let missing = all.filter { idx.refs[$0] == nil }.sorted()
+            if !missing.isEmpty {
+                warnings.insert(Warning(kind: "index-partial",
+                    message: "\(missing.count) of \(all.count) Swift files had no index data at \(s.rawValue), so their references were matched by name (first: \(missing.prefix(3).joined(separator: ", ")))."))
+            }
+        }
+    }
+
+    /// The declaration whose name sits at `line` of `file`: the innermost one around it, preferring one whose
+    /// name matches the index's symbol name.
+    func declAt(_ s: Side, file: String, line: Int, name: String) -> (index: Int, decl: Decl)? {
+        guard let parsed = side(s).files[file] else { return nil }
+        let base = String(name.prefix { $0 != "(" })
+        var best: (Int, Decl)?
+        var bestNamed: (Int, Decl)?
+        for (i, d) in parsed.decls.enumerated() where d.startLine <= line && line <= d.endLine {
+            if best == nil || d.endLine - d.startLine <= best!.1.endLine - best!.1.startLine { best = (i, d) }
+            if d.name == base, bestNamed == nil || d.endLine - d.startLine <= bestNamed!.1.endLine - bestNamed!.1.startLine { bestNamed = (i, d) }
+        }
+        return bestNamed ?? best
+    }
+
+    /// The top-level declaration that contains a declaration (itself when it is top level).
+    func topLevelDecl(_ s: Side, file: String, index i: Int) -> Decl? {
+        guard let parsed = side(s).files[file] else { return nil }
+        var cur = i
+        while let p = parsed.decls[cur].parentIndex { cur = p }
+        return parsed.decls[cur]
+    }
+
+    /// Index mode for one file: each reference resolves to the exact declaration it points at.
+    private mutating func resolveIndexed(_ s: Side, path: String, file: ParsedFile, comp: String, refs: [IndexedRef]) {
+        let layout = side(s).layout
+        var seen = Set<String>()
+        for ref in refs {
+            guard let targetComp = layout.fileComponent[ref.targetFile],
+                  let target = declAt(s, file: ref.targetFile, line: ref.targetLine, name: ref.name) else { continue }
+            let encl = file.enclosingDecl(line: ref.line)
+            // References to parts of the enclosing declaration itself (its parameters, local names) are not uses.
+            if ref.targetFile == path, let encl, target.decl.startLine >= encl.startLine && target.decl.endLine <= encl.endLine { continue }
+            let key = "\(ref.line)|\(ref.targetFile)|\(target.index)"
+            guard seen.insert(key).inserted else { continue }
+            let usage = Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line)
+            let targetPair = pairOf[DeclKey(side: s, file: ref.targetFile, index: target.index)]
+            if s == .head, let tp = targetPair { indexCallers[tp, default: []].append(usage) }
+            guard targetComp != comp else { continue }
+            let top = topLevelDecl(s, file: ref.targetFile, index: target.index)
+            addRef(s, from: comp, to: targetComp, ref: Ref(file: path, line: ref.line, symbol: top?.name ?? target.decl.name, side: s))
+            if let tp = targetPair { usedBy[tp, default: []].insert(usage) }
+            if let encl, let idx = file.decls.firstIndex(where: { $0.startLine == encl.startLine && $0.qualifiedName == encl.qualifiedName }),
+               let pi = pairOf[DeclKey(side: s, file: path, index: idx)] {
+                dependsOn[pi, default: []].insert(Usage(component: targetComp, symbol: target.decl.qualifiedName, file: path, line: ref.line))
+            }
+        }
+    }
+
     mutating func resolveReferences() {
         for s in [Side.base, .head] {
             let data = side(s)
@@ -552,6 +640,11 @@ struct ModelBuilder {
                     } else if layout.moduleComponent[imp.name] == nil && !Self.appleModules.contains(imp.name) {
                         warnings.insert(Warning(kind: "unresolved-import", message: "import \(imp.name) matches no target or known package product."))
                     }
+                }
+
+                if let refs = index[s]?.refs[path] {
+                    resolveIndexed(s, path: path, file: file, comp: comp, refs: refs)
+                    continue
                 }
 
                 var seenRef = Set<NameRef>()
@@ -865,7 +958,7 @@ struct ModelBuilder {
 
         let sortedWarnings = warnings.sorted { ($0.kind, $0.file ?? "", $0.line ?? 0, $0.message) < ($1.kind, $1.file ?? "", $1.line ?? 0, $1.message) }
         return ChangeModel(
-            analyzer: AnalyzerInfo(version: Analyzer.version, resolution: "name-based"),
+            analyzer: AnalyzerInfo(version: Analyzer.version, resolution: index.isEmpty ? "name-based" : "index"),
             repo: repo,
             components: components.values.sorted { $0.id < $1.id },
             edges: edges,

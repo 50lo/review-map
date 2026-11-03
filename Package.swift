@@ -13,6 +13,8 @@ let package = Package(
         .package(url: "https://github.com/tuist/XcodeProj.git", exact: "9.17.6"),
         .package(url: "https://github.com/jpsim/Yams.git", exact: "6.2.2"),
         .package(url: "https://github.com/kylef/PathKit.git", exact: "1.0.1"),
+        // swift-6.2.4-RELEASE; index mode reads the compiler's index store with it.
+        .package(url: "https://github.com/swiftlang/indexstore-db.git", revision: "cf29ef4e5e5243a3b6f518d72c6e527b5290375a"),
     ],
     targets: [
         .executableTarget(
@@ -30,6 +32,7 @@ let package = Package(
                 .product(name: "XcodeProj", package: "XcodeProj"),
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "PathKit", package: "PathKit"),
+                .product(name: "IndexStoreDB", package: "indexstore-db"),
             ]
         ),
         .testTarget(

@@ -101,6 +101,9 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
             <StatusDot status="added" /> {byStatus("added")} added, <StatusDot status="removed" /> {byStatus("removed")} removed,{" "}
             <StatusDot status="changed" /> {byStatus("changed")} changed dependencies
           </li>
+          <li className="muted">
+            {model.analyzer?.resolution === "index" ? "References resolved exactly from the build index" : "References matched by name"}
+          </li>
           {model.externalDeps.map((d) => (
             <li key={d.name}>
               <button className="link" onClick={() => setFocus({ type: "component", id: `ext:${d.name}` })}>

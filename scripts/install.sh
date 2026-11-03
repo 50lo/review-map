@@ -35,8 +35,14 @@ done
 
 echo "Building reviewmap (release)…"
 cd "$root"
-swift build -c release --product reviewmap
-built="$(swift build -c release --show-bin-path)/reviewmap"
+# On Linux, IndexStoreDB's C++ needs the toolchain's dispatch and Block headers on the include path.
+set --
+if [ "$(uname -s)" = "Linux" ]; then
+  swift_lib="$(dirname "$(dirname "$(readlink -f "$(command -v swift)")")")/lib/swift"
+  set -- -Xcxx "-I$swift_lib" -Xcxx "-I$swift_lib/Block"
+fi
+swift build -c release --product reviewmap "$@"
+built="$(swift build -c release --show-bin-path "$@")/reviewmap"
 
 mkdir -p "$bin" "$share/viewer"
 install -m 755 "$built" "$bin/reviewmap"

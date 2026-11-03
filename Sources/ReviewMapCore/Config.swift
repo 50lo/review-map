@@ -12,6 +12,11 @@ import Yams
 ///       maxDepth: 3
 ///     exclude: ["**/Pods/**"]
 ///     generated: ["**/*.generated.swift"]
+///     index:            # exact references from a build (see IndexOptions)
+///       enabled: true
+///       project: App.xcworkspace
+///       scheme: App
+///       destination: "generic/platform=iOS Simulator"
 public struct Config: Codable, Equatable {
     public struct ComponentRule: Codable, Equatable {
         public var name: String
@@ -22,11 +27,19 @@ public struct Config: Codable, Equatable {
         public var threshold: Int?
         public var maxDepth: Int?
     }
+    public struct Index: Codable, Equatable {
+        public var enabled: Bool?
+        public var builder: String?
+        public var project: String?
+        public var scheme: String?
+        public var destination: String?
+    }
 
     public var components: [ComponentRule]?
     public var split: Split?
     public var exclude: [String]?
     public var generated: [String]?
+    public var index: Index?
 
     public init() {}
 
@@ -52,7 +65,7 @@ public struct Config: Codable, Equatable {
     lazy var generatedMatchers: [Glob] = (Config.defaultGenerated + (generated ?? [])).map(Glob.init)
 
     enum CodingKeys: String, CodingKey {
-        case components, split, exclude, generated
+        case components, split, exclude, generated, index
     }
 }
 
