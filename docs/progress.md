@@ -35,9 +35,9 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 
 ## Milestone 4 notes
 
-- The analyzer emits review, removed, and context regions. Risk follows the brief's table, plus these additions: a changed interface signature and a removed interface declaration are medium, usage from other components adds up to 0.2, tasks and locks are medium while isolation annotations stay high, and control flow in SwiftUI view code counts half of medium so layout-heavy `body` changes don't dominate. Weights are to be tuned in evaluation.
+- The analyzer emits review, removed, and context regions. Risk follows the brief's table, plus these additions: a changed interface signature and a removed interface declaration are medium, usage from other components adds up to 0.2, tasks and locks are medium while isolation annotations stay high, and control flow in SwiftUI view code counts half of medium so layout-heavy `body` changes don't dominate. Weights are not tuned yet.
 - Region reasons show in a label row above each region rather than a side gutter, because a gutter doesn't fit at phone width.
-- Context snippets are collapsed to one-line labels by default (the brief's "related items stay quiet"). Whether they help or clutter is still an open question for evaluation.
+- Context snippets are collapsed to one-line labels by default (the brief's "related items stay quiet"). Whether they help or clutter is still open.
 - Removed lines inside a block that also adds lines are part of the review region (their removed checks count), and the viewer places them as markers by comparing base and head. Pure deletions are `removed` regions with an anchor.
 - Start here groups regions by entity and folds members into their type, so one Codable type or enum doesn't fill the list. Each row opens its riskiest region.
 - Reviewed checkboxes, notes with Markdown export, and region shortcuts (`j`/`k`, `]`/`[`) are in. With the local server they're saved next to the model; the single-file build uses browser storage, because it has no server to write a file.
@@ -51,7 +51,7 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 - Models go to `~/.reviewmap/models/<repo>/<head>/` by default, so running inside the target repo writes nothing there and each branch keeps its own reviewed marks and notes. Two repos with the same folder name share a directory.
 - In use with the `claude` CLI on Anton's repos. The `codex exec` path (`--output-last-message`, prompt on stdin with `-`) has not run yet. Tests and demos use `scripts/fake-llm.sh`, which fills the reply template with canned values.
 - Removal candidates are tagged on review regions, since every changed entity has at least one; a speculative abstraction is tagged on its declaration region.
-- The ranking toggle switches the whole LLM layer, not only the ranking: with it off the viewer shows no LLM notes, summaries, pruning, or removal candidates, so the evaluation compares the tool with and without the LLM.
+- The ranking toggle switches the whole LLM layer, not only the ranking: with it off the viewer shows no LLM notes, summaries, pruning, or removal candidates, so the tool can be compared with and without the LLM.
 - Entity and component summaries are always shown when the LLM layer is on, because they were opened almost every time. Region notes and removal notes stay on demand. Context the LLM leaves out folds into a count after the kept snippets.
 - Test components, test and generated code, and cosmetic changes are not sent to the LLM.
 - On IceCubesApp's last 40 commits with the fake: 23 batches, the largest prompt about 79,000 characters, 13 seconds in all.
@@ -73,34 +73,20 @@ Milestones from the prototype brief. Each one is usable on a real PR before the 
 - Milestone 1's done criterion: the change model of five real PRs from the target app looks right on manual inspection. So far only IceCubesApp and NetNewsWire have been checked.
 - Index mode with real Bazel and rules_swift on the target repo: the build in a fresh output base, and whether the index covers the app's files (no large `index-partial` warning).
 
-## Evaluation
+## Findings
 
-From the brief. Five large, agent-generated PRs from the target repo that already went through human review, ideally first reviewed by a colleague.
+From a few days of use on real PRs.
 
-For each PR:
+- Indexing is essential. Matching by name creates false links, and the false links make the map confusing.
+- Indexing by building the whole project is too slow. A clean build of one of the target projects takes about 20 minutes.
+- LLM suggestions on individual fragments add little. They rarely surface issues the automated review agents on CI didn't already find. Structural reviews, over the shape of the change rather than single fragments, are worth exploring.
+- The most valuable parts are the visual map of the change, seeing the code behind each arrow and block, and opening changed fragments in the IDE quickly.
 
-1. List the concerns from its real review, plus bugs later traced to it. That list is the ground truth.
-2. Review it again in Review Map and record concerns as notes in the tool.
-3. Note for each view (map, Start here, interface view, implementation view, context snippets) whether it was used, ignored, or misleading.
-4. Repeat the ranking check with the LLM layer on and off (the Ranking toggle).
-
-| PR | Ground-truth concerns | Found | New concerns | Time to first concern | Total review time | In top 10 regions (LLM on / off) | Noise regions |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | | | | | | | |
-| 2 | | | | | | | |
-| 3 | | | | | | | |
-| 4 | | | | | | | |
-| 5 | | | | | | | |
-
-Success: the same or more concerns found in less time on at least three of the five PRs, and the tool is the choice for the next large PR.
-
-### Open questions to answer
+## Open questions
 
 - Is folder-based grouping good enough, or should an LLM propose the component grouping?
-- Does name-based resolution hold up, or is index mode needed from the start?
 - Is the component map the right entry point, or does Start here get used more?
 - How should removed code be shown without falling back to a diff?
 - Do inline context snippets help, or do they clutter the view?
-- Do LLM rankings and summaries add signal or noise compared with deterministic flags?
 - How should large SwiftUI `body` changes that are mostly layout be handled, so they don't dominate the ranking?
 - How should changes in non-Swift files be shown: storyboards, asset catalogs, plists, and the project file?
