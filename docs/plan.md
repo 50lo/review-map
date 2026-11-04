@@ -17,7 +17,7 @@ Each step is usable on real PRs before the next starts.
 | --- | --- |
 | 1 | Map: selection glitch, collapse and expand, editor command |
 | 2 | Language-neutral core |
-| 3 | First new language |
+| 3 | TypeScript |
 | 4 | Structural review |
 | 5 | Faster Swift indexing |
 
@@ -45,9 +45,9 @@ The core stays in Swift: git export, diffing, components, regions, risk, the LLM
 - **Resolution**: references come in as SCIP. Swift's IndexStoreDB reader sits behind the same interface. Name matching stays as the fallback.
 - **Model**: contract flags get a language prefix; everything else stays language-neutral.
 
-### 3. First new language
+### 3. TypeScript
 
-Exact resolution comes from the language's own indexer, which type-checks the source without a full build:
+TypeScript is the first new language; Rust and Go follow the same path. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
 
 | Language | Indexer | Needs |
 | --- | --- | --- |
@@ -55,7 +55,7 @@ Exact resolution comes from the language's own indexer, which type-checks the so
 | Go | `scip-go` | Downloaded modules |
 | Rust | `rust-analyzer scip` | `cargo metadata`; build scripts and proc macros compile |
 
-Index results are cached per commit, as they are for Swift. The other two languages follow the same path.
+Index results are cached per commit, as they are for Swift.
 
 ### 4. Structural review
 
@@ -90,8 +90,3 @@ Swift has no exact resolution without a build for Xcode and Bazel projects, so t
 - Keep one warm output base or DerivedData per repo instead of a fresh one per build, so the head builds incrementally on top of the base.
 - Build only the changed modules and the modules that depend on them.
 - Improve the name fallback: infer the receiver's type from local declarations (`let x: T`, `T(...)`, typed parameters and properties), and draw links that stay guesses differently from exact ones.
-
-## Open questions
-
-- Which language comes first?
-- For TypeScript, Go, and Rust, is installing or downloading dependencies before analysis acceptable?
