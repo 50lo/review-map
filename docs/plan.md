@@ -92,3 +92,8 @@ Swift has no exact resolution without a build for Xcode and Bazel projects, so t
 - Keep one warm output base or DerivedData per repo instead of a fresh one per build, so the head builds incrementally on top of the base.
 - Build only the changed modules and the modules that depend on them.
 - Improve the name fallback: infer the receiver's type from local declarations (`let x: T`, `T(...)`, typed parameters and properties), and draw links that stay guesses differently from exact ones.
+
+## Future improvements
+
+- Add SwiftFormat to the project.
+- Add Sublime Text (`subl`) to the editor presets.
