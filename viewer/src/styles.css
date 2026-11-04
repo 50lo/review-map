@@ -16,6 +16,11 @@
   --region: #d4910a;
   --context: #7b5cd6;
   color-scheme: light;
+  /* Muted map colors, mixed with the background instead of drawn with opacity. */
+  --edge-dim: color-mix(in srgb, var(--unchanged) 22%, var(--bg));
+  --edge-quiet: color-mix(in srgb, var(--unchanged) 55%, var(--bg));
+  --dim-fg: color-mix(in srgb, var(--muted) 45%, var(--bg));
+  --dim-line: color-mix(in srgb, var(--line) 60%, var(--bg));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -189,6 +194,12 @@ code,
   flex: 1;
   position: relative;
   min-width: 0;
+}
+/* The interface and code pages cover the map and the side panel. Hidden content isn't painted,
+   so a large map costs nothing there, and it keeps its viewport for when you come back. */
+.body.paged > .map,
+.body.paged > .sidebar {
+  visibility: hidden;
 }
 
 .hidden-note {
@@ -415,9 +426,6 @@ code,
   min-width: 1px;
   min-height: 1px;
 }
-.react-flow__node {
-  transition: opacity 0.15s;
-}
 
 .node {
   width: 100%;
@@ -431,7 +439,6 @@ code,
   justify-content: center;
   gap: 3px;
   cursor: pointer;
-  transition: opacity 0.15s;
 }
 .node.changed {
   border-color: color-mix(in srgb, var(--accent) calc(40% + var(--score) * 60%), var(--line));
@@ -445,9 +452,68 @@ code,
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+/* Away from the focus. Muted colors, not opacity (see EDGE_COLORS in MapView.tsx). */
 .node.dim,
 .group.dim {
-  opacity: 0.22;
+  color: var(--dim-fg);
+  border-color: var(--dim-line);
+  border-style: solid;
+}
+.node.dim {
+  background: var(--bg);
+}
+.group.dim {
+  background: transparent;
+}
+.node.dim .badge,
+.group.dim .badge,
+.node.dim .tag,
+.group.dim .tag,
+.node.dim .layer,
+.node.dim .muted,
+.node.dim .group-toggle,
+.group.dim .group-toggle {
+  background: transparent;
+  color: var(--dim-fg);
+  border-color: var(--dim-line);
+}
+.node.dim .node-progress {
+  visibility: hidden;
+}
+/* A collapsed group: a stack of cards. */
+.node.collapsed {
+  box-shadow:
+    4px 4px 0 -1px var(--node-bg),
+    4px 4px 0 0 var(--line),
+    8px 8px 0 -1px var(--node-bg),
+    8px 8px 0 0 var(--line);
+}
+.node.collapsed.dim {
+  box-shadow:
+    4px 4px 0 -1px var(--bg),
+    4px 4px 0 0 var(--dim-line);
+}
+.group-toggle {
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.node-head .group-toggle {
+  margin-left: auto;
+}
+.node-head .layer + .group-toggle {
+  margin-left: 0;
+}
+.group-toggle:hover {
+  color: var(--fg);
+  border-color: var(--muted);
 }
 .node-title {
   font-weight: 600;
@@ -550,7 +616,6 @@ code,
   border-radius: 12px;
   background: var(--group-bg);
   cursor: pointer;
-  transition: opacity 0.15s;
 }
 .group-title {
   display: flex;
@@ -811,6 +876,11 @@ code,
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+.map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .open-iface {
   margin: 2px 0 6px;

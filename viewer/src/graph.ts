@@ -140,7 +140,11 @@ export interface Visible {
   hiddenUnrelated: number;
 }
 
-export function visible(index: Index, opts: MapOptions): Visible {
+/**
+ * What the map draws. `expanded` lists components whose direct neighbors are shown too,
+ * whatever the scope.
+ */
+export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<string> = new Set()): Visible {
   const { model } = index;
   const allowed = (id: string) => {
     const c = index.components.get(id);
@@ -167,6 +171,11 @@ export function visible(index: Index, opts: MapOptions): Visible {
       }
     }
   }
+  for (const e of model.edges) {
+    if (!allowed(e.from) || !allowed(e.to)) continue;
+    if (expanded.has(e.from)) nodes.add(e.to);
+    if (expanded.has(e.to)) nodes.add(e.from);
+  }
   // A visible split folder pulls in its target, which is drawn as a group around it.
   for (const id of [...nodes]) {
     let p = index.components.get(id)?.parent;
@@ -181,13 +190,170 @@ export function visible(index: Index, opts: MapOptions): Visible {
   return { nodes, edges, hiddenTests, hiddenUnrelated: Math.max(0, hiddenUnrelated) };
 }
 
+/** The neighbors of a component that the map doesn't show yet. */
+export function hiddenNeighbors(index: Index, vis: Visible, id: string, showTests: boolean): string[] {
+  const out = new Set<string>();
+  const allowed = (x: string) => showTests || !index.components.get(x)?.isTest;
+  for (const e of index.model.edges) {
+    if (e.from === e.to) continue;
+    if (e.from === id && allowed(e.to) && !vis.nodes.has(e.to)) out.add(e.to);
+    if (e.to === id && allowed(e.from) && !vis.nodes.has(e.from)) out.add(e.from);
+  }
+  return [...out].sort();
+}
+
+// ---------------------------------------------------------------------------
+// Collapsed groups
+
+/** A target split into folders, drawn as a group around them. */
+export const isGroupOf = (index: Index, vis: Visible, id: string) => (index.children.get(id) ?? []).some((c) => vis.nodes.has(c));
+
+/** Above this many visible components, groups start collapsed. */
+export const COLLAPSE_ABOVE = 40;
+
+/** Groups collapsed when the map opens: all of them on a large map, none on a small one. */
+export function defaultCollapsed(index: Index, vis: Visible): Set<string> {
+  if (vis.nodes.size <= COLLAPSE_ABOVE) return new Set();
+  return new Set([...vis.nodes].filter((id) => isGroupOf(index, vis, id)));
+}
+
+/** The components a focus is about, which the map must show. */
+function focusComponents(index: Index, focus: Focus): string[] {
+  switch (focus?.type) {
+    case "component":
+    case "interface":
+      return [focus.id];
+    case "edge": {
+      const e = index.model.edges.find((x) => edgeKey(x) === focus.key);
+      return e ? [e.from, e.to] : [];
+    }
+    case "entity": {
+      const e = index.entities.get(focus.id);
+      return e ? [e.component] : [];
+    }
+    default:
+      return [];
+  }
+}
+
+/**
+ * `collapsed` without the groups that would hide the focus: the groups around it, and for an
+ * edge also its ends, which would otherwise draw it inside a bundle. Returns the same set when
+ * nothing changes.
+ */
+export function revealFocus(index: Index, collapsed: Set<string>, focus: Focus): Set<string> {
+  const open = new Set<string>();
+  for (const id of focusComponents(index, focus)) {
+    const first = focus?.type === "edge" ? id : index.components.get(id)?.parent;
+    for (let p = first; p; p = index.components.get(p)?.parent) {
+      if (collapsed.has(p)) open.add(p);
+    }
+  }
+  if (open.size === 0) return collapsed;
+  return new Set([...collapsed].filter((id) => !open.has(id)));
+}
+
+/** An edge as drawn: a model edge, or a bundle of them when an end is a collapsed group. */
+export interface MapEdge {
+  /** The model edge's key, or a bundle key. */
+  key: string;
+  from: string;
+  to: string;
+  status: Edge["status"];
+  refCount: number;
+  bundle: boolean;
+  members: Edge[];
+}
+
+export interface MapGraph {
+  nodes: Set<string>;
+  edges: MapEdge[];
+  /** Collapsed groups drawn as single nodes, with the number of components they hide. */
+  collapsed: Map<string, number>;
+}
+
+export const bundleKey = (from: string, to: string) => `bundle:${from}->${to}`;
+
+/** True when `id` is `root` or inside it. */
+export function within(index: Index, id: string, root: string): boolean {
+  for (let cur: string | undefined = id; cur; cur = index.components.get(cur)?.parent) if (cur === root) return true;
+  return false;
+}
+
+/** The model edges a bundle between two drawn nodes stands for. */
+export const bundleMembers = (index: Index, from: string, to: string) =>
+  index.model.edges.filter((e) => within(index, e.from, from) && within(index, e.to, to));
+
+/** One status for several edges: theirs when they agree, else changed. */
+export function mergeStatus(edges: Edge[]): Edge["status"] {
+  const statuses = new Set(edges.map((e) => e.status));
+  return statuses.size === 1 ? edges[0].status : "changed";
+}
+
+/** The map with collapsed groups drawn as one node each, and the edges into them bundled. */
+export function collapse(index: Index, vis: Visible, collapsed: ReadonlySet<string>): MapGraph {
+  const rep = (id: string) => {
+    let out = id;
+    for (let p = index.components.get(id)?.parent; p; p = index.components.get(p)?.parent) {
+      if (collapsed.has(p) && vis.nodes.has(p)) out = p;
+    }
+    return out;
+  };
+  const nodes = new Set<string>();
+  const hidden = new Map<string, number>();
+  for (const id of vis.nodes) {
+    const r = rep(id);
+    nodes.add(r);
+    if (r !== id) hidden.set(r, (hidden.get(r) ?? 0) + 1);
+  }
+  const byEnds = new Map<string, { from: string; to: string; members: Edge[] }>();
+  for (const e of vis.edges) {
+    const from = rep(e.from);
+    const to = rep(e.to);
+    if (from === to) continue;
+    const k = `${from}\n${to}`;
+    const b = byEnds.get(k) ?? { from, to, members: [] };
+    b.members.push(e);
+    byEnds.set(k, b);
+  }
+  const edges: MapEdge[] = [...byEnds.values()].map(({ from, to, members }) => {
+    const single = members.length === 1 && members[0].from === from && members[0].to === to;
+    return {
+      key: single ? edgeKey(members[0]) : bundleKey(from, to),
+      from,
+      to,
+      status: mergeStatus(members),
+      refCount: members.reduce((n, e) => n + (e.refCount ?? e.refs.length), 0),
+      bundle: !single,
+      members,
+    };
+  });
+  const collapsedNodes = new Map([...hidden].filter(([id]) => collapsed.has(id)));
+  return { nodes, edges, collapsed: collapsedNodes };
+}
+
+/** Change counts of a component together with everything inside it, for a collapsed group. */
+export function rollup(index: Index, id: string): { changedEntities: number; interfaceChanges: number; changeScore: number; changed: boolean } {
+  const out = { changedEntities: 0, interfaceChanges: 0, changeScore: 0, changed: false };
+  for (const c of index.model.components) {
+    if (!within(index, c.id, id)) continue;
+    out.changedEntities += c.changedEntities;
+    out.interfaceChanges += c.interfaceChanges;
+    out.changeScore = Math.max(out.changeScore, c.changeScore || 0);
+    out.changed ||= isChanged(index, c);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+
 export interface Related {
   nodes: Set<string>;
   edges: Set<string>;
 }
 
 /** What stays prominent around the focus. Null focus means everything is prominent. */
-export function related(index: Index, edges: Edge[], focus: Focus): Related | null {
+export function related(index: Index, edges: Array<{ key: string; from: string; to: string }>, focus: Focus): Related | null {
   focus = mapFocus(index, focus);
   if (!focus) return null;
   const nodes = new Set<string>();
@@ -196,7 +362,7 @@ export function related(index: Index, edges: Edge[], focus: Focus): Related | nu
     nodes.add(focus.id);
     for (const e of edges) {
       if (e.from === focus.id || e.to === focus.id) {
-        keys.add(edgeKey(e));
+        keys.add(e.key);
         nodes.add(e.from);
         nodes.add(e.to);
       }
@@ -205,13 +371,16 @@ export function related(index: Index, edges: Edge[], focus: Focus): Related | nu
     const c = index.components.get(focus.id);
     if (c?.parent) nodes.add(c.parent);
     for (const child of index.children.get(focus.id) ?? []) nodes.add(child);
-  } else if (focus.type === "edge") {
-    const key = focus.key;
-    const e = edges.find((x) => edgeKey(x) === key);
+  } else if (focus.type === "edge" || focus.type === "bundle") {
+    const key = focus.type === "edge" ? focus.key : bundleKey(focus.from, focus.to);
+    const e = edges.find((x) => x.key === key);
     if (e) {
       keys.add(key);
       nodes.add(e.from);
       nodes.add(e.to);
+    } else if (focus.type === "bundle") {
+      nodes.add(focus.from);
+      nodes.add(focus.to);
     }
   }
   // Parents of lit nodes are drawn around them, so keep them lit too.

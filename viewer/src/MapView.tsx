@@ -12,7 +12,7 @@ import {
   type Node as RFNode,
   type NodeProps,
 } from "@xyflow/react";
-import { componentEntities, edgeKey, externalChangeOf, isChanged, related, shortName, type Focus, type Index, type Visible } from "./graph";
+import { componentEntities, externalChangeOf, isChanged, related, rollup, shortName, within, type Focus, type Index, type MapGraph } from "./graph";
 import { useReview } from "./review";
 import { layout, type Placed } from "./layout";
 import type { Component, ExternalDepChange } from "./types";
@@ -24,6 +24,12 @@ export const EDGE_COLORS: Record<string, string> = {
   unchanged: "var(--unchanged)",
 };
 
+// Edges away from the focus, and unchanged edges, are drawn in muted colors rather than with
+// opacity: on a large map, a selection that made hundreds of elements translucent left parts of
+// the page unpainted.
+const QUIET_UNCHANGED = "var(--edge-quiet)";
+const DIMMED = "var(--edge-dim)";
+
 interface NodeData extends Record<string, unknown> {
   comp: Component;
   label: string;
@@ -33,6 +39,11 @@ interface NodeData extends Record<string, unknown> {
   selected: boolean;
   /** Reviewed entities out of the ones the component's views list. */
   progress?: { done: number; total: number };
+  /** Set on groups: collapsed state, how many components a collapsed one hides, and the toggle. */
+  group?: { collapsed: boolean; hides: number; toggle: () => void };
+  /** Change counts and score, rolled up over a collapsed group's contents. */
+  counts: { changedEntities: number; interfaceChanges: number };
+  score: number;
 }
 
 const Handles = () => (
@@ -44,26 +55,40 @@ const Handles = () => (
 
 const statusClass = (c: Component) => (c.status === "added" ? "st-added" : c.status === "removed" ? "st-removed" : "");
 
-const Badges = ({ c }: { c: Component }) =>
-  c.changedEntities > 0 ? (
+const Badges = ({ counts }: { counts: NodeData["counts"] }) =>
+  counts.changedEntities > 0 ? (
     <span className="badges">
       <span className="badge" title="Changed entities">
-        {c.changedEntities} changed
+        {counts.changedEntities} changed
       </span>
-      {c.interfaceChanges > 0 && (
+      {counts.interfaceChanges > 0 && (
         <span className="badge iface" title="Interface changes">
-          {c.interfaceChanges} interface
+          {counts.interfaceChanges} interface
         </span>
       )}
     </span>
   ) : null;
 
+/** Collapses or expands a group without selecting it. */
+const GroupToggle = ({ group }: { group: NonNullable<NodeData["group"]> }) => (
+  <button
+    className="group-toggle nodrag nopan"
+    title={group.collapsed ? `Expand: show the ${group.hides} components inside` : "Collapse into one node"}
+    onClick={(e) => {
+      e.stopPropagation();
+      group.toggle();
+    }}
+  >
+    {group.collapsed ? `▸ ${group.hides}` : "▾"}
+  </button>
+);
+
 const ComponentNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
   const c = data.comp;
-  const score = Math.max(0, Math.min(1, c.changeScore || 0));
+  const score = Math.max(0, Math.min(1, data.score || 0));
   return (
     <div
-      className={`node ${data.changed ? "changed" : "quiet"} ${statusClass(c)} ${data.dim ? "dim" : ""} ${data.selected ? "sel" : ""}`}
+      className={`node ${data.changed ? "changed" : "quiet"} ${statusClass(c)} ${data.dim ? "dim" : ""} ${data.selected ? "sel" : ""} ${data.group?.collapsed ? "collapsed" : ""}`}
       style={{ ["--score" as string]: score }}
     >
       <Handles />
@@ -73,9 +98,10 @@ const ComponentNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         </span>
         {c.status && <span className={`tag ${statusClass(c)}`}>{c.status === "added" ? "new" : c.status}</span>}
         {c.layer && <span className="layer">{c.layer}</span>}
+        {data.group && <GroupToggle group={data.group} />}
       </div>
       <div className="node-sub">
-        <Badges c={c} />
+        <Badges counts={data.counts} />
         {!data.changed && <span className="muted">unchanged</span>}
       </div>
       {data.progress && data.progress.total > 0 && (
@@ -93,8 +119,9 @@ const GroupNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
     <div className={`group ${statusClass(c)} ${data.dim ? "dim" : ""} ${data.selected ? "sel" : ""}`}>
       <Handles />
       <div className="group-title" title={c.name}>
+        {data.group && <GroupToggle group={data.group} />}
         <span>{data.label}</span>
-        <Badges c={c} />
+        <Badges counts={data.counts} />
         {c.status && <span className={`tag ${statusClass(c)}`}>{c.status === "added" ? "new" : c.status}</span>}
       </div>
     </div>
@@ -119,10 +146,11 @@ const nodeTypes = { component: ComponentNode, componentGroup: GroupNode, externa
 
 interface Props {
   index: Index;
-  vis: Visible;
+  graph: MapGraph;
   focus: Focus;
   setFocus: (f: Focus) => void;
   showUnchanged: boolean;
+  toggleGroup: (id: string) => void;
 }
 
 export function MapView(props: Props) {
@@ -133,28 +161,44 @@ export function MapView(props: Props) {
   );
 }
 
-function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
+function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Props) {
   const [placed, setPlaced] = useState<Map<string, Placed> | null>(null);
-  const { fitView } = useReactFlow();
-  const layoutKey = [...vis.nodes].sort().join("|");
+  const { fitBounds } = useReactFlow();
+  const layoutKey = [...graph.nodes].sort().join("|");
 
   useEffect(() => {
     let live = true;
     // Only edges that changed shape the layout. Unchanged edges in a real app connect almost
     // everything to the model and core modules, and spread the map out until it's unreadable.
-    layout(index, vis.nodes, vis.edges.filter((e) => e.status !== "unchanged")).then((p) => {
+    layout(index, graph.nodes, graph.edges.filter((e) => e.status !== "unchanged")).then((p) => {
       if (!live) return;
       setPlaced(p);
-      requestAnimationFrame(() => fitView({ padding: 0.12, duration: 0 }));
+      // Fit to the layout itself: React Flow may not have the new nodes yet, and it skips the
+      // ones it hasn't rendered.
+      const top = [...p.values()].filter((n) => !n.parent);
+      if (top.length === 0) return;
+      const x = Math.min(...top.map((n) => n.x));
+      const y = Math.min(...top.map((n) => n.y));
+      const width = Math.max(...top.map((n) => n.x + n.width)) - x;
+      const height = Math.max(...top.map((n) => n.y + n.height)) - y;
+      requestAnimationFrame(() => fitBounds({ x, y, width, height }, { padding: 0.12, duration: 0 }));
     });
     return () => {
       live = false;
     };
   }, [index, layoutKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rel = useMemo(() => related(index, vis.edges, focus), [index, vis.edges, focus]);
+  const rel = useMemo(() => related(index, graph.edges, focus), [index, graph.edges, focus]);
   const { reviewed } = useReview();
-  const shownEntities = useMemo(() => new Map([...vis.nodes].map((id) => [id, componentEntities(index, id).shown])), [index, vis.nodes]);
+  const progress = useMemo(() => {
+    const out = new Map<string, { done: number; total: number }>();
+    for (const id of graph.nodes) {
+      const inside = graph.collapsed.has(id) ? index.model.components.filter((c) => within(index, c.id, id)).map((c) => c.id) : [id];
+      const shown = inside.flatMap((c) => componentEntities(index, c).shown);
+      out.set(id, { done: shown.filter((e) => reviewed[e.id]).length, total: shown.length });
+    }
+    return out;
+  }, [index, graph, reviewed]);
 
   const nodes = useMemo<RFNode<NodeData>[]>(() => {
     if (!placed) return [];
@@ -164,7 +208,9 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
       .sort((a, b) => depth(a) - depth(b))
       .map((p) => {
         const comp = index.components.get(p.id)!;
+        const hides = graph.collapsed.get(p.id);
         const type = p.isGroup ? "componentGroup" : comp.kind === "external" ? "external" : "component";
+        const roll = hides ? rollup(index, p.id) : undefined;
         return {
           id: p.id,
           type,
@@ -173,51 +219,53 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
           draggable: false,
           connectable: false,
           zIndex: p.isGroup ? 0 : 3, // above edges (2), so a tap on a node never lands on an edge passing under it
-          style: { width: p.width, height: p.height },
+          // Known sizes, so fitting and culling work before React Flow has measured a node.
+          width: p.width,
+          height: p.height,
           data: {
             comp,
             label: shortName(index, comp),
             ext: externalChangeOf(index, comp),
-            changed: isChanged(index, comp),
+            changed: roll ? roll.changed : isChanged(index, comp),
             dim: !!rel && !rel.nodes.has(p.id),
             selected: focus?.type === "component" && focus.id === p.id,
-            progress: {
-              done: (shownEntities.get(p.id) ?? []).filter((e) => reviewed[e.id]).length,
-              total: shownEntities.get(p.id)?.length ?? 0,
-            },
+            progress: progress.get(p.id),
+            counts: roll ?? comp,
+            score: roll ? roll.changeScore : comp.changeScore,
+            group: p.isGroup || hides ? { collapsed: !!hides, hides: hides ?? 0, toggle: () => toggleGroup(p.id) } : undefined,
           },
         };
       });
-  }, [placed, index, rel, focus, reviewed, shownEntities]);
+  }, [placed, index, graph, rel, focus, progress, toggleGroup]);
 
   const edges = useMemo<RFEdge[]>(() => {
     if (!placed) return [];
-    return vis.edges
+    return graph.edges
       .filter((e) => placed.has(e.from) && placed.has(e.to))
-      .filter((e) => showUnchanged || e.status !== "unchanged" || rel?.edges.has(edgeKey(e)))
+      .filter((e) => showUnchanged || e.status !== "unchanged" || rel?.edges.has(e.key))
       .map((e) => {
-        const key = edgeKey(e);
-        const color = EDGE_COLORS[e.status];
-        const lit = !rel || rel.edges.has(key);
-        const selected = focus?.type === "edge" && focus.key === key;
-        const weight = 1 + Math.min(3, Math.log2(1 + (e.refCount ?? e.refs.length)) / 2);
+        const lit = !rel || rel.edges.has(e.key);
+        const color = !lit ? DIMMED : e.status === "unchanged" && !rel ? QUIET_UNCHANGED : EDGE_COLORS[e.status];
+        const selected = (focus?.type === "edge" && focus.key === e.key) || (focus?.type === "bundle" && e.bundle && focus.from === e.from && focus.to === e.to);
+        const weight = 1 + Math.min(3, Math.log2(1 + e.refCount) / 2);
         return {
-          id: key,
+          id: e.key,
           source: e.from,
           target: e.to,
           zIndex: 2,
           interactionWidth: 18,
-          className: `edge-${e.status}`,
+          className: `edge-${e.status}${e.bundle ? " edge-bundle" : ""}`,
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
           style: {
             stroke: color,
             strokeWidth: selected ? weight + 2 : weight,
             strokeDasharray: e.status === "removed" ? "6 4" : undefined,
-            opacity: lit ? (e.status === "unchanged" ? 0.45 : 1) : 0.08,
           },
         };
       });
-  }, [placed, vis.edges, rel, focus, showUnchanged]);
+  }, [placed, graph.edges, rel, focus, showUnchanged]);
+
+  const bundles = useMemo(() => new Map(graph.edges.filter((e) => e.bundle).map((e) => [e.key, e])), [graph.edges]);
 
   return (
     <ReactFlow
@@ -225,11 +273,15 @@ function Flow({ index, vis, focus, setFocus, showUnchanged }: Props) {
       edges={edges}
       nodeTypes={nodeTypes}
       onNodeClick={(_, n) => setFocus({ type: "component", id: n.id })}
-      onEdgeClick={(_, e) => setFocus({ type: "edge", key: e.id })}
+      onEdgeClick={(_, e) => {
+        const b = bundles.get(e.id);
+        setFocus(b ? { type: "bundle", from: b.from, to: b.to } : { type: "edge", key: e.id });
+      }}
       onPaneClick={() => setFocus(null)}
       nodesDraggable={false}
       nodesConnectable={false}
       elementsSelectable={false}
+      onlyRenderVisibleElements
       minZoom={0.1}
       proOptions={{ hideAttribution: true }}
       colorMode="system"

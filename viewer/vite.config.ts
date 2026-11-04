@@ -4,7 +4,7 @@ import react from "@vitejs/plugin-react";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import fs from "node:fs";
 import path from "node:path";
-import { collectSources, gitShow, openInXcode, repoInfo } from "./server/repo";
+import { collectSources, editorFrom, gitShow, openInEditor, repoInfo } from "./server/repo";
 
 // The change model to show. Set by `reviewmap --view`, or by hand:
 //   REVIEWMAP_MODEL=/path/to/change-model.json npm run dev
@@ -12,8 +12,14 @@ const modelPath = process.env.REVIEWMAP_MODEL ? path.resolve(process.env.REVIEWM
 
 const readModel = () => JSON.parse(fs.readFileSync(modelPath!, "utf8"));
 
+// The editor Open runs: REVIEWMAP_EDITOR, set by `reviewmap --editor` or by hand.
+const editor = editorFrom(process.env.REVIEWMAP_EDITOR);
+if (process.env.REVIEWMAP_EDITOR && !editor) {
+  console.warn(`REVIEWMAP_EDITOR="${process.env.REVIEWMAP_EDITOR}" is neither a known editor nor a command with {file}; Open is off.`);
+}
+
 // Serves the change model at /api/model, file contents at base and head at /api/source, and
-// Open in Xcode at /api/open.
+// opening a file in the editor at /api/open.
 function modelServer(): Plugin {
   return {
     name: "reviewmap-model",
@@ -35,9 +41,11 @@ function modelServer(): Plugin {
         const result =
           req.method !== "POST"
             ? { ok: false, message: "Use POST" }
-            : r
-              ? await openInXcode(r, q.get("file") ?? "", Number(q.get("line") ?? 1))
-              : { ok: false, message: "Repo not found" };
+            : !editor
+              ? { ok: false, message: "No editor set; pass --editor or set REVIEWMAP_EDITOR." }
+              : r
+                ? await openInEditor(editor, r, q.get("file") ?? "", Number(q.get("line") ?? 1))
+                : { ok: false, message: "Repo not found" };
         res.statusCode = result.ok ? 200 : 400;
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.end(result.message);
@@ -114,6 +122,8 @@ function embedModel(): Plugin {
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), modelServer(), ...(mode === "single" ? [embedModel(), viteSingleFile()] : [])],
+  // The editor's name for the Open buttons; null hides them.
+  define: { __REVIEWMAP_EDITOR__: JSON.stringify(mode === "single" ? null : (editor?.name ?? null)) },
   build: { chunkSizeWarningLimit: 4000 }, // elkjs is large; this is a local tool
   test: { environment: "node" },
 }));

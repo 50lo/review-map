@@ -2,6 +2,8 @@
 
 Review Map becomes the review tool Anton uses as a maintainer, for Swift, TypeScript, Rust, and Go. It's a personal tool, not a product: shortcuts are fine where they save real work, and the code stays simple and maintainable.
 
+Progress is tracked in [progress.md](progress.md).
+
 What carries over from the prototype (see [archive/progress.md](archive/progress.md)):
 
 - The visual map of the change, the code behind each block and arrow, and opening changed code in the IDE are the valuable parts.

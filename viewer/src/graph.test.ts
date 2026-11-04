@@ -1,7 +1,29 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { buildIndex, componentEntities, contextOf, edgeKey, flagLabel, llmOf, regionPosition, related, removalCandidates, startHere, stepRegion, visible } from "./graph";
+import {
+  buildIndex,
+  bundleKey,
+  bundleMembers,
+  collapse,
+  componentEntities,
+  contextOf,
+  defaultCollapsed,
+  edgeKey,
+  flagLabel,
+  hiddenNeighbors,
+  llmOf,
+  regionPosition,
+  related,
+  removalCandidates,
+  revealFocus,
+  rollup,
+  startHere,
+  stepRegion,
+  visible,
+} from "./graph";
+import { editorFrom, openInEditor } from "../server/repo";
+import { focusToHash, hashToFocus } from "./nav";
 import { layout } from "./layout";
 import { validate } from "./load";
 
@@ -52,16 +74,118 @@ describe("visible", () => {
   });
 });
 
+describe("neighbors on request", () => {
+  it("adds the neighbors of expanded components, whatever the scope", () => {
+    const base = visible(index, { scope: "changed", showTests: true });
+    const hidden = hiddenNeighbors(index, base, "spm:Features/Checkout", true);
+    expect(hidden).toContain("spm:FeaturesTests");
+    const more = visible(index, { scope: "changed", showTests: true }, new Set(["spm:Features/Checkout"]));
+    for (const id of hidden) expect(more.nodes.has(id)).toBe(true);
+    expect(hiddenNeighbors(index, more, "spm:Features/Checkout", true)).toEqual([]);
+    // The test filter still applies.
+    expect(hiddenNeighbors(index, base, "spm:Features/Checkout", false)).not.toContain("spm:FeaturesTests");
+  });
+});
+
+describe("collapsed groups", () => {
+  const v = visible(index, { scope: "changed", showTests: false });
+
+  it("draws a collapsed group as one node and bundles the edges of its folders", () => {
+    const g = collapse(index, v, new Set(["spm:Features"]));
+    expect(g.nodes.has("spm:Features")).toBe(true);
+    expect(g.nodes.has("spm:Features/Checkout")).toBe(false);
+    expect(g.collapsed.get("spm:Features")).toBe(2);
+    const b = g.edges.find((e) => e.from === "spm:Features" && e.to === "spm:Networking")!;
+    expect(b.bundle).toBe(true);
+    expect(b.key).toBe(bundleKey("spm:Features", "spm:Networking"));
+    expect(b.members.map(edgeKey)).toContain("spm:Features/Checkout->spm:Networking");
+    expect(b.refCount).toBe(b.members.reduce((n, e) => n + (e.refCount ?? e.refs.length), 0));
+    // No edge inside the group, and every edge's ends are drawn.
+    expect(g.edges.every((e) => e.from !== e.to && g.nodes.has(e.from) && g.nodes.has(e.to))).toBe(true);
+    expect(bundleMembers(index, "spm:Features", "spm:Networking").map(edgeKey)).toEqual(b.members.map(edgeKey));
+  });
+
+  it("keeps model edges as they are when nothing is collapsed", () => {
+    const g = collapse(index, v, new Set());
+    expect(g.nodes).toEqual(v.nodes);
+    expect(g.edges.map((e) => e.key).sort()).toEqual(v.edges.map(edgeKey).sort());
+    expect(g.edges.every((e) => !e.bundle)).toBe(true);
+  });
+
+  it("merges statuses: the same one, or changed when they differ", () => {
+    const g = collapse(index, v, new Set(["spm:Features"]));
+    for (const e of g.edges) {
+      const statuses = new Set(e.members.map((m) => m.status));
+      expect(e.status).toBe(statuses.size === 1 ? e.members[0].status : "changed");
+    }
+  });
+
+  it("rolls up change counts over the group", () => {
+    const r = rollup(index, "spm:Features");
+    const inside = model.components.filter((c) => c.id === "spm:Features" || c.parent === "spm:Features");
+    expect(r.changedEntities).toBe(inside.reduce((n, c) => n + c.changedEntities, 0));
+    expect(r.changed).toBe(true);
+  });
+
+  it("starts collapsed only on a large map, and opens the group around the focus", () => {
+    expect(defaultCollapsed(index, v).size).toBe(0);
+    const big = { ...v, nodes: new Set([...v.nodes, ...Array.from({ length: 50 }, (_, i) => `x${i}`)]) };
+    expect([...defaultCollapsed(index, big)]).toEqual(["spm:Features"]);
+    const c = new Set(["spm:Features"]);
+    expect(revealFocus(index, c, { type: "component", id: "spm:Networking" })).toBe(c);
+    expect(revealFocus(index, c, { type: "component", id: "spm:Features/Checkout" }).size).toBe(0);
+    expect(revealFocus(index, c, { type: "edge", key: "spm:Features/Checkout->spm:Networking" }).size).toBe(0);
+    // The group's own edge would be drawn inside a bundle, so it opens too; selecting the group doesn't.
+    expect(revealFocus(index, c, { type: "edge", key: "spm:Features->spm:Networking" }).size).toBe(0);
+    expect(revealFocus(index, c, { type: "component", id: "spm:Features" })).toBe(c);
+    const entity = model.entities.find((e) => e.component === "spm:Features/Checkout")!;
+    expect(revealFocus(index, c, { type: "entity", id: entity.id }).size).toBe(0);
+  });
+
+  it("lights a selected bundle and its ends", () => {
+    const g = collapse(index, v, new Set(["spm:Features"]));
+    const r = related(index, g.edges, { type: "bundle", from: "spm:Features", to: "spm:Networking" })!;
+    expect(r.edges.has(bundleKey("spm:Features", "spm:Networking"))).toBe(true);
+    expect(r.nodes.has("spm:Networking")).toBe(true);
+  });
+
+  it("keeps a bundle focus in the URL", () => {
+    const f = { type: "bundle" as const, from: "spm:Features", to: "a b/c" };
+    expect(hashToFocus("#" + focusToHash(f))).toEqual(f);
+  });
+});
+
+describe("editor", () => {
+  it("reads presets and commands, and defaults to Xcode on macOS", () => {
+    expect(editorFrom(undefined, "darwin")?.name).toBe("Xcode");
+    expect(editorFrom(undefined, "linux")).toBeNull();
+    expect(editorFrom("vscode", "linux")?.args).toEqual(["code", "-g", "{file}:{line}"]);
+    expect(editorFrom("Zed")?.name).toBe("Zed");
+    expect(editorFrom("/usr/local/bin/subl {file}:{line}")).toEqual({ name: "subl", args: ["/usr/local/bin/subl", "{file}:{line}"] });
+    expect(editorFrom("nano")).toBeNull();
+  });
+
+  it("runs the command on a file in the working copy, and nothing outside it", async () => {
+    const repo = { root: path.resolve(__dirname, "../.."), baseSha: "", headSha: "" };
+    const ok = { name: "Test", args: ["test", "-f", "{file}"] };
+    expect(await openInEditor(ok, repo, "README.md", 3)).toEqual({ ok: true, message: "Opened in Test" });
+    expect((await openInEditor(ok, repo, "../etc/passwd", 1)).ok).toBe(false);
+    expect((await openInEditor(ok, repo, "missing.swift", 1)).ok).toBe(false);
+    expect((await openInEditor({ name: "Bad", args: ["false"] }, repo, "README.md", 1)).ok).toBe(false);
+  });
+});
+
 describe("related", () => {
   it("lights the focus, its edges, their ends, and the group around them", () => {
     const v = visible(index, { scope: "changed", showTests: false });
-    const r = related(index, v.edges, { type: "component", id: "spm:Networking" })!;
+    const edges = collapse(index, v, new Set()).edges;
+    const r = related(index, edges, { type: "component", id: "spm:Networking" })!;
     expect(r.nodes.has("spm:Features/Checkout")).toBe(true);
     expect(r.nodes.has("spm:Features")).toBe(true);
     expect(r.nodes.has("ext:swift-collections")).toBe(true);
     expect(r.nodes.has("spm:Persistence")).toBe(false);
     expect(r.edges.has("spm:Features/Checkout->spm:Networking")).toBe(true);
-    expect(related(index, v.edges, null)).toBeNull();
+    expect(related(index, edges, null)).toBeNull();
   });
 });
 
