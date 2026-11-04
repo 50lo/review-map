@@ -1,6 +1,6 @@
 # Review Map
 
-A throwaway prototype that shows a Swift change as structure (components, dependency edges, changed contracts) instead of line diffs. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. Progress is tracked in [docs/progress.md](docs/progress.md).
+A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift today; TypeScript, Rust, and Go are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
 
 ## Run it
 
@@ -174,7 +174,7 @@ index:                 # index mode; the CLI flags win
 
 ## change-model.json
 
-The schema is in `Sources/ReviewMapCore/Model.swift`. It follows the sketch in the brief, with these additions:
+The schema is in `Sources/ReviewMapCore/Model.swift`. Fields worth knowing:
 
 - `analyzer` (version, resolution mode) and `repo.usesMergeBase`.
 - Components: `module`, `parent`, `isTest`, `status` (`added`/`removed`), `changedEntities`, `interfaceChanges`.
