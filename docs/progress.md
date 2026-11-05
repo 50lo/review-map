@@ -6,7 +6,7 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 | --- | --- | --- |
 | 1 | Map: selection glitch, collapse and expand, editor command | Done; the glitch fix still needs a check on a large real model |
 | 2 | Language-neutral core | Done |
-| 3 | TypeScript | Not started |
+| 3 | TypeScript | Done; index mode still needs a run on a pnpm or yarn monorepo |
 | 4 | Structural review | Not started |
 | 5 | Faster Swift indexing | Not started |
 
@@ -31,3 +31,15 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 - `SCIP.swift` reads SCIP indexes into the same per-side references the index store gives: definitions place each symbol, every other occurrence is a reference, and local symbols resolve only within their document. It is tested with indexes written field by field; no indexer runs it yet.
 - Tree-sitter comes with TypeScript in step 3, where its first grammar is used.
 - On IceCubesApp's last 10 and 40 commits and on two ranges of this repo, the model is the same as before the change apart from the flag prefix.
+
+## Step 3 notes
+
+- Tree-sitter's C library (0.25.10) and the TypeScript and TSX grammars (tree-sitter-typescript 0.23.2) come in as SwiftPM packages. `TreeSitter.swift` wraps parsing, nodes, tokens, and queries, and applies the `#eq?`, `#not-eq?`, `#match?`, `#not-match?`, and `#any-of?` predicates that the C library leaves to its caller.
+- Declarations come from a walk over the tree, since nesting, modifiers, and headers need its structure. References and risk marks are queries. The risk table has one pattern per signal, and a pattern that names a node a grammar lacks (TSX has no `<T>x` assertions) is left out for that grammar.
+- TypeScript declarations use the existing entity kinds; the viewer names them as TypeScript does (interface, member, constructor, type, function, property, variable). The model only gains two component kinds, `npmPackage` and `tsconfig`.
+- Only imported names are reference candidates. `NameRef` carries the file a relative import points at (`source`) and the package a bare import names (`module`), and the core uses them before the declaration table. Rust and Go imports can fill the same fields.
+- Test files go to a test component next to their package (`npm:<name>:tests`). The core's test paths now include `.test.` and `.spec.` files and `__tests__`, `test`, `tests`, and `e2e` folders.
+- A `tsconfig.json` in or above a package, such as a workspace root's base config, is not a component. `@types/<name>` packages count as the module they type.
+- Lockfile pins cover the packages a `package.json` lists; transitive ones are left out. pnpm 10 and later write the lockfile as two YAML documents, and both are read.
+- Index mode installs dependencies with scripts off and runs scip-typescript 0.4.0 through `npx`. A failed install doesn't stop indexing; `SideIndex.warnings` reports it as `index-partial`. SCIP references to modules are skipped, since a module has no declaration to point at.
+- On this repo's viewer change in 2b36566 (Swift and TypeScript together), name matching takes 3s. Index mode, with `npm ci` in `viewer/`, takes 9s per side and finds uses from the viewer tests that name matching misses. On trpc/trpc (a pnpm workspace, 288 components, its last 40 commits), name matching takes 9s; the ambiguity warnings left come from `~/` path aliases.

@@ -453,6 +453,8 @@ struct PromptBuilder: @unchecked Sendable {
         switch k {
         case .spmTarget: return "SPM target"
         case .xcodeTarget: return "Xcode target"
+        case .npmPackage: return "npm package"
+        case .tsconfig: return "tsconfig project"
         case .folder: return "folder"
         case .external: return "external package"
         }

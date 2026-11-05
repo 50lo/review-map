@@ -148,6 +148,9 @@ struct SideData {
     /// Top-level declared name -> components that declare it.
     let declTable: [String: Set<String>]
     let generated: Set<String>
+    /// Import paths -> source file: each file without its extension ("src/cart" for "src/cart.ts"), and a
+    /// directory for its index file ("src/models" for "src/models/index.ts"). See `NameRef.source`.
+    let modulePaths: [String: String]
 
     static func load(side: Side, dir: String, blobs: [String: String], languages: [Language], config: inout Config,
                      parser: ParseCache, options: AnalyzeOptions) throws -> SideData {
@@ -166,7 +169,18 @@ struct SideData {
         }
         let gen = config.generatedMatchers + languages.flatMap(\.generatedPatterns).map(Glob.init)
         let generated = Set(paths.filter { p in gen.contains { $0.matches(p) } })
-        return SideData(side: side, dir: dir, files: files, layout: layout, declTable: table, generated: generated)
+        var modulePaths: [String: String] = [:]
+        for path in paths {
+            var key = (path as NSString).deletingPathExtension
+            if key.hasSuffix(".d") { key = String(key.dropLast(2)) }
+            if modulePaths[key] == nil || !path.hasSuffix(".d.ts") { modulePaths[key] = path }
+            if (key as NSString).lastPathComponent == "index" {
+                let dir = (key as NSString).deletingLastPathComponent
+                if modulePaths[dir] == nil { modulePaths[dir] = path }
+            }
+        }
+        return SideData(side: side, dir: dir, files: files, layout: layout, declTable: table, generated: generated,
+                        modulePaths: modulePaths)
     }
 }
 
@@ -382,6 +396,7 @@ struct ModelBuilder {
     mutating func addIndex(_ sides: [Side: SideIndex], language lang: Language) {
         for (s, idx) in sides {
             index[s, default: SideIndex(refs: [:])].refs.merge(idx.refs) { a, _ in a }
+            for w in idx.warnings { warnings.insert(w) }
             let layout = side(s).layout
             let all = side(s).files.filter { $0.value.language == lang.id }.keys.filter { path in
                 guard !side(s).generated.contains(path), let c = layout.fileComponent[path] else { return false }
@@ -489,16 +504,28 @@ struct ModelBuilder {
                 var seenRef = Set<NameRef>()
                 for ref in file.typeRefs where !seenRef.contains(ref) {
                     seenRef.insert(ref)
-                    guard var cands = data.declTable[ref.name], !cands.contains(comp) else { continue }
-                    cands = cands.filter { c in
-                        guard let m = layout.components[c]?.module else { return true }
-                        return visible.contains(m)
+                    let target: String
+                    if let source = ref.source, let sourceFile = data.modulePaths[source], let c = layout.fileComponent[sourceFile] {
+                        // The language says which file the name comes from.
+                        guard c != comp else { continue }
+                        target = c
+                    } else {
+                        guard var cands = data.declTable[ref.name], !cands.contains(comp) else { continue }
+                        cands = cands.filter { c in
+                            guard let m = layout.components[c]?.module else { return true }
+                            return visible.contains(m)
+                        }
+                        if let module = ref.module {
+                            let named = cands.filter { layout.components[$0]?.module == module }
+                            if !named.isEmpty { cands = named }
+                        }
+                        if cands.count > 1 {
+                            ambiguous[ref.name, default: []].formUnion(cands)
+                            continue
+                        }
+                        guard let only = cands.first else { continue }
+                        target = only
                     }
-                    if cands.count > 1 {
-                        ambiguous[ref.name, default: []].formUnion(cands)
-                        continue
-                    }
-                    guard let target = cands.first else { continue }
                     addRef(s, from: comp, to: target, ref: Ref(file: path, line: ref.line, symbol: ref.name, side: s))
                     resolvedTypes.insert("\(target)|\(ref.name)")
                     let encl = file.enclosingDecl(line: ref.line)

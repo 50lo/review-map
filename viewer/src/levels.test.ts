@@ -77,8 +77,8 @@ describe("nav", () => {
 describe("interface view", () => {
   it("lists interface changes by kind and internal changes below", () => {
     const m = interfaceModel(index, "cfg:Core");
-    expect(m.groups.map((g) => g.title)).toEqual(["Protocols", "Types", "Functions", "Properties", "Enum cases"].filter((t) => m.groups.some((g) => g.title === t)));
-    expect(m.groups.find((g) => g.title === "Protocols")?.entities.map((e) => e.qualifiedName)).toContain("CartRepository");
+    expect(m.groups.map((g) => g.title)).toEqual(["Protocols and interfaces", "Types", "Functions", "Properties", "Enum cases and members"].filter((t) => m.groups.some((g) => g.title === t)));
+    expect(m.groups.find((g) => g.title === "Protocols and interfaces")?.entities.map((e) => e.qualifiedName)).toContain("CartRepository");
     for (const g of m.groups) expect(g.entities.every((e) => e.isInterface)).toBe(true);
     expect(m.internal.every((e) => !e.isInterface)).toBe(true);
   });

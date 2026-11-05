@@ -8,6 +8,7 @@ import {
   isGroupOf,
   externalChangeOf,
   isLowRisk,
+  kindLabel,
   llmOf,
   removalCandidates,
   riskTier,
@@ -185,7 +186,7 @@ function StartRow({ index, it, reviewed, setFocus }: { index: Index; it: StartIt
       <button className="row" onClick={() => setFocus(it.focus)}>
         <span className="row-main">
           {it.source === "regions" && <span className={`risk risk-${riskTier(it.score)}`}>{it.score.toFixed(2)}</span>}{" "}
-          <span className="kind">{it.entity.kind}</span> <span className="qname">{it.entity.qualifiedName}</span>
+          <span className="kind">{kindLabel(it.entity)}</span> <span className="qname">{it.entity.qualifiedName}</span>
           {it.members.length > 0 && <span className="muted"> +{it.members.length} members</span>}
           {reviewed && <span className="muted small"> · reviewed</span>}
         </span>
@@ -344,7 +345,7 @@ function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Componen
           </p>
         )}
         <p className="muted small">
-          {[kindLabel(c.kind), c.module && c.module !== c.name ? `module ${c.module}` : null, c.layer, c.isTest ? "tests" : null, c.status]
+          {[componentKindLabel(c.kind), c.module && c.module !== c.name ? `module ${c.module}` : null, c.layer, c.isTest ? "tests" : null, c.status]
             .filter(Boolean)
             .join(" · ")}
         </p>
@@ -391,15 +392,22 @@ function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Componen
   );
 }
 
-const kindLabel = (k: string) =>
-  ({ spmTarget: "SPM target", xcodeTarget: "Xcode target", folder: "folder", external: "external package" })[k] ?? k;
+const componentKindLabel = (k: string) =>
+  ({
+    spmTarget: "SPM target",
+    xcodeTarget: "Xcode target",
+    npmPackage: "npm package",
+    tsconfig: "tsconfig project",
+    folder: "folder",
+    external: "external package",
+  })[k] ?? k;
 
 function EntityRow({ e, setFocus }: { e: Entity; setFocus: Props["setFocus"] }) {
   return (
     <li className={`with-check ${e.isInterface ? "iface" : ""}`}>
       <ReviewedBox id={e.id} compact />
       <button className="entity-link" onClick={() => setFocus({ type: "entity", id: e.id })}>
-        <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
+        <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         {e.isInterface && <span className="muted small"> interface</span>}
       </button>
       <Signature e={e} />

@@ -41,6 +41,9 @@ struct Decl {
     var endLine: Int
     /// Last line of the declaration's header: the line of the opening brace of its body or members.
     var headerEndLine: Int = 0
+    /// Facts a language records for its own contract flags and risk, outside the compared text
+    /// (TypeScript: "optional", "jsx").
+    var traits: Set<String> = []
 
     var isContainer: Bool {
         switch kind {
@@ -53,6 +56,12 @@ struct Decl {
 struct NameRef: Hashable {
     var name: String
     var line: Int
+    /// The file the name was imported from, when the language says: repo-relative and without its extension
+    /// ("src/cart" for `import { Cart } from "./cart.js"` in `src/main.ts`).
+    var source: String? = nil
+    /// The module the name was imported from, when the language says ("@shop/core" for
+    /// `import { Cart } from "@shop/core/cart"`).
+    var module: String? = nil
 }
 
 struct ParsedFile {

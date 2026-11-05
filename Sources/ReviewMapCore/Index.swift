@@ -76,6 +76,8 @@ struct IndexedRef: Hashable {
 /// Exact references for the source files of one side. Files missing from `refs` had no index data.
 struct SideIndex {
     var refs: [String: [IndexedRef]]
+    /// What the index is missing, such as dependencies that couldn't be installed.
+    var warnings: [Warning] = []
 }
 
 struct IndexError: Error, CustomStringConvertible {

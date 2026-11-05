@@ -48,6 +48,36 @@ enum Shell {
         return outData
     }
 
+    /// Runs a program with its output written to a log file, and returns its exit status. `append` keeps
+    /// what the log already holds; `environment` adds to the inherited variables.
+    static func runLogged(_ args: [String], cwd: String, logPath: String, append: Bool = false,
+                          environment: [String: String] = [:]) throws -> Int32 {
+        if !append || !FileManager.default.fileExists(atPath: logPath) {
+            FileManager.default.createFile(atPath: logPath, contents: nil)
+        }
+        let logHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: logPath))
+        defer { try? logHandle.close() }
+        logHandle.seekToEndOfFile()
+        logHandle.write(Data(("$ " + args.joined(separator: " ") + "\n\n").utf8))
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        p.arguments = args
+        p.currentDirectoryURL = URL(fileURLWithPath: cwd)
+        if !environment.isEmpty { p.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new } }
+        p.standardOutput = logHandle
+        p.standardError = logHandle
+        p.standardInput = FileHandle.nullDevice
+        try p.run()
+        p.waitUntilExit()
+        logHandle.write(Data("\n".utf8))
+        return p.terminationStatus
+    }
+
+    /// Whether a program is on the PATH.
+    static func exists(_ program: String) -> Bool {
+        (try? string(["which", program])).map { !$0.isEmpty } ?? false
+    }
+
     static func string(_ args: [String], cwd: String? = nil) throws -> String {
         String(decoding: try run(args, cwd: cwd), as: UTF8.self)
             .trimmingCharacters(in: .whitespacesAndNewlines)

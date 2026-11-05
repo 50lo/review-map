@@ -49,7 +49,7 @@ The core stays in Swift: git export, diffing, components, regions, risk, the LLM
 
 ### 3. TypeScript
 
-TypeScript is the first new language; Rust and Go follow the same path. It brings tree-sitter with the TypeScript grammar, TypeScript's declaration, reference, and risk queries, and npm workspace and `tsconfig` components. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
+TypeScript is the first new language; Rust and Go follow the same path. It brings tree-sitter with the TypeScript grammar, TypeScript's declarations, its reference and risk queries, and npm workspace and `tsconfig` components. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
 
 | Language | Indexer | Needs |
 | --- | --- | --- |
@@ -97,3 +97,5 @@ Swift has no exact resolution without a build for Xcode and Bazel projects, so t
 
 - Add SwiftFormat to the project.
 - Add Sublime Text (`subl`) to the editor presets.
+- Resolve `tsconfig` path aliases (`@/`, `~/`) in TypeScript name matching.
+- Parse JavaScript files (`.js`, `.jsx`, `.mjs`, `.cjs`) with the TSX grammar.

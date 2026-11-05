@@ -15,6 +15,9 @@ let package = Package(
         .package(url: "https://github.com/kylef/PathKit.git", exact: "1.0.1"),
         // swift-6.2.4-RELEASE; index mode reads the compiler's index store with it.
         .package(url: "https://github.com/swiftlang/indexstore-db.git", revision: "cf29ef4e5e5243a3b6f518d72c6e527b5290375a"),
+        // Tree-sitter's C library and the grammars of the languages parsed with it.
+        .package(url: "https://github.com/tree-sitter/tree-sitter.git", exact: "0.25.10"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-typescript.git", exact: "0.23.2"),
     ],
     targets: [
         .executableTarget(
@@ -33,6 +36,8 @@ let package = Package(
                 .product(name: "Yams", package: "Yams"),
                 .product(name: "PathKit", package: "PathKit"),
                 .product(name: "IndexStoreDB", package: "indexstore-db"),
+                .product(name: "TreeSitter", package: "tree-sitter"),
+                .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
             ]
         ),
         .testTarget(

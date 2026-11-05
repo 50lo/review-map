@@ -154,8 +154,12 @@ enum ComponentBuilder {
         return prefix.joined(separator: "/")
     }
 
+    /// Test folders (`Tests`, `FooTests`, `__tests__`, `test`, `e2e`) and test files (`cart.test.ts`, `cart.spec.ts`).
     static func isTestPath(_ p: String) -> Bool {
-        p.split(separator: "/").contains { $0.hasSuffix("Tests") || $0 == "Tests" || $0.hasSuffix("Test") }
+        let parts = p.split(separator: "/")
+        if parts.contains(where: { ["test", "tests", "__tests__", "__mocks__", "e2e"].contains($0) }) { return true }
+        if let name = parts.last, name.contains(".test.") || name.contains(".spec.") { return true }
+        return parts.contains { $0.hasSuffix("Tests") || $0 == "Tests" || $0.hasSuffix("Test") }
     }
 
     // MARK: File system

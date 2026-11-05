@@ -6,11 +6,11 @@ import type { Focus } from "./nav";
 import type { Entity, Usage } from "./types";
 
 export const KIND_GROUPS: Array<{ title: string; kinds: string[] }> = [
-  { title: "Protocols", kinds: ["protocol"] },
+  { title: "Protocols and interfaces", kinds: ["protocol"] },
   { title: "Types", kinds: ["struct", "class", "enum", "actor", "extension", "typealias"] },
   { title: "Functions", kinds: ["func", "init"] },
   { title: "Properties", kinds: ["var"] },
-  { title: "Enum cases", kinds: ["case"] },
+  { title: "Enum cases and members", kinds: ["case"] },
   { title: "Files and build settings", kinds: ["file", "target"] },
 ];
 

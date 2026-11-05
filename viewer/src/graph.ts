@@ -429,6 +429,14 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
  * They follow the brief's table: concurrency and persisted or networked models are high, other
  * contract changes medium.
  */
+/** Entity kinds as the entity's language names them: a TypeScript "protocol" is an interface. */
+const TS_KINDS: Record<string, string> = { protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function" };
+export const kindLabel = (e: Entity): string => {
+  if (!/\.(ts|tsx|mts|cts)$/.test(e.location.file)) return e.kind;
+  if (e.kind === "var") return e.qualifiedName.includes(".") ? "property" : "variable";
+  return TS_KINDS[e.kind] ?? e.kind;
+};
+
 /** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
 export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, "");
 
@@ -437,6 +445,7 @@ const flagWeight = (prefixed: string): number => {
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
   if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
   if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;
+  if (/^(interface-member|enum-member|abstract-member|supertype-|export-removed|package-exports)/.test(flag)) return 2;
   return 1;
 };
 
