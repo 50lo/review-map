@@ -17,6 +17,8 @@ import { findingCounts, topSeverity } from "./findings";
 import { useReview } from "./review";
 import { layout, type Placed } from "./layout";
 import type { Component, ExternalDepChange, Finding } from "./types";
+import { componentLanguages, type Language } from "./languages";
+import { LanguageBadges } from "./LanguageBadges";
 
 export const EDGE_COLORS: Record<string, string> = {
   added: "var(--added)",
@@ -34,6 +36,7 @@ const DIMMED = "var(--edge-dim)";
 interface NodeData extends Record<string, unknown> {
   comp: Component;
   label: string;
+  languages: Language[];
   ext?: ExternalDepChange;
   changed: boolean;
   dim: boolean;
@@ -110,6 +113,7 @@ const ComponentNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         {c.status && <span className={`tag ${statusClass(c)}`}>{c.status === "added" ? "new" : c.status}</span>}
         {c.layer && <span className="layer">{c.layer}</span>}
         {data.group && <GroupToggle group={data.group} />}
+        <LanguageBadges languages={data.languages} />
       </div>
       <div className="node-sub">
         <Badges counts={data.counts} />
@@ -135,6 +139,7 @@ const GroupNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         <Badges counts={data.counts} />
         <FindingBadge findings={data.findings} />
         {c.status && <span className={`tag ${statusClass(c)}`}>{c.status === "added" ? "new" : c.status}</span>}
+        <LanguageBadges languages={data.languages} />
       </div>
     </div>
   );
@@ -150,6 +155,7 @@ const ExternalNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         {data.label}
       </span>
       {label && <span className="badge ext-badge">{label}</span>}
+      <LanguageBadges languages={data.languages} external />
       <FindingBadge findings={data.findings} corner />
     </div>
   );
@@ -214,6 +220,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
   }, [index, graph, reviewed]);
 
   const found = useMemo(() => findingCounts(index, graph), [index, graph]);
+  const languages = useMemo(() => componentLanguages(index.model), [index]);
 
   const nodes = useMemo<RFNode<NodeData>[]>(() => {
     if (!placed) return [];
@@ -240,6 +247,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
           data: {
             comp,
             label: shortName(index, comp),
+            languages: languages.get(comp.id) ?? [],
             ext: externalChangeOf(index, comp),
             changed: roll ? roll.changed : isChanged(index, comp),
             dim: !!rel && !rel.nodes.has(p.id),
@@ -252,7 +260,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
           },
         };
       });
-  }, [placed, index, graph, rel, focus, progress, toggleGroup, found]);
+  }, [placed, index, graph, rel, focus, progress, toggleGroup, found, languages]);
 
   const edges = useMemo<RFEdge[]>(() => {
     if (!placed) return [];

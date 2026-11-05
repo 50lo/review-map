@@ -1,0 +1,1 @@
+Swift and TypeScript marks from [Simple Icons](https://github.com/simple-icons/simple-icons), licensed under [CC0 1.0](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md). Brand colors are applied locally.
