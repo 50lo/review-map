@@ -20,7 +20,7 @@ import {
   type Visible,
 } from "./graph";
 import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
-import { FindingsSection } from "./Findings";
+import { FindingsSection } from "./FindingsSection";
 import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
 import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
