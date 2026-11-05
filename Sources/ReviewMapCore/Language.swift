@@ -55,15 +55,14 @@ protocol Language {
     /// all components, and their matched declaration pairs: implicit conformances may need the
     /// base interface's method set even when a type no longer conforms at head.
     /// `requirement` identifies the changed member, or is nil for whole-interface context.
-    /// `name` is the consumer's lookup spelling. The inheritance-based default preserves the
-    /// existing check and context lookup rules; implicit conformance need not require an import.
+    /// The inheritance-based default preserves the existing check and context lookup rules;
+    /// implicit conformance need not require an import.
     /// Implementations are supplied by the language so method-set matching can consider arity.
-    func conformers(of interface: Pair, requirement: Pair?, named name: String, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
                     for use: ConformanceUse) -> [Conformer]
-    /// The isolation of a reference at a 1-based line. `source` lazily reads the complete file on
-    /// this side, once per file, so languages can inspect enclosing blocks as well as declarations.
-    /// The default is no known isolation. The source reader is valid only during this call.
-    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String?
+    /// The isolation of a reference at a 1-based line, from the language's parsed file facts.
+    /// The default is no known isolation.
+    func isolation(in file: ParsedFile, line: Int) -> String?
 
     // MARK: Resolution
 
@@ -73,8 +72,16 @@ protocol Language {
 }
 
 extension Language {
-    func conformers(of interface: Pair, requirement: Pair?, named name: String, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
                     for use: ConformanceUse) -> [Conformer] {
+        let name: String
+        switch use {
+        case .check: name = interface.any.decl.qualifiedName
+        case .context:
+            // Preserve the existing lookup spellings: a whole-interface context uses its simple
+            // name, while a requirement context uses its enclosing scope (which may be qualified).
+            name = requirement.map { $0.any.decl.scope ?? "" } ?? interface.any.decl.name
+        }
         if use == .check, let member = requirement?.head?.decl {
             let abstract = interface.any.decl.kind == .class && member.modifiers.contains("abstract")
             // An existing default implementation covers every explicit conformer.
@@ -106,7 +113,7 @@ extension Language {
         return result
     }
 
-    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? { nil }
+    func isolation(in file: ParsedFile, line: Int) -> String? { nil }
 }
 
 /// The two existing consumers use different visibility and member matching rules.

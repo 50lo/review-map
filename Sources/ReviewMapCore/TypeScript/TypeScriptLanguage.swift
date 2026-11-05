@@ -103,16 +103,6 @@ struct TypeScriptLanguage: Language {
         return top.modifiers.contains("export") && !top.modifiers.contains("default")
     }
 
-    /// Preserve the existing interpretation of Actor-suffixed decorators on TypeScript callers.
-    /// Other declarations have no known isolation; SwiftUI inheritance has no TypeScript meaning.
-    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? {
-        guard let decl = file.enclosingDecl(line: line) else { return nil }
-        for enclosing in [decl] + file.enclosingDeclarations(of: decl) {
-            if let attribute = enclosing.attributes.first(where: { $0.hasSuffix("Actor") }) { return "@" + attribute }
-        }
-        return nil
-    }
-
     // MARK: Resolution
 
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {

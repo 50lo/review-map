@@ -61,11 +61,11 @@ final class LanguageTests: XCTestCase {
         for (marker, expected) in [("main", "@MainActor"), ("nonisolated", "nonisolated"), ("custom", "@WorkActor"),
                                    ("actor", "actor Worker"), ("view", "@MainActor"), ("none", nil)] {
             let line = source.components(separatedBy: "\n").firstIndex { $0.hasSuffix("// " + marker) }! + 1
-            XCTAssertEqual(swift.isolation(in: file, line: line, source: { XCTFail("Swift isolation needs no source read"); return "" }), expected, marker)
+            XCTAssertEqual(swift.isolation(in: file, line: line), expected, marker)
         }
         let ts = TypeScriptLanguage()
         let tsFile = ts.parse(path: "app.ts", source: "function run() { action(); }")
-        XCTAssertNil(ts.isolation(in: tsFile, line: 1, source: { XCTFail("Default isolation needs no source read"); return "" }))
+        XCTAssertNil(ts.isolation(in: tsFile, line: 1))
         let decoratedSource = """
             @MainActor class Screen {
               tap() { action(); } // main
@@ -74,9 +74,9 @@ final class LanguageTests: XCTestCase {
             class Page implements View { render() { action(); } } // none
             """
         let decorated = ts.parse(path: "screen.ts", source: decoratedSource)
-        for (marker, expected) in [("main", "@MainActor"), ("custom", "@WorkActor"), ("none", nil)] {
+        for marker in ["main", "custom", "none"] {
             let line = decoratedSource.components(separatedBy: "\n").firstIndex { $0.hasSuffix("// " + marker) }! + 1
-            XCTAssertEqual(ts.isolation(in: decorated, line: line, source: { XCTFail("Decorator isolation needs no source read"); return "" }), expected, marker)
+            XCTAssertNil(ts.isolation(in: decorated, line: line), "TypeScript decorators do not declare an isolation domain: " + marker)
         }
     }
 
@@ -101,14 +101,48 @@ final class LanguageTests: XCTestCase {
         XCTAssertEqual(Set(language.conformanceUses), [.check, .context], "Checks and region context both delegate discovery")
     }
 
+    func testDefaultConformanceKeepsNestedNamesAndConsumerScopes() throws {
+        let language = SwiftLanguage()
+        let store = """
+            struct Namespace {
+              protocol Store { func load() -> Int }
+              struct Local: Store { func load() -> Int { 1 } }
+            }
+            """
+        let qualified = "struct Qualified: Namespace.Store { func load() -> Int { 1 } }\n"
+        var builder = try builder(
+            base: ["API/Store.swift": store, "API/Qualified.swift": qualified, "Remote/Qualified.swift": qualified],
+            head: ["API/Store.swift": store.replacingOccurrences(of: "protocol Store { func load() -> Int }", with: "protocol Store { func load() async -> Int }"),
+                   "API/Qualified.swift": qualified, "Remote/Qualified.swift": qualified], language: language)
+        builder.matchEntities()
+        let interface = try XCTUnwrap(builder.pairs.first { $0.head?.decl.qualifiedName == "Namespace.Store" })
+        let requirement = try XCTUnwrap(builder.pairs.first { $0.head?.decl.qualifiedName == "Namespace.Store.load()" })
+
+        let wholeContext = language.conformers(of: interface, requirement: nil, in: builder, for: .context)
+        XCTAssertEqual(wholeContext.map { $0.declaration.decl.qualifiedName }, ["Namespace.Local"],
+                       "Whole-interface context keeps its simple-name lookup")
+        let memberContext = language.conformers(of: interface, requirement: requirement, in: builder, for: .context)
+        XCTAssertEqual(memberContext.map { $0.declaration.component }, ["folder:API", "folder:Remote"],
+                       "Requirement context uses the qualified scope without a dependency requirement")
+        for conformer in memberContext {
+            XCTAssertEqual(conformer.implementations.map(\.component), [conformer.declaration.component],
+                           "Context only shows implementations from the conformer's component")
+        }
+        let checked = language.conformers(of: interface, requirement: requirement, in: builder, for: .check)
+        XCTAssertEqual(checked.map { $0.declaration.component }, ["folder:API"],
+                       "Checks use the qualified interface name and require visibility")
+        XCTAssertEqual(checked.first?.implementations.map(\.component), ["folder:API", "folder:Remote"],
+                       "The existing check uses global scope/name matching, unlike context")
+    }
+
     func testUsageDelegatesIsolationForBothSidesWithAndWithoutIndex() throws {
         for indexed in [false, true] {
             let language = HookLanguage()
             var builder = try builder(
                 base: ["Lib/Counter.swift": "struct Counter {\n  func tick() {}\n}\n",
-                       "Old/Caller.swift": "// base-block\nfunc old() { Counter().tick() }\n"],
+                       "Old/Caller.swift": "\nfunc old() { Counter().tick() }\n"],
                 head: ["Lib/Counter.swift": "struct Counter {\n  func tick() { print(1) }\n}\n",
-                       "New/Caller.swift": "// head-block\nfunc new() { Counter().tick() }\n"], language: language)
+                       "New/Caller.swift": "\nfunc new() { Counter().tick() }\n"], language: language)
             if indexed {
                 let ref = IndexedRef(line: 2, targetFile: "Lib/Counter.swift", targetLine: 2, name: "tick()")
                 builder.addIndex([.base: SideIndex(refs: ["Lib/Counter.swift": [], "Old/Caller.swift": [ref]]),
@@ -120,6 +154,34 @@ final class LanguageTests: XCTestCase {
             let tick = try XCTUnwrap(model.entities.first { $0.qualifiedName == "Counter.tick()" })
             XCTAssertTrue(tick.usedBy.contains { $0.file == "Old/Caller.swift" && $0.side == .base && $0.isolation == "base-block" }, "indexed: \(indexed)")
             XCTAssertTrue(tick.usedBy.contains { $0.file == "New/Caller.swift" && $0.side == nil && $0.isolation == "head-block" }, "indexed: \(indexed)")
+        }
+    }
+
+    func testTypeScriptDecoratedCallersHaveNoIsolationWithAndWithoutIndex() throws {
+        for indexed in [false, true] {
+            let language = TypeScriptLanguage()
+            let caller = """
+                import { Counter } from "../Lib/counter";
+                @MainActor
+                class Screen {
+                  tap() { new Counter().tick(); }
+                  @WorkActor
+                  work() { new Counter().tick(); }
+                }
+                """
+            var builder = try builder(
+                base: ["Lib/counter.ts": "export class Counter {\n  tick() {}\n}\n", "App/caller.ts": caller],
+                head: ["Lib/counter.ts": "export class Counter {\n  tick() { console.log(1); }\n}\n", "App/caller.ts": caller], language: language)
+            if indexed {
+                let refs = [4, 6].map { IndexedRef(line: $0, targetFile: "Lib/counter.ts", targetLine: 2, name: "tick") }
+                let index = SideIndex(refs: ["Lib/counter.ts": [], "App/caller.ts": refs])
+                builder.addIndex([.base: index, .head: index], language: language)
+            }
+            builder.matchEntities()
+            builder.resolveReferences()
+            let tick = try XCTUnwrap(finish(builder).entities.first { $0.qualifiedName == "Counter.tick()" })
+            XCTAssertEqual(Set(tick.usedBy.map(\.symbol)), ["Screen.tap()", "Screen.work()"], "indexed: \(indexed)")
+            XCTAssertTrue(tick.usedBy.allSatisfy { $0.isolation == nil }, "TypeScript decorators do not imply actor isolation; indexed: \(indexed)")
         }
     }
 
@@ -168,7 +230,7 @@ private final class HookLanguage: Language {
     var sawBaseInterfaceAndConformer = false
 
     func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool { decl.name == "api" }
-    func conformers(of interface: Pair, requirement: Pair?, named name: String, in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer] {
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer] {
         conformanceUses.append(use)
         if interface.base != nil && builder.pairs.contains(where: { $0.base?.decl.name == "HiddenConformer" && $0.head != nil }) {
             sawBaseInterfaceAndConformer = true
@@ -183,9 +245,12 @@ private final class HookLanguage: Language {
             return Conformer(declaration: candidate, implementations: implementations)
         }
     }
-    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? {
-        let text = source()
-        return text.contains("base-block") ? "base-block" : text.contains("head-block") ? "head-block" : nil
+    func isolation(in file: ParsedFile, line: Int) -> String? {
+        switch file.enclosingDecl(line: line)?.name {
+        case "old": return "base-block"
+        case "new": return "head-block"
+        default: return nil
+        }
     }
     func isSource(_ path: String) -> Bool { swift.isSource(path) }
     func parse(path: String, source: String) -> ParsedFile { swift.parse(path: path, source: source) }

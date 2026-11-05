@@ -454,7 +454,7 @@ struct StructuralChecks {
             let interface = b.pairs[interfaceIndex]
             let proto = parent.qualifiedName
             var missing: [Located] = [], stale: [Located] = []
-            let candidates = b.language(of: h.file).conformers(of: interface, requirement: p, named: proto, in: b, for: .check)
+            let candidates = b.language(of: h.file).conformers(of: interface, requirement: p, in: b, for: .check)
             for candidate in candidates {
                 let c = candidate.declaration
                 guard c.decl.kind != .protocol, !(c.decl.kind == .extension && c.decl.name == proto), !isLow(c, .head) else { continue }

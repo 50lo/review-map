@@ -143,7 +143,7 @@ struct SwiftLanguage: Language {
 
     /// The isolation code at `line` runs in, from the innermost declaration around it that says:
     /// a global actor attribute ("@MainActor"), `nonisolated`, an actor ("actor CartStore"), or a SwiftUI view.
-    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? {
+    func isolation(in file: ParsedFile, line: Int) -> String? {
         var cur: Int? = nil
         var size = Int.max
         for (i, d) in file.decls.enumerated() where d.startLine <= line && line <= d.endLine && d.endLine - d.startLine <= size {

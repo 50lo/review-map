@@ -1,11 +1,11 @@
 ---
 # rm-n95m
 title: Move public API, conformance, and isolation behind Language
-status: completed
+status: in-progress
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T10:15:20Z
+updated_at: 2026-11-05T21:14:12Z
 parent: rm-yuz2
 blocking:
     - rm-b7l5
@@ -24,14 +24,14 @@ Add to the `Language` protocol in Sources/ReviewMapCore/Language.swift:
 Move the existing logic behind these, so Checks.swift and the usage computation stay language-neutral.
 
 ## Acceptance criteria
-- [x] Public-API classification, conformer discovery, and reference isolation in checks, usage, and conformer context are delegated through `Language`; Swift and TypeScript results are unchanged.
+- [ ] Checks and usage have no Swift- or TypeScript-specific knowledge left; Swift and TypeScript results are unchanged.
 - [x] Existing ChecksTests and TypeScriptTests pass, including the `MemoryRepository` conformers case.
 - [x] A model of this repo and of the TypeScript fixture is the same before and after.
 
 ## Constraints
-Three hooks only, shaped by what the new languages need; don't generalize further. Preserve the existing implicit-caller exclusions in `Checks.swift` (runtime attributes, special names, and possible witnesses); moving those is outside this task.
+Three hooks only, shaped by what the new languages need; don't generalize further.
 
-`Regions.swift` must use the same conformer-discovery hook for conformer context. Its inheritance lookup for overrides and view-code classification remains separate. Preserve the current behavior of each consumer, including their different visibility filters and interface-name lookup.
+`Regions.swift` uses the same conformer-discovery hook for conformer context. Override context reuses the builder's syntax-based inheritance index; view-code classification retains its inherited-type facts. Preserve the current behavior of each consumer, including their different visibility filters and interface-name lookup.
 
 
 ## Hook contract
@@ -40,19 +40,26 @@ The three `Language` methods are:
 
 ```swift
 func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool
-func conformers(of interface: Pair, requirement: Pair?, named name: String,
+func conformers(of interface: Pair, requirement: Pair?,
                 in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer]
-func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String?
+func isolation(in file: ParsedFile, line: Int) -> String?
 ```
 
 - `enclosing` contains the declaration's parent chain, innermost first. Public API classification is used by unused-code checks.
 - `ConformanceUse` has `check` and `context` cases. Each `Conformer` contains `declaration: Located` and `implementations: [Located]`. The requirement is nil for whole-interface context. For a requested requirement, an empty implementation list means it is missing; consumers use the supplied matches. This lets a language reject a same-name method with the wrong arity.
 - The conformance hook receives the matched interface and the builder's base and head trees, declaration pairs, and all components. The default preserves the existing inheritance, visibility, default-extension, and implementation lookup rules of each consumer. An implicit-conformance implementation can return candidates without a head dependency edge and select implementations from the appropriate component.
-- Isolation uses a 1-based reference line and a lazy reader for the complete source on that side, cached once per file and valid for the call. The default returns nil. Swift retains its declaration isolation rules, and TypeScript retains the existing Actor-suffixed decorator labels.
+- Isolation uses a parsed file and a 1-based reference line. The default returns nil, including for TypeScript. Swift retains its declaration isolation rules. Kotlin can record dispatcher ranges during parsing when rm-c2og is implemented; no source reader or speculative range fields are added here.
 
 
 ## Validation
 
-- The full Swift suite passes: 88 tests with `NSUnbufferedIO=YES swift test --parallel --num-workers 2`, including the five new hook tests, ChecksTests, TypeScriptTests, index suites, and unchanged snapshots.
+- The full Swift suite passes: 90 tests with `NSUnbufferedIO=YES swift test --parallel --num-workers 2`, including the seven hook tests, ChecksTests, TypeScriptTests, index suites, and unchanged snapshots.
 - Complete change models match the pre-refactor analyzer for this repo (`e6fda05` to `e7c70c6`), the basic Swift fixture, and the TypeScript fixture.
-- The hook tests cover wrong-arity methods, same-named types in unrelated components, base/head source access, and name/index usage paths. Independent review found no remaining issues.
+- The hook tests cover wrong-arity methods, same-named types in unrelated components, base/head parsed-file isolation, and name/index usage paths. The original broad acceptance criterion remains open as described below.
+
+
+## Remaining acceptance work
+
+The three planned hooks are implemented, but the original first acceptance criterion is not fully satisfied: `Checks.swift` still contains the implicit-caller names, runtime attributes, and prefix exclusions. Draft rm-welo tracks moving those behind language policy and resolving the three-hook constraint before any additional hook is implemented. The criterion stays unchecked, and rm-n95m and rm-yuz2 remain in progress. The existing exclusions stay active to avoid false unused/orphaned-code findings.
+
+Review also identified the old shared function's accidental interpretation of TypeScript Actor-suffixed decorators as Swift isolation. TypeScript now uses the planned nil default. This corrects those decorator cases; the recorded repository model and Swift/TypeScript fixture models remain unchanged.
