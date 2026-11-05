@@ -30,7 +30,9 @@ enum SCIP {
     // MARK: Reading
 
     /// Exact references for one side, from SCIP indexes of its exported tree at `sourceRoot`. Paths become
-    /// repo-relative through each index's project root; files outside `known` are left out.
+    /// repo-relative through each index's project root; files outside `known` are left out. Modules and
+    /// packages (symbols that end in a namespace, such as an import's `src/\`cart.ts\`/`) aren't declarations,
+    /// so references to them are left out too.
     static func sideIndex(_ indexes: [Index], sourceRoot: String, known: Set<String>) -> SideIndex {
         var definitions: [String: (file: String, line: Int)] = [:]
         var documents: [(file: String, doc: Document)] = []
@@ -40,22 +42,27 @@ enum SCIP {
                 let file = join(prefix, doc.path)
                 guard known.contains(file) else { continue }
                 documents.append((file, doc))
-                for o in doc.occurrences where o.isDefinition && !o.symbol.isEmpty {
+                for o in doc.occurrences where o.isDefinition && isDeclaration(o.symbol) {
                     let key = symbolKey(o.symbol, file: file)
                     if definitions[key] == nil { definitions[key] = (file, o.line) }
                 }
             }
         }
-        var refs: [String: [IndexedRef]] = [:]
+        // A file indexed by two projects appears twice.
+        var found: [String: Set<IndexedRef>] = [:]
         for (file, doc) in documents {
-            var out = Set<IndexedRef>()
-            for o in doc.occurrences where !o.isDefinition && !o.symbol.isEmpty {
+            var out = found[file] ?? []
+            for o in doc.occurrences where !o.isDefinition && isDeclaration(o.symbol) {
                 guard let def = definitions[symbolKey(o.symbol, file: file)] else { continue }
                 out.insert(IndexedRef(line: o.line, targetFile: def.file, targetLine: def.line, name: name(ofSymbol: o.symbol)))
             }
-            refs[file, default: []] += out.sorted { ($0.line, $0.targetFile, $0.targetLine) < ($1.line, $1.targetFile, $1.targetLine) }
+            found[file] = out
         }
-        return SideIndex(refs: refs)
+        return SideIndex(refs: found.mapValues { $0.sorted { ($0.line, $0.targetFile, $0.targetLine) < ($1.line, $1.targetFile, $1.targetLine) } })
+    }
+
+    private static func isDeclaration(_ symbol: String) -> Bool {
+        !symbol.isEmpty && !symbol.hasSuffix("/")
     }
 
     /// Local symbols ("local 4") are only unique within their document.

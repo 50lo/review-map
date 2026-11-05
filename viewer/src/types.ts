@@ -34,7 +34,7 @@ export interface RegionLLM {
 export interface Component {
   id: string;
   name: string;
-  kind: "spmTarget" | "xcodeTarget" | "folder" | "external" | string;
+  kind: "spmTarget" | "xcodeTarget" | "npmPackage" | "tsconfig" | "folder" | "external" | string;
   layer?: string;
   module?: string;
   parent?: string;

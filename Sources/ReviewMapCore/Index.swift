@@ -76,6 +76,8 @@ struct IndexedRef: Hashable {
 /// Exact references for the source files of one side. Files missing from `refs` had no index data.
 struct SideIndex {
     var refs: [String: [IndexedRef]]
+    /// What the index is missing, such as dependencies that couldn't be installed.
+    var warnings: [Warning] = []
 }
 
 struct IndexError: Error, CustomStringConvertible {
@@ -85,6 +87,22 @@ struct IndexError: Error, CustomStringConvertible {
 
 /// Small path helpers shared by the analyzer and the CLI.
 public enum Paths {
+    /// A path relative to `file`'s directory, made repo-relative: "../models/cart" from "src/app/main.ts" is
+    /// "src/models/cart". A leading "/" starts at the repo root. Nil when it leaves the repo.
+    static func resolve(_ relative: String, from file: String) -> String? {
+        var parts = relative.hasPrefix("/") ? [] : file.split(separator: "/").dropLast().map(String.init)
+        for p in relative.split(separator: "/").map(String.init) {
+            switch p {
+            case ".": continue
+            case "..":
+                guard !parts.isEmpty else { return nil }
+                parts.removeLast()
+            default: parts.append(p)
+            }
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: "/")
+    }
+
     /// "feature/login" → "feature-login"; anything outside letters, digits, dot, dash, and underscore becomes a dash.
     public static func slug(_ s: String) -> String {
         let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")

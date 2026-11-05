@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CodeView, useSource, type CodeRegion } from "./CodeView";
 import { lineChanges } from "./diff";
-import { componentEdges, contextOf, flagLabel, llmOf, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
+import { componentEdges, contextOf, flagLabel, kindLabel, llmOf, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
 import {
   dependsOnTarget,
   findEntity,
@@ -143,7 +143,7 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
     <article className="card">
       <ReviewedBox id={e.id} compact />
       <button className="card-title" onClick={() => go({ type: "entity", id: e.id })}>
-        <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
+        <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         <span className="chev">›</span>
       </button>
       <Signature e={e} />
@@ -159,7 +159,7 @@ const OneLiner = ({ e, id, go }: { e: Entity; id?: string; go: Go }) => (
   <li className="with-check">
     <ReviewedBox id={id ?? e.id} compact />
     <button className="one-liner" onClick={() => go({ type: "entity", id: id ?? e.id })}>
-      <span className="kind">{e.kind}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
+      <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
       {e.contractFlags.length > 0 && <span className="muted small"> · {e.contractFlags.length} flag{e.contractFlags.length === 1 ? "" : "s"}</span>}
     </button>
   </li>
@@ -433,7 +433,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
     <div className="page-inner">
       <header className="page-head">
         <div className="eyebrow">
-          {e.kind} in{" "}
+          {kindLabel(e)} in{" "}
           <button className="link" onClick={() => go({ type: "interface", id: e.component })}>
             {compName(index, e.component)}
           </button>

@@ -22,29 +22,7 @@ final class IndexTests: XCTestCase {
 
     func fixtureRepo() throws -> String {
         if let r = Self.repo { return r }
-        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/indexed", withExtension: nil)).path
-        let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-indexed-\(UUID().uuidString)")
-        let fm = FileManager.default
-        try fm.createDirectory(atPath: repo, withIntermediateDirectories: true)
-        func git(_ args: String...) throws {
-            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
-        }
-        func copyTree(_ side: String) throws {
-            for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" {
-                try fm.removeItem(atPath: repo + "/" + item)
-            }
-            for item in try fm.contentsOfDirectory(atPath: fixture + "/" + side) {
-                try fm.copyItem(atPath: fixture + "/" + side + "/" + item, toPath: repo + "/" + item)
-            }
-        }
-        try git("init", "-q", "-b", "main")
-        try copyTree("base")
-        try git("add", "-A")
-        try git("commit", "-qm", "base")
-        try git("branch", "base")
-        try copyTree("head")
-        try git("add", "-A")
-        try git("commit", "-qm", "head")
+        let repo = try Fixture.repo("indexed")
         Self.repo = repo
         Self.cache = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-index-cache-\(UUID().uuidString)")
         return repo

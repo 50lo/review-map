@@ -117,16 +117,16 @@ struct Analyze: ParsableCommand {
 }
 
 struct IndexArgs: ParsableArguments {
-    @Flag(inversion: .prefixedNo, help: "Resolve references exactly from a build's index store instead of by name. Builds base and head once per commit (default: index.enabled in reviewmap.yml).")
+    @Flag(inversion: .prefixedNo, help: "Resolve references exactly from each language's index instead of by name: a build's index store for Swift, scip-typescript for TypeScript. Indexes base and head once per commit (default: index.enabled in reviewmap.yml).")
     var index: Bool?
 
-    @Option(name: .customLong("index-builder"), help: "bazel, xcodebuild, or swift (default: bazel for a Bazel workspace with targets, else xcodebuild where it exists, else swift).")
+    @Option(name: .customLong("index-builder"), help: "Swift: bazel, xcodebuild, or swift (default: bazel for a Bazel workspace with targets, else xcodebuild where it exists, else swift).")
     var builder: String?
 
-    @Option(name: .customLong("index-target"), help: "Bazel target to build; repeat for several (default: top_level_targets of the repo's rules_xcodeproj rule).")
+    @Option(name: .customLong("index-target"), help: "Swift: Bazel target to build; repeat for several (default: top_level_targets of the repo's rules_xcodeproj rule).")
     var targets: [String] = []
 
-    @Option(name: .customLong("index-project"), help: "The .xcworkspace, .xcodeproj, or package directory to build, relative to the repo root.")
+    @Option(name: .customLong("index-project"), help: "Swift: the .xcworkspace, .xcodeproj, or package directory to build, relative to the repo root.")
     var project: String?
 
     @Option(name: .customLong("index-scheme"), help: "xcodebuild scheme (default: the only one, or the one named after the project).")
@@ -135,7 +135,7 @@ struct IndexArgs: ParsableArguments {
     @Option(name: .customLong("index-destination"), help: "xcodebuild destination (default: generic/platform=iOS Simulator).")
     var destination: String?
 
-    @Option(name: .customLong("index-cache"), help: "Directory for built index stores (default: ~/.reviewmap/index).")
+    @Option(name: .customLong("index-cache"), help: "Directory for built indexes (default: ~/.reviewmap/index).")
     var cache: String?
 
     @Flag(name: .customLong("rebuild-index"), help: "Build again even when the index of a commit is cached.")

@@ -368,20 +368,7 @@ enum IndexBuilder {
     }
 
     static func run(_ args: [String], cwd: String, logPath: String) throws -> Int32 {
-        FileManager.default.createFile(atPath: logPath, contents: nil)
-        let logHandle = try FileHandle(forWritingTo: URL(fileURLWithPath: logPath))
-        defer { try? logHandle.close() }
-        logHandle.write(Data(("$ " + args.joined(separator: " ") + "\n\n").utf8))
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        p.arguments = args
-        p.currentDirectoryURL = URL(fileURLWithPath: cwd)
-        p.standardOutput = logHandle
-        p.standardError = logHandle
-        p.standardInput = FileHandle.nullDevice
-        try p.run()
-        p.waitUntilExit()
-        return p.terminationStatus
+        try Shell.runLogged(args, cwd: cwd, logPath: logPath)
     }
 
     /// libIndexStore from the toolchain that builds: $REVIEWMAP_LIBINDEXSTORE, or next to `swift`.

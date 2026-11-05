@@ -6,42 +6,8 @@ import XCTest
 /// compares the change model with Fixtures/<name>/expected.json.
 /// Set UPDATE_SNAPSHOTS=1 to rewrite the snapshot.
 final class FixtureTests: XCTestCase {
-    static var cached: [String: ChangeModel] = [:]
-
     func model(_ name: String) throws -> ChangeModel {
-        if let m = Self.cached[name] { return m }
-        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: nil)).path
-        let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-fixture-\(UUID().uuidString)")
-        let fm = FileManager.default
-        try fm.createDirectory(atPath: repo, withIntermediateDirectories: true)
-        defer { try? fm.removeItem(atPath: repo) }
-        func git(_ args: String...) throws {
-            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
-        }
-        func copyTree(_ side: String) throws {
-            for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" {
-                try fm.removeItem(atPath: repo + "/" + item)
-            }
-            let src = fixture + "/" + side
-            for item in try fm.contentsOfDirectory(atPath: src) {
-                try fm.copyItem(atPath: src + "/" + item, toPath: repo + "/" + item)
-            }
-        }
-        try git("init", "-q", "-b", "main")
-        try copyTree("base")
-        try git("add", "-A")
-        try git("commit", "-qm", "base")
-        try git("branch", "base")
-        try copyTree("head")
-        try git("add", "-A")
-        try git("commit", "-qm", "head")
-
-        var m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"))
-        m.repo.root = "<repo>"
-        m.repo.baseSha = "<base>"
-        m.repo.headSha = "<head>"
-        Self.cached[name] = m
-        return m
+        try Fixture.model(name)
     }
 
     func entity(_ m: ChangeModel, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
@@ -49,22 +15,7 @@ final class FixtureTests: XCTestCase {
     }
 
     func testSnapshot() throws {
-        let m = try model("basic")
-        let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/basic", withExtension: nil)).path
-        let actual = try ChangeModelIO.encode(m)
-        // Write to the source tree, not the copied bundle.
-        let sourceSnapshot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .appendingPathComponent("Fixtures/basic/expected.json")
-        if ProcessInfo.processInfo.environment["UPDATE_SNAPSHOTS"] == "1" {
-            try actual.write(to: sourceSnapshot)
-            return
-        }
-        let expected = try Data(contentsOf: URL(fileURLWithPath: fixture + "/expected.json"))
-        if actual != expected {
-            let out = (NSTemporaryDirectory() as NSString).appendingPathComponent("basic-actual.json")
-            try actual.write(to: URL(fileURLWithPath: out))
-            XCTFail("Snapshot differs. Actual written to \(out). Run with UPDATE_SNAPSHOTS=1 to accept.")
-        }
+        try Fixture.checkSnapshot("basic")
     }
 
     func testProtocolRequirements() throws {
@@ -207,5 +158,73 @@ final class FixtureTests: XCTestCase {
         XCTAssertEqual(state.lines, [2, 3])
         XCTAssertTrue(try regions(m, "CartRepository.items()", kind: "context").contains { $0.relation == "conformer" && $0.reasons == ["CartStore.items()"] })
         XCTAssertTrue(try regions(m, "Transport.send(_:)", kind: "context").contains { $0.relation == "override" && $0.reasons == ["LoggingTransport.send(_:)"] })
+    }
+}
+
+/// Builds a two-commit git repo from Fixtures/<name>/{base,head} and runs the analyzer on it, once per fixture.
+enum Fixture {
+    nonisolated(unsafe) static var cached: [String: ChangeModel] = [:]
+
+    static func path(_ name: String) throws -> String {
+        try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: nil)).path
+    }
+
+    /// A temporary repo with the fixture's base on branch `base` and its head on `main`. The caller removes it.
+    static func repo(_ name: String) throws -> String {
+        let fixture = try path(name)
+        let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-fixture-\(UUID().uuidString)")
+        let fm = FileManager.default
+        try fm.createDirectory(atPath: repo, withIntermediateDirectories: true)
+        func git(_ args: String...) throws {
+            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
+        }
+        func copyTree(_ side: String) throws {
+            for item in try fm.contentsOfDirectory(atPath: repo) where item != ".git" {
+                try fm.removeItem(atPath: repo + "/" + item)
+            }
+            let src = fixture + "/" + side
+            for item in try fm.contentsOfDirectory(atPath: src) {
+                try fm.copyItem(atPath: src + "/" + item, toPath: repo + "/" + item)
+            }
+        }
+        try git("init", "-q", "-b", "main")
+        try copyTree("base")
+        try git("add", "-A")
+        try git("commit", "-qm", "base")
+        try git("branch", "base")
+        try copyTree("head")
+        try git("add", "-A")
+        try git("commit", "-qm", "head")
+        return repo
+    }
+
+    static func model(_ name: String) throws -> ChangeModel {
+        if let m = cached[name] { return m }
+        let repo = try repo(name)
+        defer { try? FileManager.default.removeItem(atPath: repo) }
+        var m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"))
+        m.repo.root = "<repo>"
+        m.repo.baseSha = "<base>"
+        m.repo.headSha = "<head>"
+        cached[name] = m
+        return m
+    }
+
+    /// Compares the model with Fixtures/<name>/expected.json; UPDATE_SNAPSHOTS=1 rewrites it.
+    static func checkSnapshot(_ name: String, sourceFile: String = #filePath) throws {
+        let actual = try ChangeModelIO.encode(try model(name))
+        // Write to the source tree, not the copied bundle.
+        let sourceSnapshot = URL(fileURLWithPath: sourceFile).deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/\(name)/expected.json")
+        if ProcessInfo.processInfo.environment["UPDATE_SNAPSHOTS"] == "1" {
+            try actual.write(to: sourceSnapshot)
+            return
+        }
+        let expected = try Data(contentsOf: URL(fileURLWithPath: try path(name) + "/expected.json"))
+        if actual != expected {
+            let out = (NSTemporaryDirectory() as NSString).appendingPathComponent("\(name)-actual.json")
+            try actual.write(to: URL(fileURLWithPath: out))
+            XCTFail("Snapshot differs. Actual written to \(out). Run with UPDATE_SNAPSHOTS=1 to accept.")
+        }
     }
 }
