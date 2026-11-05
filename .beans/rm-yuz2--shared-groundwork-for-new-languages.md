@@ -1,11 +1,11 @@
 ---
 # rm-yuz2
 title: Shared groundwork for new languages
-status: todo
+status: in-progress
 type: epic
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-05T09:55:09Z
 ---
 
 Two pieces of work that Go, Rust, and Kotlin all need, done once before Go starts. See "Adding a language" in docs/plan.md.

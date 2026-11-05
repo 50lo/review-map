@@ -3,11 +3,9 @@
 
 import { createHighlighterCore, type HighlighterCore, type ThemedToken } from "shiki/core";
 import { createJavaScriptRegexEngine } from "shiki/engine/javascript";
-import swift from "shiki/langs/swift.mjs";
-import tsx from "shiki/langs/tsx.mjs";
-import typescript from "shiki/langs/typescript.mjs";
 import githubLight from "shiki/themes/github-light.mjs";
 import githubDark from "shiki/themes/github-dark.mjs";
+import { highlightGrammars, highlightLanguageOf } from "./languages";
 
 export interface Tok {
   text: string;
@@ -19,7 +17,7 @@ let highlighter: Promise<HighlighterCore> | null = null;
 const getHighlighter = () =>
   (highlighter ??= createHighlighterCore({
     themes: [githubLight, githubDark],
-    langs: [swift, typescript, tsx],
+    langs: highlightGrammars(),
     engine: createJavaScriptRegexEngine(),
   }));
 
@@ -29,10 +27,7 @@ const cache = new Map<string, Promise<Tok[][]>>();
 const plain = (text: string): Tok[][] => text.split("\n").map((l) => [{ text: l }]);
 
 /** The Shiki language for a file, by extension. */
-export function languageOf(file: string): string | undefined {
-  const ext = file.slice(file.lastIndexOf(".") + 1);
-  return ({ swift: "swift", ts: "typescript", mts: "typescript", cts: "typescript", tsx: "tsx" } as Record<string, string>)[ext];
-}
+export const languageOf = highlightLanguageOf;
 
 /** Lines of tokens for a whole file. Highlighting needs the whole file, because state carries across lines. */
 export function highlightFile(key: string, file: string, text: string): Promise<Tok[][]> {
