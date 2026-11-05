@@ -15,7 +15,21 @@ reviewmap
 
 `scripts/install.sh` builds the release binary and installs it to `~/.local/bin/reviewmap`, with the viewer and its npm dependencies in `~/.local/share/reviewmap/viewer`. `PREFIX=/some/dir` installs under another prefix. If the `bin` directory isn't on your `PATH`, the script prints the line to add to your shell profile. Run it again after pulling to update; it reinstalls npm dependencies only when they changed. `scripts/install.sh --uninstall` removes both. The installed copy doesn't use the checkout, which can be moved or deleted. `REVIEWMAP_VIEWER` points the binary at another viewer directory.
 
-Without installing, `swift build -c release` and `.build/release/reviewmap` work too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); the install script and CI do this.
+You can build the analyzer with either:
+
+```sh
+swift build -c release --product reviewmap
+```
+
+or
+
+```sh
+bazel build --config=release //:reviewmap
+```
+
+Installation script `scripts/install.sh` uses SwiftPM.
+
+Without installing, `.build/release/reviewmap` runs the SwiftPM build too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); the install script and CI do this.
 
 An experimental native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
 
