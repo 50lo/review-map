@@ -65,6 +65,31 @@ describe("visible", () => {
     expect(v.hiddenTests + v.hiddenUnrelated).toBe(0);
   });
 
+  it("hides fixture targets and their split children until Tests is enabled", () => {
+    const fixtureIds = new Set(["spm:Features", "spm:Features/Catalog", "spm:Features/Checkout"]);
+    const nested = buildIndex({
+      ...model,
+      components: model.components.map((c) => fixtureIds.has(c.id) ? {
+        ...c,
+        isTest: true,
+        paths: c.paths.map((p) => `Tests/HostTests/Fixtures/basic/${p}`),
+      } : c),
+    });
+    const hidden = visible(nested, { scope: "all", showTests: false });
+    const shown = visible(nested, { scope: "all", showTests: true });
+    for (const id of fixtureIds) {
+      expect(hidden.nodes.has(id)).toBe(false);
+      expect(shown.nodes.has(id)).toBe(true);
+    }
+    expect(hidden.nodes.has("cfg:Core")).toBe(true);
+    const incident = model.edges.filter((e) => fixtureIds.has(e.from) || fixtureIds.has(e.to));
+    expect(incident.length).toBeGreaterThan(0);
+    for (const edge of incident) {
+      expect(hidden.edges).not.toContain(edge);
+      expect(shown.edges).toContain(edge);
+    }
+  });
+
   it("keeps a split folder's target as its group", () => {
     const tiny = buildIndex({
       ...model,
