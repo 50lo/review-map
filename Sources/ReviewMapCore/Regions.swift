@@ -3,16 +3,11 @@ import Foundation
 // Review, removed, and context regions: where in each changed entity the reviewer should look,
 // how risky each place is, and which unchanged code explains it. Everything here is
 // deterministic; the weights follow the brief's starting table and are meant to be tuned.
+// Languages weigh their own contract flags and say which code is view code.
 
-private let high = 0.6
-private let medium = 0.3
-private let base = 0.1
-
-private let concurrencyFlags = ["mainactor-", "nonisolated-", "sendable-", "async-", "conformance-isolation-changed",
-                                "kind-changed", "default-isolation-changed", "strict-concurrency-changed"]
-private let persistenceFlags = ["codable-shape", "swiftdata-model-changed", "coredata-model-changed"]
-private let configFlags = ["info-plist-changed", "build-settings-changed", "deployment-target-changed",
-                           "swift-version-changed", "swift-features-changed"]
+private let high = RiskWeight.high
+private let medium = RiskWeight.medium
+private let base = RiskWeight.base
 
 private struct Signal {
     var weight: Double
@@ -69,7 +64,8 @@ private final class RegionBuilder {
     private var inheritors: [String: [Indexed]] = [:]
     /// "component|Type" -> head type declarations (not extensions).
     private var types: [String: [Indexed]] = [:]
-    private var viewTypes = Set<String>()
+    /// "component|Type" -> what the head type and its extensions conform to or inherit from.
+    private var typeInherits: [String: Set<String>] = [:]
     /// Head declarations whose entity changed.
     private var changedHead = Set<DeclKey>()
 
@@ -86,7 +82,7 @@ private final class RegionBuilder {
                     if d.kind != .extension { types["\(comp)|\(typeName)", default: []].append(item) }
                     for c in d.inherited.map(ModelBuilder.conformanceName) {
                         inheritors[c, default: []].append(item)
-                        if c == "View" || c == "ViewModifier" { viewTypes.insert("\(comp)|\(typeName)") }
+                        typeInherits["\(comp)|\(typeName)", default: []].insert(c)
                     }
                 }
             }
@@ -185,11 +181,11 @@ private final class RegionBuilder {
         return out + context(for: e, pair: pair, regions: out, headerId: headerId)
     }
 
+    /// Each flag weighs what its language says; the reason is the flag itself.
     private func flagSignals(_ e: Entity) -> [Signal] {
         e.contractFlags.map { f in
-            if concurrencyFlags.contains(where: { f.hasPrefix($0) }) || persistenceFlags.contains(f) { return Signal(weight: high, reason: f) }
-            if configFlags.contains(f) { return Signal(weight: medium, reason: f) }
-            return Signal(weight: e.isInterface ? high : medium, reason: f)
+            guard let (lang, name) = Languages.split(flag: f) else { return Signal(weight: e.isInterface ? high : medium, reason: f) }
+            return Signal(weight: lang.flagRisk(name, isInterface: e.isInterface), reason: f)
         }
     }
 
@@ -212,14 +208,10 @@ private final class RegionBuilder {
         let removedChecks = labels(.check) { h, b in b > h }
         if !removedChecks.isEmpty { signals.append(Signal(weight: high, reason: removedChecks.map { "\($0) removed" }.joined(separator: ", "))) }
         // Isolation annotations in code are high; tasks, continuations, and locks are medium.
-        let isAnnotation: (String) -> Bool = { $0.hasPrefix("@") || $0.hasPrefix("nonisolated") }
-        let addedConc = labels(.concurrency) { h, b in h > b }
-        let removedConc = labels(.concurrency) { h, b in b > h }
-        if !addedConc.isEmpty {
-            signals.append(Signal(weight: addedConc.contains(where: isAnnotation) ? high : medium, reason: "concurrency: " + addedConc.joined(separator: ", ")))
-        }
-        if !removedConc.isEmpty {
-            signals.append(Signal(weight: removedConc.contains(where: isAnnotation) ? high : medium, reason: "concurrency removed: " + removedConc.joined(separator: ", ")))
+        for (pred, prefix) in [({ (h: Int, b: Int) in h > b }, "concurrency: "), ({ (h: Int, b: Int) in b > h }, "concurrency removed: ")] {
+            let isolation = labels(.isolation, pred)
+            let all = (isolation + labels(.concurrency, pred)).sorted()
+            if !all.isEmpty { signals.append(Signal(weight: isolation.isEmpty ? medium : high, reason: prefix + all.joined(separator: ", "))) }
         }
         let crashes = labels(.crash) { h, b in h > b }
         if !crashes.isEmpty { signals.append(Signal(weight: medium, reason: crashes.map { "new \($0)" }.joined(separator: ", "))) }
@@ -232,10 +224,11 @@ private final class RegionBuilder {
 
     private func isUI(_ e: Entity, _ hd: Located?) -> Bool {
         if b.head.layout.components[e.component]?.layer == "ui" { return true }
-        guard let d = hd?.decl else { return false }
-        if d.signatureDisplay.contains("some View") || (d.typeAnnotation ?? "").contains("View") { return true }
-        if let scope = d.scope, viewTypes.contains("\(hd!.component)|\(scope)") { return true }
-        return d.isContainer && viewTypes.contains("\(hd!.component)|\(d.kind == .extension ? d.name : d.qualifiedName)")
+        guard let hd else { return false }
+        let d = hd.decl
+        var inherits = d.scope.flatMap { typeInherits["\(hd.component)|\($0)"] } ?? []
+        if d.isContainer { inherits.formUnion(typeInherits["\(hd.component)|\(d.kind == .extension ? d.name : d.qualifiedName)"] ?? []) }
+        return b.language(of: hd.file).isViewCode(d, inherits: inherits)
     }
 
     private func score(_ signals: [Signal], low: Bool) -> Double {

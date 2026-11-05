@@ -429,7 +429,11 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
  * They follow the brief's table: concurrency and persisted or networked models are high, other
  * contract changes medium.
  */
-const flagWeight = (flag: string): number => {
+/** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
+export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, "");
+
+const flagWeight = (prefixed: string): number => {
+  const flag = flagName(prefixed);
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
   if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
   if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;
@@ -580,7 +584,8 @@ export function shortName(index: Index, c: Component): string {
 }
 
 /** Human form of a contract flag: "async-added" → "async added". */
-export function flagLabel(f: string): string {
+export function flagLabel(flag: string): string {
+  const f = flagName(flag);
   const i = f.indexOf(":");
   const name = (i < 0 ? f : f.slice(0, i)).replace(/-/g, " ");
   return i < 0 ? name : `${name}: ${f.slice(i + 1).replace("->", " → ")}`;

@@ -1,0 +1,92 @@
+import Foundation
+
+/// A declaration found in one source file at one side of the change. Kinds and fields are shared by
+/// every language; a language leaves the ones it has no equivalent for at their defaults.
+struct Decl {
+    var kind: EntityKind
+    /// Simple name ("add", "init", "CartService"); for extensions the extended type.
+    var name: String
+    /// Human-readable qualified name: "CartService.add(item:)", "extension CartService: Sendable".
+    var qualifiedName: String
+    /// Qualified name of the enclosing type scope ("CartService"), nil at top level.
+    var scope: String?
+    var parentIndex: Int?
+    var isTopLevel: Bool { parentIndex == nil }
+    /// Name plus argument labels, used to match overloads: "add(item:)".
+    var labelsKey: String
+    var signatureDisplay: String
+    /// Trivia-free header tokens without attributes and modifiers.
+    var signatureCanon: String
+    /// Trivia-free attributes + modifiers.
+    var modifiersCanon: String
+    /// Trivia-free body tokens (empty for containers: their members are compared one by one).
+    var bodyCanon: String
+    /// Raw text of the declaration (header only for containers), used to detect cosmetic-only changes.
+    var rawText: String
+    var access: String?
+    var attributes: [String]
+    var modifiers: [String]
+    var inherited: [String]
+    var isAsync = false
+    var isThrows = false
+    var throwsType: String?
+    var isStored = false
+    var isStatic = false
+    var typeAnnotation: String?
+    /// Declared inside a protocol (a requirement).
+    var inProtocol = false
+    /// Kind of the enclosing container, if any.
+    var parentKind: EntityKind?
+    var startLine: Int
+    var endLine: Int
+    /// Last line of the declaration's header: the line of the opening brace of its body or members.
+    var headerEndLine: Int = 0
+
+    var isContainer: Bool {
+        switch kind {
+        case .struct, .class, .enum, .actor, .protocol, .extension: return true
+        default: return false
+        }
+    }
+}
+
+struct NameRef: Hashable {
+    var name: String
+    var line: Int
+}
+
+struct ParsedFile {
+    var path: String
+    /// Id of the language that parsed the file.
+    var language: String
+    var decls: [Decl]
+    var imports: [NameRef]
+    /// Free identifiers and type names (candidates for cross-component references).
+    var typeRefs: [NameRef]
+    /// Names used after a dot (`x.foo`), for member-level usage.
+    var memberRefs: [NameRef]
+    /// Risk-relevant constructs per line (crash points, checks, branches, concurrency).
+    var marks: [Int: [LineMark]] = [:]
+
+    /// Innermost declaration containing `line`.
+    func enclosingDecl(line: Int) -> Decl? {
+        var best: Decl?
+        for d in decls where d.startLine <= line && line <= d.endLine {
+            if let b = best {
+                if d.endLine - d.startLine <= b.endLine - b.startLine { best = d }
+            } else {
+                best = d
+            }
+        }
+        return best
+    }
+}
+
+/// A construct on one line that matters for risk: a crash point, a check, a branch, a concurrency
+/// primitive (a task, a continuation, a lock), or an isolation annotation in code.
+struct LineMark: Hashable {
+    enum Kind: String { case crash, check, flow, concurrency, isolation }
+    var kind: Kind
+    var label: String
+}
+

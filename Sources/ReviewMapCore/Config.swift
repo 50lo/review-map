@@ -8,7 +8,7 @@ import Yams
 ///         paths: ["App/Features/Checkout/**"]
 ///         layer: domain
 ///     split:
-///       threshold: 30   # targets with more Swift files than this are split by folder
+///       threshold: 30   # targets with more source files than this are split by folder
 ///       maxDepth: 3
 ///     exclude: ["**/Pods/**"]
 ///     generated: ["**/*.generated.swift"]
@@ -61,10 +61,8 @@ public struct Config: Codable, Equatable {
         "**/.build/**", "**/Pods/**", "**/Carthage/**", "**/DerivedData/**", "**/node_modules/**",
         "**/SourcePackages/**", "**/.swiftpm/**",
     ]
-    static let defaultGenerated = [
-        "**/Generated/**", "**/*.generated.swift", "**/R.generated.swift", "**/*+CoreDataProperties.swift",
-        "**/*.pb.swift", "**/*.grpc.swift",
-    ]
+    /// Each language adds its own generated-file patterns.
+    static let defaultGenerated = ["**/Generated/**"]
 
     lazy var excludeMatchers: [Glob] = (Config.defaultExcludes + (exclude ?? [])).map(Glob.init)
     lazy var generatedMatchers: [Glob] = (Config.defaultGenerated + (generated ?? [])).map(Glob.init)

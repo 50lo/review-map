@@ -6,7 +6,7 @@ declare global {
   }
 }
 
-export const SUPPORTED_VERSION = 1;
+export const SUPPORTED_VERSION = 2;
 
 export type ModelOrigin = "embedded" | "server" | "url" | "file";
 let origin: ModelOrigin = "file";

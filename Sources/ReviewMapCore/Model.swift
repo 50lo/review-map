@@ -2,7 +2,8 @@
 // Versioned; consumers must ignore fields they don't know.
 
 public struct ChangeModel: Codable, Equatable {
-    public var version: Int = 1
+    /// 2: contract flags carry their language's prefix ("swift:codable-shape").
+    public var version: Int = 2
     public var analyzer: AnalyzerInfo
     public var repo: RepoInfo
     public var components: [Component]
@@ -56,8 +57,10 @@ public struct RemovalCandidate: Codable, Equatable {
 
 public struct AnalyzerInfo: Codable, Equatable {
     public var version: String
-    /// "name-based" (default) or "index" (not implemented yet).
+    /// "name-based" (default), or "index" when index mode resolved at least one language.
     public var resolution: String
+    /// Ids of the languages with source files in the change ("swift").
+    public var languages: [String]?
 }
 
 public struct RepoInfo: Codable, Equatable {
@@ -79,7 +82,7 @@ public struct Component: Codable, Equatable {
     public var name: String
     public var kind: ComponentKind
     public var layer: String?
-    /// Module (Swift module name) the component's code compiles into, if known.
+    /// Module the component's code compiles into, if known.
     public var module: String?
     /// For components split out of a large target: the target component they came from.
     public var parent: String?
@@ -168,6 +171,7 @@ public struct Entity: Codable, Equatable {
     /// Every aspect that changed, most significant first (e.g. ["signature", "body"]).
     public var changes: [ChangeKind]
     public var signature: Signature
+    /// Contract flags, each prefixed with its language's id ("swift:mainactor-added").
     public var contractFlags: [String]
     /// "test", "generated".
     public var tags: [String]
