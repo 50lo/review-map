@@ -389,16 +389,23 @@ private final class RegionBuilder {
         }
 
         // Other conformers of a changed protocol, and their implementations of a changed requirement.
-        if d.kind == .protocol || d.parentKind == .protocol {
+        if d.kind == .protocol || d.parentKind == .protocol,
+           let interface = d.kind == .protocol ? pair : b.parentPair(hd, side: .head).map({ b.pairs[$0] }) {
             let proto = d.kind == .protocol ? d.name : (d.scope ?? "")
-            let requirement = d.kind == .protocol ? nil : d.name
+            let requirement = d.kind == .protocol ? nil : pair
             var n = 0
-            for t in inheritors[proto] ?? [] where n < 5 {
-                let typeName = t.decl.kind == .extension ? t.decl.name : t.decl.qualifiedName
-                if let req = requirement {
-                    let impls = (members["\(t.component)|\(typeName)"] ?? []).filter { $0.decl.name == req }
-                    guard let impl = impls.first else { continue }
-                    add(declItem(impl, relation: "conformer", supports: headerSupports))
+            let candidates = b.language(of: hd.file).conformers(of: interface, requirement: requirement, named: proto, in: b, for: .context)
+            for candidate in candidates where n < 5 {
+                let located: Located
+                if requirement != nil {
+                    guard let implementation = candidate.implementations.first else { continue }
+                    located = implementation
+                } else {
+                    located = candidate.declaration
+                }
+                let t = Indexed(component: located.component, file: located.file, index: located.index, decl: located.decl)
+                if requirement != nil {
+                    add(declItem(t, relation: "conformer", supports: headerSupports))
                 } else {
                     var it = declItem(t, relation: "conformer", supports: headerSupports)
                     it.lines = Array(t.decl.startLine...max(t.decl.startLine, t.decl.headerEndLine))

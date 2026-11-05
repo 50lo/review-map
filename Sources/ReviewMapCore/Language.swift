@@ -46,11 +46,77 @@ protocol Language {
     /// for a type, the type itself conform to or inherit from.
     func isViewCode(_ decl: Decl, inherits: Set<String>) -> Bool
 
+    // MARK: Structural review
+
+    /// Whether this declaration is public API. `enclosing` is its parent chain, innermost first;
+    /// it excludes the declaration itself. This classifies API for unused-code checks, not usage.
+    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool
+    /// Head declarations that conform to the matched interface. `builder` contains both sides,
+    /// all components, and their matched declaration pairs: implicit conformances may need the
+    /// base interface's method set even when a type no longer conforms at head.
+    /// `requirement` identifies the changed member, or is nil for whole-interface context.
+    /// `name` is the consumer's lookup spelling. The inheritance-based default preserves the
+    /// existing check and context lookup rules; implicit conformance need not require an import.
+    /// Implementations are supplied by the language so method-set matching can consider arity.
+    func conformers(of interface: Pair, requirement: Pair?, named name: String, in builder: ModelBuilder,
+                    for use: ConformanceUse) -> [Conformer]
+    /// The isolation of a reference at a 1-based line. `source` lazily reads the complete file on
+    /// this side, once per file, so languages can inspect enclosing blocks as well as declarations.
+    /// The default is no known isolation. The source reader is valid only during this call.
+    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String?
+
     // MARK: Resolution
 
     /// Exact references for each side, or nil when the language has no index. Throws when a side can't
     /// be indexed, and then the language's files are matched by name at both sides.
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]?
+}
+
+extension Language {
+    func conformers(of interface: Pair, requirement: Pair?, named name: String, in builder: ModelBuilder,
+                    for use: ConformanceUse) -> [Conformer] {
+        if use == .check, let member = requirement?.head?.decl {
+            let abstract = interface.any.decl.kind == .class && member.modifiers.contains("abstract")
+            // An existing default implementation covers every explicit conformer.
+            if !abstract, (builder.headMembers["\(name)|\(member.name)"] ?? []).contains(where: { implementation in
+                guard let parent = implementation.decl.parentIndex else { return false }
+                return builder.head.files[implementation.file]?.decls[parent].kind == .extension
+            }) { return [] }
+        }
+        var result: [Conformer] = []
+        for candidate in builder.inheritors[name] ?? [] {
+            if use == .check {
+                let component = interface.any.component
+                guard candidate.component == component || builder.edgeRefs[.head]?[candidate.component]?[component] != nil else { continue }
+            }
+            let type = candidate.decl.kind == .extension ? candidate.decl.name : candidate.decl.qualifiedName
+            var implementations: [Located] = []
+            if let member = requirement?.head?.decl {
+                implementations = (builder.headMembers["\(type)|\(member.name)"] ?? []).filter { implementation in
+                    switch use {
+                    case .check:
+                        return implementation.decl.kind == member.kind || ModelBuilder.kindGroup(implementation.decl.kind) == ModelBuilder.kindGroup(member.kind)
+                    case .context:
+                        return implementation.component == candidate.component
+                    }
+                }
+            }
+            result.append(Conformer(declaration: candidate, implementations: implementations))
+        }
+        return result
+    }
+
+    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? { nil }
+}
+
+/// The two existing consumers use different visibility and member matching rules.
+enum ConformanceUse: Hashable { case check, context }
+
+/// A head conformer and its implementations of the requested requirement. An empty implementation
+/// list means the requirement is missing; the core never rematches methods the language rejected.
+struct Conformer {
+    var declaration: Located
+    var implementations: [Located]
 }
 
 /// One side to index: its commit, the exported tree, and the language's source files in it.

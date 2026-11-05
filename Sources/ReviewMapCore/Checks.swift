@@ -140,19 +140,9 @@ struct StructuralChecks {
         return b.side(s).files[file]?.decls[i]
     }
 
-    /// Public API: Swift's public, open, and package; TypeScript's exports (named, not default) and their public members.
     private func isPublic(_ l: Located, _ s: Side) -> Bool {
-        let d = l.decl
-        if b.language(of: l.file).id == "swift" { return ["public", "open", "package"].contains(d.access ?? "") }
-        if d.modifiers.contains("default") { return false }
-        guard !d.isTopLevel else { return d.modifiers.contains("export") }
-        if let a = d.access, a != "public" { return false }
-        var cur = d.parentIndex
-        while let i = cur, let p = decl(s, l.file, i) {
-            if p.isTopLevel { return p.modifiers.contains("export") && !p.modifiers.contains("default") }
-            cur = p.parentIndex
-        }
-        return false
+        let enclosing = b.side(s).files[l.file]?.enclosingDeclarations(of: l.decl) ?? []
+        return b.language(of: l.file).isPublicAPI(l.decl, enclosing: enclosing)
     }
 
     /// Declarations that something calls without naming them: initializers, overrides, entry points,
@@ -451,18 +441,6 @@ struct StructuralChecks {
     // MARK: Conformers of a changed protocol
 
     private func conformers() -> [Finding] {
-        // Head containers by the names they conform to or inherit from.
-        var inheritors: [String: [Located]] = [:]
-        // "Type|member" -> head members, across every file and component.
-        var members: [String: [Located]] = [:]
-        for path in b.head.files.keys.sorted() {
-            guard let file = b.head.files[path], let comp = b.head.layout.fileComponent[path] else { continue }
-            for (i, d) in file.decls.enumerated() {
-                let l = Located(decl: d, file: path, index: i, component: comp)
-                if d.isContainer { for c in d.inherited.map(ModelBuilder.conformanceName) { inheritors[c, default: []].append(l) } }
-                if let scope = d.scope { members["\(scope)|\(d.name)", default: []].append(l) }
-            }
-        }
         let changedHead = Set(b.pairs.compactMap { p -> String? in
             guard let h = p.head, !p.changes.isEmpty, p.changes != [.cosmetic] else { return nil }
             return "\(h.file)|\(h.index)"
@@ -472,15 +450,15 @@ struct StructuralChecks {
             guard let h = p.head, !isLow(h, .head), let parent = decl(.head, h.file, h.decl.parentIndex) else { continue }
             let abstract = parent.kind == .class && h.decl.modifiers.contains("abstract")
             guard h.decl.inProtocol || abstract, p.changes.contains(.added) || p.changes.contains(.signature) else { continue }
+            guard let interfaceIndex = b.parentPair(h, side: .head) else { continue }
+            let interface = b.pairs[interfaceIndex]
             let proto = parent.qualifiedName
-            // Default implementations in an extension of the protocol cover every conformer.
-            if !abstract, (members["\(proto)|\(h.decl.name)"] ?? []).contains(where: { decl(.head, $0.file, $0.decl.parentIndex)?.kind == .extension }) { continue }
             var missing: [Located] = [], stale: [Located] = []
-            for c in inheritors[proto] ?? [] where c.decl.kind != .protocol && !(c.decl.kind == .extension && c.decl.name == proto) && !isLow(c, .head) {
-                // Only conformers that can see the protocol: the same component, or one that depends on it.
-                guard c.component == h.component || b.edgeRefs[.head]![c.component]?[h.component] != nil else { continue }
-                let type = c.decl.kind == .extension ? c.decl.name : c.decl.qualifiedName
-                let impl = (members["\(type)|\(h.decl.name)"] ?? []).filter { $0.decl.kind == h.decl.kind || ModelBuilder.kindGroup($0.decl.kind) == ModelBuilder.kindGroup(h.decl.kind) }
+            let candidates = b.language(of: h.file).conformers(of: interface, requirement: p, named: proto, in: b, for: .check)
+            for candidate in candidates {
+                let c = candidate.declaration
+                guard c.decl.kind != .protocol, !(c.decl.kind == .extension && c.decl.name == proto), !isLow(c, .head) else { continue }
+                let impl = candidate.implementations
                 if impl.isEmpty {
                     if !(missing.contains { $0.decl.qualifiedName == c.decl.qualifiedName }) { missing.append(c) }
                 } else if p.changes.contains(.signature) && !impl.contains(where: { changedHead.contains("\($0.file)|\($0.index)") }) {

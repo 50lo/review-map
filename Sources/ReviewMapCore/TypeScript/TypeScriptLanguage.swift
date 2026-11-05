@@ -92,6 +92,27 @@ struct TypeScriptLanguage: Language {
         return ["JSX.Element", "ReactNode", "ReactElement", "FC<", "FunctionComponent", "ComponentType"].contains(where: types.contains)
     }
 
+    // MARK: Structural review
+
+    /// Named exports and their public members; default exports keep their existing exclusion.
+    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool {
+        if decl.modifiers.contains("default") { return false }
+        guard !decl.isTopLevel else { return decl.modifiers.contains("export") }
+        if let access = decl.access, access != "public" { return false }
+        guard let top = enclosing.first(where: \.isTopLevel) else { return false }
+        return top.modifiers.contains("export") && !top.modifiers.contains("default")
+    }
+
+    /// Preserve the existing interpretation of Actor-suffixed decorators on TypeScript callers.
+    /// Other declarations have no known isolation; SwiftUI inheritance has no TypeScript meaning.
+    func isolation(in file: ParsedFile, line: Int, source: () -> String) -> String? {
+        guard let decl = file.enclosingDecl(line: line) else { return nil }
+        for enclosing in [decl] + file.enclosingDeclarations(of: decl) {
+            if let attribute = enclosing.attributes.first(where: { $0.hasSuffix("Actor") }) { return "@" + attribute }
+        }
+        return nil
+    }
+
     // MARK: Resolution
 
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {
