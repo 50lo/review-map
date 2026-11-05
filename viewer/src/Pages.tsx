@@ -18,7 +18,7 @@ import {
 } from "./levels";
 import type { Focus } from "./nav";
 import { findingsForComponent, findingsForEntity } from "./findings";
-import { FindingsSection } from "./Findings";
+import { FindingsSection } from "./FindingsSection";
 import { EdgeList } from "./Sidebar";
 import { canOpenInEditor, editorName, openInEditor } from "./source";
 import { setNote, useReview } from "./review";
