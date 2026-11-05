@@ -15,10 +15,13 @@ enum SwiftComponents {
             for t in spmTargets(root: root, packageDir: pkgDir, dumpPackage: dumpPackage, layout: &layout) {
                 var id = "spm:\(t.name)"
                 if layout.components[id] != nil { id = "spm:\(pkgDir)/\(t.name)" }
+                let targetPath = join(pkgDir, t.path)
+                // A fixture package's library targets are test code in the enclosing repository.
+                let isTest = t.isTest || ComponentBuilder.isTestPath(targetPath)
                 layout.components[id] = ComponentInfo(id: id, name: t.name, kind: .spmTarget, module: t.name,
-                                                      parent: nil, isTest: t.isTest, layer: nil)
+                                                      parent: nil, isTest: isTest, layer: nil)
                 layout.moduleComponent[t.name] = layout.moduleComponent[t.name] ?? id
-                claimedDirs.append((join(pkgDir, t.path), id))
+                claimedDirs.append((targetPath, id))
                 layout.targetSettings[id] = TargetSettings(file: manifestPath, settings: t.settings, language: "swift")
                 for d in t.deps {
                     layout.manifestDeps.append(ManifestDep(from: id, module: d.name, file: manifestPath, language: "swift"))
