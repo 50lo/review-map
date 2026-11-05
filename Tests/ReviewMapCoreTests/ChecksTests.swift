@@ -13,7 +13,9 @@ final class ChecksTests: XCTestCase {
     }
 
     /// A repo with `base` committed on branch `base` and `head` on `main`. A nil file content deletes the file.
-    func analyze(base: [String: String], head: [String: String?]) throws -> ChangeModel {
+    /// `index` stands in for the indexers.
+    func analyze(base: [String: String], head: [String: String?],
+                 index: ((Language, String, String) -> [Side: SideIndex]?)? = nil) throws -> ChangeModel {
         let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-checks-\(UUID().uuidString)")
         repos.append(repo)
         let fm = FileManager.default
@@ -40,7 +42,7 @@ final class ChecksTests: XCTestCase {
         try write(head)
         try git("add", "-A")
         try git("commit", "-qm", "head")
-        return try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"))
+        return try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"), index: index)
     }
 
     func findings(_ m: ChangeModel, _ kind: String) -> [Finding] {
@@ -115,6 +117,25 @@ final class ChecksTests: XCTestCase {
         XCTAssertTrue(f.anchors.contains(.entity("folder:App::show()")), "the caller that dropped it")
         XCTAssertEqual(f.location?.file, "Lib/Format.swift")
         XCTAssertEqual(findings(m, "orphaned").count, 1)
+    }
+
+    /// A file the index has no data for (a target the build skipped) still counts its callers by name.
+    func testPartialIndexKeepsNameReferencesOfUncoveredFiles() throws {
+        let format = "struct Format {\n    static func legacy(_ s: String) -> String { s }\n}\n"
+        let m = try analyze(
+            base: ["Lib/Format.swift": format,
+                   "App/App.swift": "func show() { print(Format.legacy(\"a\")) }\n",
+                   "Other/Other.swift": "func other() { print(Format.legacy(\"b\")) }\n"],
+            head: ["Other/Other.swift": "func other() { print(\"b\") }\n"],
+            index: { lang, _, _ in
+                guard lang.id == "swift" else { return nil }
+                // App/App.swift is missing on both sides, as if its target weren't built.
+                let ref = IndexedRef(line: 1, targetFile: "Lib/Format.swift", targetLine: 2, name: "legacy(_:)")
+                return [.base: SideIndex(refs: ["Lib/Format.swift": [], "Other/Other.swift": [ref]]),
+                        .head: SideIndex(refs: ["Lib/Format.swift": [], "Other/Other.swift": []])]
+            })
+        XCTAssertEqual(m.analyzer.resolution, "index")
+        XCTAssertEqual(findings(m, "orphaned"), [], "App/App.swift still calls Format.legacy")
     }
 
     func testConformersOfAChangedProtocol() throws {

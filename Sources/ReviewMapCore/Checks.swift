@@ -172,10 +172,20 @@ struct StructuralChecks {
         let d = l.decl
         let lang = b.language(of: l.file).id
         if b.indexedLanguages.contains(lang), let map = indexed[s] {
-            return (map[DeclKey(side: s, file: l.file, index: l.index)] ?? []).filter { o in
+            let exact = (map[DeclKey(side: s, file: l.file, index: l.index)] ?? []).filter { o in
                 !(o.file == l.file && d.startLine <= o.line && o.line <= d.endLine)
             }
+            // Files the index has no data for (a target the build skipped) fall back to name occurrences,
+            // as reference resolution does.
+            let covered = b.index[s]?.refs ?? [:]
+            return exact + nameOccurrences(l, s).filter { covered[$0.file] == nil }
         }
+        return nameOccurrences(l, s)
+    }
+
+    /// Where the declaration's name appears at one side, outside the declaration itself.
+    private func nameOccurrences(_ l: Located, _ s: Side) -> [Occurrence] {
+        let d = l.decl
         // Lines that name the declaration without using it: the declaration itself and extension headers of the type.
         var own: [String: [ClosedRange<Int>]] = [l.file: [d.startLine...d.endLine]]
         if d.isContainer {

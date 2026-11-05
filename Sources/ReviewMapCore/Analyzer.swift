@@ -40,6 +40,13 @@ public enum Analyzer {
     }
 
     public static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in }) throws -> ChangeModel {
+        try run(options, log: log, index: nil)
+    }
+
+    /// `index`, for tests, stands in for the languages' indexers: given a language and the two sides'
+    /// exported trees, it returns that language's references, or nil for none.
+    static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in },
+                    index injected: ((Language, _ baseDir: String, _ headDir: String) -> [Side: SideIndex]?)?) throws -> ChangeModel {
         let root = try Shell.string(["git", "-C", options.repo, "rev-parse", "--show-toplevel"])
         let git = GitRepo(root: root)
         let headSha = try git.revParse(options.head)
@@ -73,7 +80,9 @@ public enum Analyzer {
 
         var builder = ModelBuilder(base: baseSide, head: headSide, languages: languages, options: options)
         let indexOptions = options.index.merged(with: config.index)
-        if indexOptions.enabled == true {
+        if let injected {
+            for lang in languages { if let idx = injected(lang, baseDir, headDir) { builder.addIndex(idx, language: lang) } }
+        } else if indexOptions.enabled == true {
             for lang in languages {
                 let files = { (s: SideData) in s.files.filter { $0.value.language == lang.id }.keys.sorted() }
                 do {
