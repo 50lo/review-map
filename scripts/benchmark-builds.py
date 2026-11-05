@@ -49,6 +49,7 @@ def main():
         "skip_clean": args.skip_clean,
         "date": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "commit": capture(["git", "rev-parse", "HEAD"]),
+        "git_status": capture(["git", "status", "--short"]),
         "platform": platform.platform(),
         "machine": capture(["sysctl", "-n", "hw.model"]) if platform.system() == "Darwin" else platform.machine(),
         "cpus": os.cpu_count(),
@@ -59,6 +60,9 @@ def main():
         "toolchains": os.environ.get("TOOLCHAINS"),
         "samples": [],
     }
+    if platform.system() == "Darwin":
+        results["xcode"] = capture(["xcodebuild", "-version"])
+        results["swiftc_path"] = capture(["xcrun", "--find", "swiftc"])
     if "bazel" in args.systems:
         results["bazel"] = capture(["bazel", "--version"])
     logs = args.output.parent / (args.output.stem + "-logs")

@@ -535,7 +535,7 @@
     "@@rules_swift_package_manager+//:extensions.bzl%swift_deps": {
       "general": {
         "bzlTransitiveDigest": "WqjwddNEIa8R9dLFD9cWurdqtd+HXujkNm9hZvk+lhI=",
-        "usagesDigest": "FMsquWn+YShWiIpxgrGlCRZZiU4Hu+bMtR9H2CnjCpw=",
+        "usagesDigest": "0ZbvNCMdobR7ImyG1SKMwVlR7WphGJK2wK+xxVPBfsg=",
         "recordedInputs": [
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
@@ -678,7 +678,7 @@
               "target_deps": {},
               "module_aliases": {},
               "dep_module_aliases": "",
-              "bazel_target_mods": "",
+              "bazel_target_mods": "[{\"attr\":\"textual_hdrs\",\"target\":\"IndexStoreDB_LLVMSupport.rspm_cxx\",\"values\":[\"Sources/IndexStoreDB_LLVMSupport/Unix/Host.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Memory.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Mutex.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Path.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Process.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Program.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Signals.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Threading.inc\",\"Sources/IndexStoreDB_LLVMSupport/Unix/Watchdog.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Host.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Memory.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Mutex.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Path.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Process.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Program.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Signals.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Threading.inc\",\"Sources/IndexStoreDB_LLVMSupport/Windows/Watchdog.inc\"],\"verb\":\"add\"},{\"attr\":\"textual_hdrs\",\"target\":\"IndexStoreDB_Index.rspm_cxx\",\"values\":[\"Sources/IndexStoreDB_Index/indexstore_functions.def\"],\"verb\":\"add\"}]",
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
@@ -716,7 +716,7 @@
               "target_deps": {},
               "module_aliases": {},
               "dep_module_aliases": "",
-              "bazel_target_mods": "",
+              "bazel_target_mods": "[{\"attr\":\"srcs\",\"target\":\"TreeSitterTSX.rspm_c\",\"values\":[\"common/scanner.h\"],\"verb\":\"add\"},{\"attr\":\"srcs\",\"target\":\"TreeSitterTypeScript.rspm_c\",\"values\":[\"common/scanner.h\"],\"verb\":\"add\"}]",
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
