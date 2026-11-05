@@ -539,8 +539,9 @@ struct PromptBuilder: @unchecked Sendable {
     }
 
     func prompt(_ b: Batch) -> String {
+        let languages = (model.analyzer.languages ?? ["swift"]).map(Languages.displayName).joined(separator: " and ")
         var out = """
-        You are helping a reviewer read a Swift change. A deterministic analyzer already found the changed \
+        You are helping a reviewer read a \(languages.isEmpty ? "code" : languages) change. A deterministic analyzer already found the changed \
         declarations (entities) of one component, cut them into review regions with a risk score, and collected \
         unchanged context regions that may explain them. You only annotate these facts: never add entities, \
         regions, or ids, and never drop any.

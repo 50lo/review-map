@@ -69,10 +69,10 @@ final class FixtureTests: XCTestCase {
 
     func testProtocolRequirements() throws {
         let m = try model("basic")
-        XCTAssertEqual(try entity(m, "CartRepository.clear()").contractFlags, ["protocol-requirement-added"])
-        XCTAssertEqual(try entity(m, "CartRepository.items()").contractFlags, ["async-added", "protocol-requirement-changed"])
+        XCTAssertEqual(try entity(m, "CartRepository.clear()").contractFlags, ["swift:protocol-requirement-added"])
+        XCTAssertEqual(try entity(m, "CartRepository.items()").contractFlags, ["swift:async-added", "swift:protocol-requirement-changed"])
         let proto = try entity(m, "CartRepository")
-        XCTAssertTrue(proto.contractFlags.contains("protocol-requirement-added"))
+        XCTAssertTrue(proto.contractFlags.contains("swift:protocol-requirement-added"))
         XCTAssertTrue(proto.isInterface)
     }
 
@@ -90,23 +90,23 @@ final class FixtureTests: XCTestCase {
 
     func testConcurrency() throws {
         let m = try model("basic")
-        XCTAssertTrue(try entity(m, "CheckoutViewModel").contractFlags.contains("mainactor-added"))
-        XCTAssertEqual(try entity(m, "CheckoutViewModel.refresh()").contractFlags, ["nonisolated-removed"])
-        XCTAssertEqual(try entity(m, "PriceCache").contractFlags, ["kind-changed:class->actor"])
+        XCTAssertTrue(try entity(m, "CheckoutViewModel").contractFlags.contains("swift:mainactor-added"))
+        XCTAssertEqual(try entity(m, "CheckoutViewModel.refresh()").contractFlags, ["swift:nonisolated-removed"])
+        XCTAssertEqual(try entity(m, "PriceCache").contractFlags, ["swift:kind-changed:class->actor"])
     }
 
     func testCodableShape() throws {
         let m = try model("basic")
-        XCTAssertEqual(try entity(m, "Item.price").contractFlags, ["codable-shape"])
+        XCTAssertEqual(try entity(m, "Item.price").contractFlags, ["swift:codable-shape"])
         XCTAssertEqual(try entity(m, "Item.currency").change, .added)
-        XCTAssertTrue(try entity(m, "Item").contractFlags.contains("codable-shape"))
-        XCTAssertTrue(try entity(m, "Item.CodingKeys.currency").contractFlags.contains("codable-shape"))
+        XCTAssertTrue(try entity(m, "Item").contractFlags.contains("swift:codable-shape"))
+        XCTAssertTrue(try entity(m, "Item.CodingKeys.currency").contractFlags.contains("swift:codable-shape"))
     }
 
     func testBodyAccessCosmeticAndOverloads() throws {
         let m = try model("basic")
         XCTAssertEqual(try entity(m, "Cart.add(_:)").change, .body, "removed guard is a body change")
-        XCTAssertEqual(try entity(m, "Cart.format(_:)").contractFlags, ["access-changed:internal->public"])
+        XCTAssertEqual(try entity(m, "Cart.format(_:)").contractFlags, ["swift:access-changed:internal->public"])
         XCTAssertEqual(try entity(m, "CatalogView.title()").change, .cosmetic)
         let prices = m.entities.filter { $0.qualifiedName == "Cart.price(for:)" }
         XCTAssertEqual(prices.count, 1, "only the changed overload is reported")
@@ -115,19 +115,19 @@ final class FixtureTests: XCTestCase {
 
     func testEnumModelObservable() throws {
         let m = try model("basic")
-        XCTAssertEqual(try entity(m, "PaymentMethod.applePay").contractFlags, ["enum-case-added"])
-        XCTAssertTrue(try entity(m, "PaymentMethod").contractFlags.contains("enum-case-added"))
-        XCTAssertEqual(try entity(m, "Order.placedAt").contractFlags, ["swiftdata-model-changed"])
-        XCTAssertTrue(try entity(m, "Order").contractFlags.contains("swiftdata-model-changed"))
-        XCTAssertEqual(try entity(m, "CheckoutViewModel.total").contractFlags, ["observable-state-changed"])
+        XCTAssertEqual(try entity(m, "PaymentMethod.applePay").contractFlags, ["swift:enum-case-added"])
+        XCTAssertTrue(try entity(m, "PaymentMethod").contractFlags.contains("swift:enum-case-added"))
+        XCTAssertEqual(try entity(m, "Order.placedAt").contractFlags, ["swift:swiftdata-model-changed"])
+        XCTAssertTrue(try entity(m, "Order").contractFlags.contains("swift:swiftdata-model-changed"))
+        XCTAssertEqual(try entity(m, "CheckoutViewModel.total").contractFlags, ["swift:observable-state-changed"])
         XCTAssertEqual(try entity(m, "CheckoutViewModel.client").contractFlags, [], "not @Published")
         XCTAssertEqual(try entity(m, "PaymentClient.charge(_:method:)").contractFlags,
-                       ["access-changed:internal->public", "typed-throws-changed"])
+                       ["swift:access-changed:internal->public", "swift:typed-throws-changed"])
     }
 
     func testNonCodeContractsAndPackages() throws {
         let m = try model("basic")
-        XCTAssertEqual(try entity(m, "App/Info.plist").contractFlags, ["info-plist-changed", "url-schemes-changed"])
+        XCTAssertEqual(try entity(m, "App/Info.plist").contractFlags, ["swift:info-plist-changed", "swift:url-schemes-changed"])
         XCTAssertEqual(try entity(m, "App/Shop.entitlements").change, .added)
         XCTAssertEqual(m.externalDeps, [ExternalDepChange(name: "swift-collections", change: "bumped", from: "1.1.0", to: "1.2.0")])
     }
@@ -136,7 +136,7 @@ final class FixtureTests: XCTestCase {
         let m = try model("basic")
         let settings = try entity(m, "Features build settings")
         XCTAssertEqual(settings.kind, .target)
-        XCTAssertEqual(settings.contractFlags, ["default-isolation-changed"])
+        XCTAssertEqual(settings.contractFlags, ["swift:default-isolation-changed"])
         XCTAssertEqual(settings.signature.head, "swiftSettings: .defaultIsolation(MainActor.self)")
         XCTAssertFalse(m.entities.contains { $0.qualifiedName == "Banner" }, "conformance moved to an extension is not a change")
         let ext = try entity(m, "extension Banner: Hashable")
@@ -175,7 +175,7 @@ final class FixtureTests: XCTestCase {
         XCTAssertTrue(first[0].reasons.contains("new force unwrap"))
 
         let refresh = try regions(m, "CheckoutViewModel.refresh()", kind: "review")
-        XCTAssertEqual(refresh.first?.reasons.first, "nonisolated-removed")
+        XCTAssertEqual(refresh.first?.reasons.first, "swift:nonisolated-removed")
         XCTAssertGreaterThanOrEqual(refresh.first?.risk ?? 0, 0.6)
 
         let send = try regions(m, "Transport.send(_:)", kind: "review")
@@ -184,7 +184,7 @@ final class FixtureTests: XCTestCase {
 
         let item = try regions(m, "Item", kind: "review")
         XCTAssertEqual(item.map(\.startLine), [3], "flags from members sit on the declaration line")
-        XCTAssertTrue(item[0].reasons.contains("codable-shape"))
+        XCTAssertTrue(item[0].reasons.contains("swift:codable-shape"))
 
         XCTAssertTrue(try regions(m, "CatalogView.title()").isEmpty, "cosmetic changes have no regions")
         let testIds = Set(m.entities.filter { $0.tags.contains("test") }.map(\.id))

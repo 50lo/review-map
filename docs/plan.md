@@ -49,7 +49,7 @@ The core stays in Swift: git export, diffing, components, regions, risk, the LLM
 
 ### 3. TypeScript
 
-TypeScript is the first new language; Rust and Go follow the same path. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
+TypeScript is the first new language; Rust and Go follow the same path. It brings tree-sitter with the TypeScript grammar, TypeScript's declaration, reference, and risk queries, and npm workspace and `tsconfig` components. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
 
 | Language | Indexer | Needs |
 | --- | --- | --- |

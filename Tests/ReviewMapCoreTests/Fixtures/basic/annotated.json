@@ -1,5 +1,8 @@
 {
   "analyzer" : {
+    "languages" : [
+      "swift"
+    ],
     "resolution" : "name-based",
     "version" : "0.1.0"
   },
@@ -698,7 +701,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "access-changed:internal->public"
+        "swift:access-changed:internal->public"
       ],
       "dependsOn" : [
 
@@ -741,8 +744,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "protocol-requirement-added",
-        "protocol-requirement-changed"
+        "swift:protocol-requirement-added",
+        "swift:protocol-requirement-changed"
       ],
       "dependsOn" : [
 
@@ -789,8 +792,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "async-added",
-        "protocol-requirement-changed"
+        "swift:async-added",
+        "swift:protocol-requirement-changed"
       ],
       "dependsOn" : [
 
@@ -827,7 +830,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "protocol-requirement-added"
+        "swift:protocol-requirement-added"
       ],
       "dependsOn" : [
 
@@ -869,7 +872,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -946,7 +949,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -994,7 +997,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -1036,7 +1039,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1073,8 +1076,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added",
-        "codable-shape"
+        "swift:enum-case-added",
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -1116,7 +1119,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1169,7 +1172,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1205,8 +1208,8 @@
       ],
       "component" : "folder:App",
       "contractFlags" : [
-        "info-plist-changed",
-        "url-schemes-changed"
+        "swift:info-plist-changed",
+        "swift:url-schemes-changed"
       ],
       "dependsOn" : [
 
@@ -1241,7 +1244,7 @@
       ],
       "component" : "folder:App",
       "contractFlags" : [
-        "entitlements-changed"
+        "swift:entitlements-changed"
       ],
       "dependsOn" : [
 
@@ -1276,7 +1279,7 @@
       ],
       "component" : "spm:Features",
       "contractFlags" : [
-        "default-isolation-changed"
+        "swift:default-isolation-changed"
       ],
       "dependsOn" : [
 
@@ -1392,8 +1395,8 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "mainactor-added",
-        "observable-state-changed"
+        "swift:mainactor-added",
+        "swift:observable-state-changed"
       ],
       "dependsOn" : [
 
@@ -1482,7 +1485,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "observable-state-changed"
+        "swift:observable-state-changed"
       ],
       "dependsOn" : [
 
@@ -1607,7 +1610,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "nonisolated-removed"
+        "swift:nonisolated-removed"
       ],
       "dependsOn" : [
 
@@ -1656,7 +1659,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "throws-added"
+        "swift:throws-added"
       ],
       "dependsOn" : [
         {
@@ -1705,7 +1708,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "kind-changed:class->actor"
+        "swift:kind-changed:class->actor"
       ],
       "dependsOn" : [
 
@@ -1839,8 +1842,8 @@
       ],
       "component" : "spm:Networking",
       "contractFlags" : [
-        "access-changed:internal->public",
-        "typed-throws-changed"
+        "swift:access-changed:internal->public",
+        "swift:typed-throws-changed"
       ],
       "dependsOn" : [
         {
@@ -1948,7 +1951,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "async-added"
+        "swift:async-added"
       ],
       "dependsOn" : [
         {
@@ -2037,7 +2040,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -2079,7 +2082,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -2116,7 +2119,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -2571,7 +2574,7 @@
         "risk" : 0.68
       },
       "reasons" : [
-        "access-changed:internal->public"
+        "swift:access-changed:internal->public"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2588,8 +2591,8 @@
         "risk" : 0.14
       },
       "reasons" : [
-        "protocol-requirement-added",
-        "protocol-requirement-changed",
+        "swift:protocol-requirement-added",
+        "swift:protocol-requirement-changed",
         "used from 1 component"
       ],
       "risk" : 0.863,
@@ -2631,8 +2634,8 @@
         "risk" : 0.73
       },
       "reasons" : [
-        "async-added",
-        "protocol-requirement-changed"
+        "swift:async-added",
+        "swift:protocol-requirement-changed"
       ],
       "risk" : 0.856,
       "side" : "head",
@@ -2695,7 +2698,7 @@
         "risk" : 0.48
       },
       "reasons" : [
-        "protocol-requirement-added"
+        "swift:protocol-requirement-added"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2734,7 +2737,7 @@
         "risk" : 0.41
       },
       "reasons" : [
-        "codable-shape",
+        "swift:codable-shape",
         "used from 4 components"
       ],
       "risk" : 0.712,
@@ -2875,7 +2878,7 @@
         "risk" : 0.41
       },
       "reasons" : [
-        "codable-shape",
+        "swift:codable-shape",
         "used from 1 component"
       ],
       "risk" : 0.658,
@@ -2994,7 +2997,7 @@
         "risk" : 0.69
       },
       "reasons" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3011,7 +3014,7 @@
         "risk" : 0.77
       },
       "reasons" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -3032,8 +3035,8 @@
         "risk" : 0.85
       },
       "reasons" : [
-        "codable-shape",
-        "enum-case-added"
+        "swift:codable-shape",
+        "swift:enum-case-added"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -3050,7 +3053,7 @@
         "risk" : 0.44
       },
       "reasons" : [
-        "enum-case-added",
+        "swift:enum-case-added",
         "used from 2 components"
       ],
       "risk" : 0.676,
@@ -3143,7 +3146,7 @@
         "risk" : 0.84
       },
       "reasons" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3160,8 +3163,8 @@
         "risk" : 0.24
       },
       "reasons" : [
-        "url-schemes-changed",
-        "info-plist-changed"
+        "swift:url-schemes-changed",
+        "swift:info-plist-changed"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -3182,7 +3185,7 @@
         "risk" : 0.13
       },
       "reasons" : [
-        "entitlements-changed"
+        "swift:entitlements-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3199,7 +3202,7 @@
         "risk" : 0.27
       },
       "reasons" : [
-        "default-isolation-changed"
+        "swift:default-isolation-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3233,8 +3236,8 @@
         "risk" : 0.05
       },
       "reasons" : [
-        "mainactor-added",
-        "observable-state-changed"
+        "swift:mainactor-added",
+        "swift:observable-state-changed"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -3297,7 +3300,7 @@
         "risk" : 0.64
       },
       "reasons" : [
-        "observable-state-changed"
+        "swift:observable-state-changed"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -3454,7 +3457,7 @@
         "risk" : 0.21
       },
       "reasons" : [
-        "nonisolated-removed"
+        "swift:nonisolated-removed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3497,7 +3500,7 @@
         "risk" : 0.46
       },
       "reasons" : [
-        "throws-added"
+        "swift:throws-added"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -3563,7 +3566,7 @@
         "risk" : 0.42
       },
       "reasons" : [
-        "kind-changed:class->actor"
+        "swift:kind-changed:class->actor"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3670,8 +3673,8 @@
         "risk" : 0.06
       },
       "reasons" : [
-        "access-changed:internal->public",
-        "typed-throws-changed",
+        "swift:access-changed:internal->public",
+        "swift:typed-throws-changed",
         "used from 1 component"
       ],
       "risk" : 0.863,
@@ -3800,7 +3803,7 @@
         "risk" : 0.82
       },
       "reasons" : [
-        "async-added",
+        "swift:async-added",
         "used from 1 component"
       ],
       "risk" : 0.658,
@@ -3910,7 +3913,7 @@
         "risk" : 0.8
       },
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3927,7 +3930,7 @@
         "risk" : 0.05
       },
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3969,7 +3972,7 @@
         "risk" : 0.05
       },
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -4071,7 +4074,7 @@
     "root" : "<repo>",
     "usesMergeBase" : true
   },
-  "version" : 1,
+  "version" : 2,
   "warnings" : [
     {
       "kind" : "ambiguous-name",

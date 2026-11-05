@@ -5,7 +5,7 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 | # | Step | Status |
 | --- | --- | --- |
 | 1 | Map: selection glitch, collapse and expand, editor command | Done; the glitch fix still needs a check on a large real model |
-| 2 | Language-neutral core | Not started |
+| 2 | Language-neutral core | Done |
 | 3 | TypeScript | Not started |
 | 4 | Structural review | Not started |
 | 5 | Faster Swift indexing | Not started |
@@ -20,3 +20,14 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 - **Neighbors.** The default scope is unchanged: changed components and the other ends of changed edges. "Show N more neighbors" in a component's side panel adds its hidden neighbors on request; expansions start over with the scope.
 - **Editor command.** `--editor` on `reviewmap` and `reviewmap view` (or `REVIEWMAP_EDITOR`) takes a preset (`xcode`, `vscode`, `cursor`, `zed`, `idea`, `webstorm`, `goland`, `rustrover`) or a command with `{file}` and `{line}`. The default stays Xcode on macOS; elsewhere the Open buttons are hidden until an editor is set. The buttons are named after the editor.
 - Checked in Chromium at desktop and phone widths, in light and dark mode, on the fixture and on a synthetic model with 360 components and 600 edges. `--editor` was checked end to end with `reviewmap view` on a model of this repo.
+
+## Step 2 notes
+
+- The `Language` protocol is the seam. A language supplies its parser, the components its manifests declare, its platform modules, its lockfile pins, its contract flags and their risk weights, its non-code contracts and build-setting flags, what counts as view code, and its index.
+- Swift's code lives in `Sources/ReviewMapCore/Swift/`: SwiftSyntax parsing and risk marks, SPM and Xcode components, contract flags, Apple's non-code contracts, Package.resolved pins, and the index store build. The core keeps folder components, splitting, `reviewmap.yml` rules, matching, name resolution, edges, usage, regions, and risk scoring.
+- Risk marks have language-neutral kinds: crash, check, flow, concurrency, and isolation.
+- Contract flags carry the language's prefix (`swift:codable-shape`). The model is version 2, and `analyzer.languages` lists the languages in the change. The viewer shows flags without the prefix.
+- Index mode runs per language. A language whose index can't be built falls back to name matching at both sides without affecting the others.
+- `SCIP.swift` reads SCIP indexes into the same per-side references the index store gives: definitions place each symbol, every other occurrence is a reference, and local symbols resolve only within their document. It is tested with indexes written field by field; no indexer runs it yet.
+- Tree-sitter comes with TypeScript in step 3, where its first grammar is used.
+- On IceCubesApp's last 10 and 40 commits and on two ranges of this repo, the model is the same as before the change apart from the flag prefix.

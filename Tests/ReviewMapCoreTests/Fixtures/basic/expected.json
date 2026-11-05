@@ -1,5 +1,8 @@
 {
   "analyzer" : {
+    "languages" : [
+      "swift"
+    ],
     "resolution" : "name-based",
     "version" : "0.1.0"
   },
@@ -665,7 +668,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "access-changed:internal->public"
+        "swift:access-changed:internal->public"
       ],
       "dependsOn" : [
 
@@ -705,8 +708,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "protocol-requirement-added",
-        "protocol-requirement-changed"
+        "swift:protocol-requirement-added",
+        "swift:protocol-requirement-changed"
       ],
       "dependsOn" : [
 
@@ -750,8 +753,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "async-added",
-        "protocol-requirement-changed"
+        "swift:async-added",
+        "swift:protocol-requirement-changed"
       ],
       "dependsOn" : [
 
@@ -785,7 +788,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "protocol-requirement-added"
+        "swift:protocol-requirement-added"
       ],
       "dependsOn" : [
 
@@ -824,7 +827,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -898,7 +901,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -943,7 +946,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -982,7 +985,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1016,8 +1019,8 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added",
-        "codable-shape"
+        "swift:enum-case-added",
+        "swift:codable-shape"
       ],
       "dependsOn" : [
 
@@ -1056,7 +1059,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1106,7 +1109,7 @@
       ],
       "component" : "cfg:Core",
       "contractFlags" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "dependsOn" : [
 
@@ -1139,8 +1142,8 @@
       ],
       "component" : "folder:App",
       "contractFlags" : [
-        "info-plist-changed",
-        "url-schemes-changed"
+        "swift:info-plist-changed",
+        "swift:url-schemes-changed"
       ],
       "dependsOn" : [
 
@@ -1172,7 +1175,7 @@
       ],
       "component" : "folder:App",
       "contractFlags" : [
-        "entitlements-changed"
+        "swift:entitlements-changed"
       ],
       "dependsOn" : [
 
@@ -1204,7 +1207,7 @@
       ],
       "component" : "spm:Features",
       "contractFlags" : [
-        "default-isolation-changed"
+        "swift:default-isolation-changed"
       ],
       "dependsOn" : [
 
@@ -1314,8 +1317,8 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "mainactor-added",
-        "observable-state-changed"
+        "swift:mainactor-added",
+        "swift:observable-state-changed"
       ],
       "dependsOn" : [
 
@@ -1398,7 +1401,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "observable-state-changed"
+        "swift:observable-state-changed"
       ],
       "dependsOn" : [
 
@@ -1514,7 +1517,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "nonisolated-removed"
+        "swift:nonisolated-removed"
       ],
       "dependsOn" : [
 
@@ -1560,7 +1563,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "throws-added"
+        "swift:throws-added"
       ],
       "dependsOn" : [
         {
@@ -1606,7 +1609,7 @@
       ],
       "component" : "spm:Features/Checkout",
       "contractFlags" : [
-        "kind-changed:class->actor"
+        "swift:kind-changed:class->actor"
       ],
       "dependsOn" : [
 
@@ -1731,8 +1734,8 @@
       ],
       "component" : "spm:Networking",
       "contractFlags" : [
-        "access-changed:internal->public",
-        "typed-throws-changed"
+        "swift:access-changed:internal->public",
+        "swift:typed-throws-changed"
       ],
       "dependsOn" : [
         {
@@ -1834,7 +1837,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "async-added"
+        "swift:async-added"
       ],
       "dependsOn" : [
         {
@@ -1917,7 +1920,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -1956,7 +1959,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -1990,7 +1993,7 @@
       ],
       "component" : "spm:Persistence",
       "contractFlags" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "dependsOn" : [
 
@@ -2364,7 +2367,7 @@
       "id" : "cfg:Core::Cart.format(_:)/r1",
       "kind" : "review",
       "reasons" : [
-        "access-changed:internal->public"
+        "swift:access-changed:internal->public"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2377,8 +2380,8 @@
       "id" : "cfg:Core::CartRepository/r1",
       "kind" : "review",
       "reasons" : [
-        "protocol-requirement-added",
-        "protocol-requirement-changed",
+        "swift:protocol-requirement-added",
+        "swift:protocol-requirement-changed",
         "used from 1 component"
       ],
       "risk" : 0.863,
@@ -2413,8 +2416,8 @@
       "id" : "cfg:Core::CartRepository.items()/r1",
       "kind" : "review",
       "reasons" : [
-        "async-added",
-        "protocol-requirement-changed"
+        "swift:async-added",
+        "swift:protocol-requirement-changed"
       ],
       "risk" : 0.856,
       "side" : "head",
@@ -2466,7 +2469,7 @@
       "id" : "cfg:Core::CartRepository.clear()/r1",
       "kind" : "review",
       "reasons" : [
-        "protocol-requirement-added"
+        "swift:protocol-requirement-added"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2497,7 +2500,7 @@
       "id" : "cfg:Core::Item/r1",
       "kind" : "review",
       "reasons" : [
-        "codable-shape",
+        "swift:codable-shape",
         "used from 4 components"
       ],
       "risk" : 0.712,
@@ -2616,7 +2619,7 @@
       "id" : "cfg:Core::Item.price/r1",
       "kind" : "review",
       "reasons" : [
-        "codable-shape",
+        "swift:codable-shape",
         "used from 1 component"
       ],
       "risk" : 0.658,
@@ -2717,7 +2720,7 @@
       "id" : "cfg:Core::Item.currency/r1",
       "kind" : "review",
       "reasons" : [
-        "codable-shape"
+        "swift:codable-shape"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2730,7 +2733,7 @@
       "id" : "cfg:Core::Item.CodingKeys/r1",
       "kind" : "review",
       "reasons" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -2743,8 +2746,8 @@
       "id" : "cfg:Core::Item.CodingKeys.currency/r1",
       "kind" : "review",
       "reasons" : [
-        "codable-shape",
-        "enum-case-added"
+        "swift:codable-shape",
+        "swift:enum-case-added"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -2757,7 +2760,7 @@
       "id" : "cfg:Core::PaymentMethod/r1",
       "kind" : "review",
       "reasons" : [
-        "enum-case-added",
+        "swift:enum-case-added",
         "used from 2 components"
       ],
       "risk" : 0.676,
@@ -2835,7 +2838,7 @@
       "id" : "cfg:Core::PaymentMethod.applePay/r1",
       "kind" : "review",
       "reasons" : [
-        "enum-case-added"
+        "swift:enum-case-added"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2848,8 +2851,8 @@
       "id" : "folder:App::App/Info.plist/r1",
       "kind" : "review",
       "reasons" : [
-        "url-schemes-changed",
-        "info-plist-changed"
+        "swift:url-schemes-changed",
+        "swift:info-plist-changed"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -2862,7 +2865,7 @@
       "id" : "folder:App::App/Shop.entitlements/r1",
       "kind" : "review",
       "reasons" : [
-        "entitlements-changed"
+        "swift:entitlements-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2875,7 +2878,7 @@
       "id" : "spm:Features::build settings/r1",
       "kind" : "review",
       "reasons" : [
-        "default-isolation-changed"
+        "swift:default-isolation-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -2901,8 +2904,8 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel/r1",
       "kind" : "review",
       "reasons" : [
-        "mainactor-added",
-        "observable-state-changed"
+        "swift:mainactor-added",
+        "swift:observable-state-changed"
       ],
       "risk" : 0.748,
       "side" : "head",
@@ -2950,7 +2953,7 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.total/r1",
       "kind" : "review",
       "reasons" : [
-        "observable-state-changed"
+        "swift:observable-state-changed"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -3073,7 +3076,7 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()/r1",
       "kind" : "review",
       "reasons" : [
-        "nonisolated-removed"
+        "swift:nonisolated-removed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3108,7 +3111,7 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)/r1",
       "kind" : "review",
       "reasons" : [
-        "throws-added"
+        "swift:throws-added"
       ],
       "risk" : 0.37,
       "side" : "head",
@@ -3163,7 +3166,7 @@
       "id" : "spm:Features/Checkout::PriceCache/r1",
       "kind" : "review",
       "reasons" : [
-        "kind-changed:class->actor"
+        "swift:kind-changed:class->actor"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3246,8 +3249,8 @@
       "id" : "spm:Networking::PaymentClient.charge(_:method:)/r1",
       "kind" : "review",
       "reasons" : [
-        "access-changed:internal->public",
-        "typed-throws-changed",
+        "swift:access-changed:internal->public",
+        "swift:typed-throws-changed",
         "used from 1 component"
       ],
       "risk" : 0.863,
@@ -3350,7 +3353,7 @@
       "id" : "spm:Persistence::CartStore.items()/r1",
       "kind" : "review",
       "reasons" : [
-        "async-added",
+        "swift:async-added",
         "used from 1 component"
       ],
       "risk" : 0.658,
@@ -3441,7 +3444,7 @@
       "id" : "spm:Persistence::Order/r1",
       "kind" : "review",
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3454,7 +3457,7 @@
       "id" : "spm:Persistence::Order.total/r1",
       "kind" : "review",
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3489,7 +3492,7 @@
       "id" : "spm:Persistence::Order.placedAt/r1",
       "kind" : "review",
       "reasons" : [
-        "swiftdata-model-changed"
+        "swift:swiftdata-model-changed"
       ],
       "risk" : 0.64,
       "side" : "head",
@@ -3576,7 +3579,7 @@
     "root" : "<repo>",
     "usesMergeBase" : true
   },
-  "version" : 1,
+  "version" : 2,
   "warnings" : [
     {
       "kind" : "ambiguous-name",

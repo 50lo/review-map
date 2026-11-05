@@ -1,95 +1,14 @@
 import Foundation
 import IndexStoreDB
 
-// Index mode: exact references from the compiler's index store instead of name matching.
-// Each side's exported tree is built once (Bazel, xcodebuild, or swift build) with
+// Swift's index: each side's exported tree is built once (Bazel, xcodebuild, or swift build) with
 // indexing on; the resulting store is cached per commit, so a base shared by several branches
 // is built once. IndexStoreDB then gives, for every reference in a file, the declaration it
-// points at. If either build fails, both sides fall back to name matching, so the two sides
-// are always resolved the same way.
-
-public struct IndexOptions: Equatable {
-    /// Nil follows `index.enabled` in reviewmap.yml.
-    public var enabled: Bool?
-    /// "bazel", "xcodebuild", or "swift". Nil picks Bazel for a Bazel workspace with targets (given or from a
-    /// rules_xcodeproj rule), else xcodebuild where it exists (macOS), else swift build.
-    public var builder: String?
-    /// The .xcworkspace, .xcodeproj, or package directory to build: relative to the repo root, relative to
-    /// `workingDirectory`, or absolute inside the repo.
-    public var project: String?
-    public var scheme: String?
-    /// xcodebuild destination (default "generic/platform=iOS Simulator").
-    public var destination: String?
-    /// Bazel targets to build.
-    public var targets: [String]?
-    /// Extra arguments for `bazel build`.
-    public var bazelArgs: [String]?
-    /// Where built index stores are kept, one per repo and commit.
-    public var cacheDir: String
-    /// Build again even when a store for the commit is cached.
-    public var rebuild: Bool
-    /// Where the command was run. A relative --index-project may be relative to it, and auto-detection
-    /// prefers projects under it.
-    public var workingDirectory: String?
-
-    public init(enabled: Bool? = nil, builder: String? = nil, project: String? = nil, scheme: String? = nil,
-                destination: String? = nil, targets: [String]? = nil, bazelArgs: [String]? = nil,
-                cacheDir: String = IndexOptions.defaultCacheDir, rebuild: Bool = false, workingDirectory: String? = nil) {
-        self.enabled = enabled
-        self.builder = builder
-        self.project = project
-        self.scheme = scheme
-        self.destination = destination
-        self.targets = targets
-        self.bazelArgs = bazelArgs
-        self.cacheDir = cacheDir
-        self.rebuild = rebuild
-        self.workingDirectory = workingDirectory
-    }
-
-    public static var defaultCacheDir: String {
-        (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/index")
-    }
-
-    /// CLI values win over reviewmap.yml.
-    func merged(with config: Config.Index?) -> IndexOptions {
-        guard let c = config else { return self }
-        var o = self
-        o.enabled = o.enabled ?? c.enabled
-        o.builder = o.builder ?? c.builder
-        o.project = o.project ?? c.project
-        o.scheme = o.scheme ?? c.scheme
-        o.destination = o.destination ?? c.destination
-        o.targets = o.targets ?? c.targets
-        o.bazelArgs = o.bazelArgs ?? c.bazelArgs
-        return o
-    }
-}
-
-/// A reference from one line of a file to a declaration in the repo, at one side.
-struct IndexedRef: Hashable {
-    var line: Int
-    /// Repo-relative file and line of the referenced declaration's name.
-    var targetFile: String
-    var targetLine: Int
-    /// The index's name for the symbol ("load()", "Config", "id").
-    var name: String
-}
-
-/// Exact references for the Swift files of one side. Files missing from `refs` had no index data.
-struct SideIndex {
-    var refs: [String: [IndexedRef]]
-}
-
-struct IndexError: Error, CustomStringConvertible {
-    var description: String
-    init(_ d: String) { description = d }
-}
+// points at, as the same `SideIndex` a SCIP index gives.
 
 enum IndexBuilder {
     /// Loads (building if needed) the index of both sides. Throws when either side can't be indexed.
-    static func load(options: IndexOptions, repoRoot: String, sides: [(side: Side, sha: String, dir: String, files: [String])],
-                     log: (String) -> Void) throws -> [Side: SideIndex] {
+    static func load(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex] {
         let library = try IndexStoreLibrary(dylibPath: try libraryPath())
         let repoDir = (options.cacheDir as NSString).appendingPathComponent(Paths.slug((repoRoot as NSString).lastPathComponent))
         var out: [Side: SideIndex] = [:]
@@ -564,15 +483,5 @@ enum IndexBuilder {
         for rel in relative { out += [rel, "./" + rel] }
         var seen = Set<String>()
         return out.filter { seen.insert($0).inserted }
-    }
-}
-
-/// Small path helpers shared by the analyzer and the CLI.
-public enum Paths {
-    /// "feature/login" → "feature-login"; anything outside letters, digits, dot, dash, and underscore becomes a dash.
-    public static func slug(_ s: String) -> String {
-        let allowed = Set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
-        let out = String(s.map { allowed.contains($0) ? $0 : "-" })
-        return out.isEmpty || out.allSatisfy({ $0 == "." }) ? "-" : out
     }
 }

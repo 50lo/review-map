@@ -64,24 +64,30 @@ public enum Analyzer {
         let baseBlobs = try git.blobs(at: baseSha)
         let headBlobs = try git.blobs(at: headSha)
 
-        log("Parsing Swift files…")
+        // The languages with source files at either side.
+        let languages = Languages.all.filter { lang in baseBlobs.keys.contains(where: lang.isSource) || headBlobs.keys.contains(where: lang.isSource) }
+        log("Parsing \(languages.isEmpty ? "source" : languages.map(\.displayName).joined(separator: " and ")) files…")
         let parser = ParseCache()
-        let baseSide = try SideData.load(side: .base, dir: baseDir, blobs: baseBlobs, config: &config, parser: parser, dumpPackage: options.dumpPackage)
-        let headSide = try SideData.load(side: .head, dir: headDir, blobs: headBlobs, config: &config, parser: parser, dumpPackage: options.dumpPackage)
+        let baseSide = try SideData.load(side: .base, dir: baseDir, blobs: baseBlobs, languages: languages, config: &config, parser: parser, options: options)
+        let headSide = try SideData.load(side: .head, dir: headDir, blobs: headBlobs, languages: languages, config: &config, parser: parser, options: options)
 
-        var builder = ModelBuilder(base: baseSide, head: headSide, options: options)
+        var builder = ModelBuilder(base: baseSide, head: headSide, languages: languages, options: options)
         let indexOptions = options.index.merged(with: config.index)
         if indexOptions.enabled == true {
-            do {
-                builder.index = try IndexBuilder.load(
-                    options: indexOptions, repoRoot: root,
-                    sides: [(.head, headSha, headDir, headSide.files.keys.sorted()), (.base, baseSha, baseDir, baseSide.files.keys.sorted())],
-                    log: log)
-                builder.noteIndexCoverage()
-            } catch {
-                log("Index mode is off for this run: \(error)")
-                builder.warnings.insert(Warning(kind: "index-unavailable",
-                    message: "References were matched by name because the index could not be built: \(error)"))
+            for lang in languages {
+                let files = { (s: SideData) in s.files.filter { $0.value.language == lang.id }.keys.sorted() }
+                do {
+                    guard let index = try lang.index(
+                        options: indexOptions, repoRoot: root,
+                        sides: [IndexSide(side: .head, sha: headSha, dir: headDir, files: files(headSide)),
+                                IndexSide(side: .base, sha: baseSha, dir: baseDir, files: files(baseSide))],
+                        log: log) else { continue }
+                    builder.addIndex(index, language: lang)
+                } catch {
+                    log("Index mode is off for \(lang.displayName) in this run: \(error)")
+                    builder.warnings.insert(Warning(kind: "index-unavailable",
+                        message: "\(lang.displayName) references were matched by name because the index could not be built: \(error)"))
+                }
             }
         }
 
@@ -117,7 +123,7 @@ final class ParseCache: @unchecked Sendable {
         DispatchQueue.concurrentPerform(iterations: todo.count) { idx in
             let item = todo[idx]
             let source = (try? String(contentsOfFile: item.abs, encoding: .utf8)) ?? ""
-            let parsed = SwiftExtractor.parse(path: item.path, source: source)
+            let parsed = Languages.of(item.path)!.parse(path: item.path, source: source)
             lock.lock()
             cache[item.blob] = parsed
             lock.unlock()
@@ -143,15 +149,14 @@ struct SideData {
     let declTable: [String: Set<String>]
     let generated: Set<String>
 
-    static func load(side: Side, dir: String, blobs: [String: String], config: inout Config, parser: ParseCache, dumpPackage: Bool) throws -> SideData {
+    static func load(side: Side, dir: String, blobs: [String: String], languages: [Language], config: inout Config,
+                     parser: ParseCache, options: AnalyzeOptions) throws -> SideData {
         let excludes = config.excludeMatchers
-        let swiftPaths = blobs.keys.filter { path in
-            let name = (path as NSString).lastPathComponent
-            let isManifest = name == "Package.swift" || name.hasPrefix("Package@swift")
-            return path.hasSuffix(".swift") && !isManifest && !excludes.contains(where: { $0.matches(path) })
+        let paths = blobs.keys.filter { path in
+            languages.contains { $0.isSource(path) } && !excludes.contains(where: { $0.matches(path) })
         }.sorted()
-        let files = parser.parseAll(swiftPaths.map { ($0, blobs[$0]!, dir + "/" + $0) })
-        let layout = ComponentBuilder.build(root: dir, swiftFiles: swiftPaths, config: &config, dumpPackage: dumpPackage)
+        let files = parser.parseAll(paths.map { ($0, blobs[$0]!, dir + "/" + $0) })
+        let layout = ComponentBuilder.build(root: dir, files: paths, languages: languages, config: &config, options: options)
         var table: [String: Set<String>] = [:]
         for (path, file) in files {
             guard let comp = layout.fileComponent[path] else { continue }
@@ -159,8 +164,8 @@ struct SideData {
                 table[d.name, default: []].insert(comp)
             }
         }
-        let gen = config.generatedMatchers
-        let generated = Set(swiftPaths.filter { p in gen.contains { $0.matches(p) } })
+        let gen = config.generatedMatchers + languages.flatMap(\.generatedPatterns).map(Glob.init)
+        let generated = Set(paths.filter { p in gen.contains { $0.matches(p) } })
         return SideData(side: side, dir: dir, files: files, layout: layout, declTable: table, generated: generated)
     }
 }
@@ -190,12 +195,10 @@ struct Pair {
     var any: Located { head ?? base! }
 }
 
-private let codableNames: Set<String> = ["Codable", "Encodable", "Decodable"]
-private let observableAttrs: Set<String> = ["Published", "State", "Observable", "ObservationTracked", "Bindable", "AppStorage", "SceneStorage"]
-
 struct ModelBuilder {
     let base: SideData
     let head: SideData
+    let languages: [Language]
     let options: AnalyzeOptions
 
     var pairs: [Pair] = []
@@ -211,23 +214,29 @@ struct ModelBuilder {
     var externalDeps: [ExternalDepChange] = []
     /// Package identities pinned on either side (Package.resolved).
     var pinnedPackages = Set<String>()
-    /// Exact references per side, when index mode built both sides.
+    /// Exact references per side, for the files of the languages that index mode built at both sides.
     var index: [Side: SideIndex] = [:]
     /// Index mode: every head reference to a changed declaration, same component included (for caller context).
     var indexCallers: [Int: [Usage]] = [:]
 
-    init(base: SideData, head: SideData, options: AnalyzeOptions) {
+    init(base: SideData, head: SideData, languages: [Language], options: AnalyzeOptions) {
         self.base = base
         self.head = head
+        self.languages = languages
         self.options = options
         for w in base.layout.warnings + head.layout.warnings { warnings.insert(w) }
     }
 
     func side(_ s: Side) -> SideData { s == .base ? base : head }
 
+    /// The language of a parsed source file.
+    func language(of file: String) -> Language {
+        Languages.of(file)!
+    }
+
     // MARK: Matching
 
-    private static func kindGroup(_ k: EntityKind) -> String {
+    static func kindGroup(_ k: EntityKind) -> String {
         switch k {
         case .struct, .class, .enum, .actor: return "type"
         case .func, .`init`: return "callable"
@@ -338,221 +347,50 @@ struct ModelBuilder {
         return side(s).files[l.file]?.decls[pi]
     }
 
-    /// Types (by component + qualified name) with a given trait on one side, including conformances added in extensions.
-    private func typesWhere(_ s: SideData, _ pred: (Decl) -> Bool) -> Set<String> {
-        var result = Set<String>()
-        for (path, file) in s.files {
-            guard let comp = s.layout.fileComponent[path] else { continue }
-            for d in file.decls where d.isContainer && pred(d) {
-                result.insert("\(comp)|\(d.kind == .extension ? d.name : d.qualifiedName)")
-            }
-        }
-        return result
-    }
-
     /// "@MainActor P" -> "P".
     static func conformanceName(_ s: String) -> String {
         s.split(separator: " ").last.map(String.init) ?? s
     }
 
-    /// Effective conformances per "component|Type": name -> isolation attributes ("" when none).
-    private func conformances(_ s: SideData) -> [String: [String: String]] {
-        var result: [String: [String: String]] = [:]
-        for (path, file) in s.files {
-            guard let comp = s.layout.fileComponent[path] else { continue }
-            for d in file.decls where d.isContainer {
-                let key = "\(comp)|\(d.kind == .extension ? d.name : d.qualifiedName)"
-                for c in d.inherited {
-                    let parts = c.split(separator: " ")
-                    let attrs = parts.dropLast().filter { $0 != "@unchecked" && $0 != "@retroactive" && $0 != "@preconcurrency" }.joined(separator: " ")
-                    result[key, default: [:]][Self.conformanceName(c)] = attrs
-                }
-                if d.attributes.contains("Sendable") { result[key, default: [:]]["Sendable"] = "" }
-            }
-        }
-        return result
-    }
-
+    /// Each language's contract flags, with its prefix.
     private mutating func computeFlags() {
-        let isCodable: (Decl) -> Bool = { !codableNames.isDisjoint(with: $0.inherited.map(Self.conformanceName)) }
-        let codable = typesWhere(base, isCodable).union(typesWhere(head, isCodable))
-        let models = typesWhere(base, { $0.attributes.contains("Model") }).union(typesWhere(head, { $0.attributes.contains("Model") }))
-        // With @Observable every stored property is tracked state; with ObservableObject only @Published ones are.
-        let isObs: (Decl) -> Bool = { $0.attributes.contains("Observable") }
-        let observable = typesWhere(base, isObs).union(typesWhere(head, isObs))
-
-        let baseConf = conformances(base), headConf = conformances(head)
-        var typeDeclared = Set<String>()
-        for p in pairs where p.any.decl.isContainer && p.any.decl.kind != .extension && p.base != nil && p.head != nil {
-            typeDeclared.insert("\(p.any.component)|\(p.any.decl.qualifiedName)")
-        }
-        var parentFlags: [Int: Set<String>] = [:]
-        for i in pairs.indices {
-            let p = pairs[i]
-            let b = p.base?.decl
-            let h = p.head?.decl
-            let d = p.any.decl
-            let s: Side = p.head != nil ? .head : .base
-            var flags: [String] = []
-            let added = b == nil, removed = h == nil
-            let changed = !p.changes.isEmpty && p.changes != [.cosmetic]
-
-            if let b, let h {
-                let ba = b.access ?? "internal", ha = h.access ?? "internal"
-                if ba != ha { flags.append("access-changed:\(ba)->\(ha)") }
-                if b.isAsync != h.isAsync { flags.append(h.isAsync ? "async-added" : "async-removed") }
-                if b.isThrows != h.isThrows { flags.append(h.isThrows ? "throws-added" : "throws-removed") }
-                else if b.isThrows && b.throwsType != h.throwsType { flags.append("typed-throws-changed") }
-                let bm = b.attributes.contains("MainActor"), hm = h.attributes.contains("MainActor")
-                if bm != hm { flags.append(hm ? "mainactor-added" : "mainactor-removed") }
-                let bn = b.modifiers.contains { $0.hasPrefix("nonisolated") }, hn = h.modifiers.contains { $0.hasPrefix("nonisolated") }
-                if bn != hn { flags.append(hn ? "nonisolated-added" : "nonisolated-removed") }
-                if !b.isContainer {
-                    let bsend = b.attributes.contains("Sendable"), hsend = h.attributes.contains("Sendable")
-                    if bsend != hsend { flags.append(hsend ? "sendable-added" : "sendable-removed") }
-                }
-                if b.kind != h.kind && Self.kindGroup(b.kind) == "type" { flags.append("kind-changed:\(b.kind.rawValue)->\(h.kind.rawValue)") }
-                if b.kind != .extension || !typeDeclared.contains("\(p.any.component)|\(b.name)") {
-                    // Conformances are compared per type, across the type and its extensions in the component,
-                    // so moving a conformance into an extension is not a change.
-                    let key = "\(p.any.component)|\(b.kind == .extension ? b.name : b.qualifiedName)"
-                    let bc = baseConf[key] ?? [:], hc = headConf[key] ?? [:]
-                    for c in Set(hc.keys).subtracting(bc.keys).subtracting(["Sendable"]).sorted() { flags.append("conformance-added:\(c)") }
-                    for c in Set(bc.keys).subtracting(hc.keys).subtracting(["Sendable"]).sorted() { flags.append("conformance-removed:\(c)") }
-                    for c in Set(bc.keys).intersection(hc.keys).sorted() where bc[c] != hc[c] {
-                        flags.append("conformance-isolation-changed:\(c)")
-                    }
-                    if (bc["Sendable"] != nil) != (hc["Sendable"] != nil) && !flags.contains(where: { $0.hasPrefix("sendable-") }) {
-                        flags.append(hc["Sendable"] != nil ? "sendable-added" : "sendable-removed")
-                    }
-                }
-                let bo = b.attributes.contains("Observable"), ho = h.attributes.contains("Observable")
-                if bo != ho { flags.append(ho ? "observable-added" : "observable-removed") }
-                let bmodel = b.attributes.contains("Model"), hmodel = h.attributes.contains("Model")
-                if bmodel != hmodel { flags.append("swiftdata-model-changed") }
-            } else if d.kind == .extension {
-                // A new or deleted extension: report conformances that the type gained or lost overall.
-                let key = "\(p.any.component)|\(d.name)"
-                let bc = baseConf[key] ?? [:], hc = headConf[key] ?? [:]
-                for c in d.inherited.map(Self.conformanceName) where c != "Sendable" {
-                    if added && bc[c] == nil { flags.append("conformance-added:\(c)") }
-                    if removed && hc[c] == nil { flags.append("conformance-removed:\(c)") }
-                    if added, let old = bc[c], old != hc[c] { flags.append("conformance-isolation-changed:\(c)") }
-                }
+        let byLanguage = Dictionary(grouping: pairs.indices, by: { language(of: pairs[$0].any.file).id })
+        for lang in languages {
+            for (i, flags) in lang.contractFlags(self, pairs: byLanguage[lang.id] ?? []) {
+                pairs[i].flags = flags.map { "\(lang.id):\($0)" }
             }
-
-            var toParent: [String] = []
-            let parentKind = d.parentKind
-            if parentKind == .protocol && (added || removed || changed && p.changes.contains(where: { $0 != .body })) {
-                let f = added ? "protocol-requirement-added" : removed ? "protocol-requirement-removed" : "protocol-requirement-changed"
-                flags.append(f)
-                toParent.append(f)
-            }
-            if d.kind == .case && parentKind == .enum && (added || removed || p.changes.contains(.signature)) {
-                let f = added ? "enum-case-added" : removed ? "enum-case-removed" : "enum-case-changed"
-                flags.append(f)
-                toParent.append(f)
-            }
-            let scopeKey = "\(p.any.component)|\(d.scope ?? "")"
-            let structural = added || removed || p.changes.contains(.signature) || p.changes.contains(.modifiers)
-            if d.kind == .var && d.isStored && !d.isStatic && structural {
-                if codable.contains(scopeKey) { flags.append("codable-shape"); toParent.append("codable-shape") }
-                if models.contains(scopeKey) { flags.append("swiftdata-model-changed"); toParent.append("swiftdata-model-changed") }
-                let attrs = Set((b?.attributes ?? []) + (h?.attributes ?? []))
-                if !attrs.contains("ObservationIgnored") && (observable.contains(scopeKey) || !attrs.isDisjoint(with: observableAttrs)) {
-                    flags.append("observable-state-changed")
-                    toParent.append("observable-state-changed")
-                }
-            }
-            // Members of a nested CodingKeys enum shape the parent's encoding.
-            if let scope = d.scope, scope.hasSuffix(".CodingKeys"), d.kind == .case, added || removed || changed {
-                flags.append("codable-shape")
-                let owner = String(scope.dropLast(".CodingKeys".count))
-                if let oi = pairs.indices.first(where: { pairs[$0].any.component == p.any.component && pairs[$0].any.decl.qualifiedName == owner && pairs[$0].any.decl.kind != .extension }) {
-                    parentFlags[oi, default: []].insert("codable-shape")
-                }
-            }
-            let parentIdx = (p.head ?? p.base).flatMap { parentPair($0, side: s) }
-            if let pi = parentIdx, pairs[pi].base == nil || pairs[pi].head == nil {
-                // A member of a new or deleted type: the type itself carries the flag; repeating it on every
-                // member is noise.
-                let memberLevel: Set<String> = ["protocol-requirement-added", "protocol-requirement-removed", "enum-case-added",
-                                                "enum-case-removed", "codable-shape", "swiftdata-model-changed", "observable-state-changed"]
-                flags.removeAll { memberLevel.contains($0) }
-            }
-            pairs[i].flags = flags
-            if !toParent.isEmpty, let pp = parentIdx, pairs[pp].base != nil, pairs[pp].head != nil {
-                parentFlags[pp, default: []].formUnion(toParent)
-            }
-        }
-        for (pi, fl) in parentFlags {
-            for f in fl.sorted() where !pairs[pi].flags.contains(f) { pairs[pi].flags.append(f) }
         }
     }
 
     // MARK: References and edges
-
-    private static let appleModules: Set<String> = [
-        "Foundation", "SwiftUI", "UIKit", "AppKit", "Combine", "CoreData", "SwiftData", "Observation", "os", "OSLog",
-        "CoreGraphics", "CoreLocation", "MapKit", "AVFoundation", "AVKit", "Photos", "PhotosUI", "StoreKit", "WebKit",
-        "XCTest", "Testing", "UserNotifications", "CloudKit", "Security", "CryptoKit", "LocalAuthentication", "Network",
-        "Darwin", "Dispatch", "CoreImage", "CoreMedia", "CoreText", "QuartzCore", "SafariServices", "MessageUI",
-        "Contacts", "ContactsUI", "EventKit", "EventKitUI", "HealthKit", "WidgetKit", "AppIntents", "ActivityKit",
-        "BackgroundTasks", "CoreMotion", "CoreBluetooth", "CoreHaptics", "GameKit", "SpriteKit", "SceneKit", "ARKit",
-        "RealityKit", "Metal", "MetalKit", "Vision", "VisionKit", "CoreML", "NaturalLanguage", "Speech", "PassKit",
-        "AuthenticationServices", "LinkPresentation", "QuickLook", "PDFKit", "Charts", "TipKit", "Accessibility",
-        "MediaPlayer", "MultipeerConnectivity", "NotificationCenter", "SystemConfiguration", "UniformTypeIdentifiers",
-        "CoreTransferable", "Intents", "IntentsUI", "Swift", "_Concurrency", "Glibc", "CoreFoundation", "ImageIO",
-        "MobileCoreServices", "CoreServices", "AdSupport", "AppTrackingTransparency", "DeviceCheck", "CoreSpotlight",
-        "FoundationModels", "SwiftSyntax", "SwiftParser", "RegexBuilder", "Accelerate", "simd", "AudioToolbox",
-        "Translation", "JavaScriptCore", "CoreAudio", "CoreVideo", "GameController", "ExtensionKit", "ExtensionFoundation",
-        "SensitiveContentAnalysis", "ScreenTime", "FamilyControls", "ManagedSettings", "DeviceActivity", "Social",
-        "CoreNFC", "NetworkExtension", "ShazamKit", "MusicKit", "WeatherKit", "Synchronization", "Distributed",
-        "UIKit.UIGestureRecognizerSubclass", "ObjectiveC", "AVRouting", "CarPlay", "ClockKit", "WatchKit", "WatchConnectivity",
-        "SystemPackage", "XCUIAutomation", "SQLite3", "zlib", "Compression", "libkern", "CommonCrypto", "Cocoa", "ImagePlayground", "Combine", "MediaPlayer", "OSLog",
-    ]
 
     private mutating func addRef(_ s: Side, from: String, to: String, ref: Ref) {
         guard from != to else { return }
         edgeRefs[s]![from, default: [:]][to, default: []].append(ref)
     }
 
-    private mutating func externalComponent(for module: String, layout: ComponentLayout) -> String? {
-        var pkg = layout.externalProducts[module]
-        if pkg == nil {
-            // Products listed by name only: match the module to a pinned package identity
-            // ("SwiftSoup" -> "swiftsoup", "Collections" -> "swift-collections").
-            let m = module.lowercased()
-            func norm(_ s: String) -> String {
-                var x = s.replacingOccurrences(of: "-", with: "").replacingOccurrences(of: "_", with: "")
-                for affix in ["swift", "ios", "spm", "kit"] where x.count > affix.count + 2 {
-                    if x.hasPrefix(affix) { x.removeFirst(affix.count) }
-                    if x.hasSuffix(affix) { x.removeLast(affix.count) }
-                }
-                return x
-            }
-            pkg = pinnedPackages.sorted().first { $0 == m || norm($0) == norm(m) }
-        }
-        guard let pkg else { return nil }
+    private mutating func externalComponent(for module: String, language: Language, layout: ComponentLayout) -> String? {
+        guard let pkg = layout.externalProducts[module] ?? language.package(ofModule: module, pinned: pinnedPackages) else { return nil }
         let id = "ext:\(pkg)"
         externalComponents[id] = pkg
         return id
     }
 
-    /// Records how much of each side the index covers; uncovered files fall back to name matching. Test files
-    /// are left out of the count, because a scheme's build action often doesn't build test targets.
-    mutating func noteIndexCoverage() {
-        for s in [Side.base, .head] {
-            guard let idx = index[s] else { continue }
+    /// Adds a language's exact references, and records how much of each side they cover; uncovered files
+    /// fall back to name matching. Test files are left out of the count, because a scheme's build action
+    /// often doesn't build test targets.
+    mutating func addIndex(_ sides: [Side: SideIndex], language lang: Language) {
+        for (s, idx) in sides {
+            index[s, default: SideIndex(refs: [:])].refs.merge(idx.refs) { a, _ in a }
             let layout = side(s).layout
-            let all = side(s).files.keys.filter { path in
+            let all = side(s).files.filter { $0.value.language == lang.id }.keys.filter { path in
                 guard !side(s).generated.contains(path), let c = layout.fileComponent[path] else { return false }
                 return layout.components[c]?.isTest != true && !ComponentBuilder.isTestPath(path)
             }
             let missing = all.filter { idx.refs[$0] == nil }.sorted()
             if !missing.isEmpty {
                 warnings.insert(Warning(kind: "index-partial",
-                    message: "\(missing.count) of \(all.count) Swift files had no index data at \(s.rawValue), so their references were matched by name (first: \(missing.prefix(3).joined(separator: ", ")))."))
+                    message: "\(missing.count) of \(all.count) \(lang.displayName) files had no index data at \(s.rawValue), so their references were matched by name (first: \(missing.prefix(3).joined(separator: ", ")))."))
             }
         }
     }
@@ -627,6 +465,7 @@ struct ModelBuilder {
             var ambiguous: [String: Set<String>] = [:]
             for path in data.files.keys.sorted() {
                 guard let file = data.files[path], let comp = layout.fileComponent[path] else { continue }
+                let lang = language(of: path)
                 let module = layout.components[comp]?.module
                 var visible = Set(file.imports.map(\.name))
                 if let module { visible.insert(module) }
@@ -635,9 +474,9 @@ struct ModelBuilder {
                 for imp in file.imports {
                     if let target = layout.moduleComponent[imp.name], layout.components[target]?.module != module {
                         addRef(s, from: comp, to: target, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
-                    } else if let ext = externalComponent(for: imp.name, layout: layout) {
+                    } else if let ext = externalComponent(for: imp.name, language: lang, layout: layout) {
                         addRef(s, from: comp, to: ext, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
-                    } else if layout.moduleComponent[imp.name] == nil && !Self.appleModules.contains(imp.name) {
+                    } else if layout.moduleComponent[imp.name] == nil && !lang.platformModules.contains(imp.name) {
                         warnings.insert(Warning(kind: "unresolved-import", message: "import \(imp.name) matches no target or known package product."))
                     }
                 }
@@ -685,7 +524,7 @@ struct ModelBuilder {
             for dep in layout.manifestDeps {
                 if let target = layout.moduleComponent[dep.module] {
                     addRef(s, from: dep.from, to: target, ref: Ref(file: dep.file, line: 0, symbol: "dependency \(dep.module)", side: s))
-                } else if let ext = externalComponent(for: dep.module, layout: layout) {
+                } else if let ext = externalComponent(for: dep.module, language: Languages.named(dep.language)!, layout: layout) {
                     addRef(s, from: dep.from, to: ext, ref: Ref(file: dep.file, line: 0, symbol: "dependency \(dep.module)", side: s))
                 }
             }
@@ -694,35 +533,26 @@ struct ModelBuilder {
 
     // MARK: Non-code contracts
 
+    /// Changed non-code files that a language counts as part of a contract, as `file` entities.
     mutating func addContractFiles(baseBlobs: [String: String], headBlobs: [String: String], baseDir: String, headDir: String) {
-        func flag(for path: String) -> (key: String, flag: String)? {
-            let name = (path as NSString).lastPathComponent
-            if let r = path.range(of: ".xcdatamodeld/") {
-                return (String(path[..<r.lowerBound]) + ".xcdatamodeld", "coredata-model-changed")
-            }
-            if name == "PrivacyInfo.xcprivacy" { return (path, "privacy-manifest-changed") }
-            if name.hasSuffix(".entitlements") { return (path, "entitlements-changed") }
-            if name == "Info.plist" || name.hasSuffix("-Info.plist") { return (path, "info-plist-changed") }
+        func flag(for path: String) -> (key: String, flag: String, language: Language)? {
+            for lang in languages { if let (key, f) = lang.contractFile(path) { return (key, f, lang) } }
             return nil
         }
-        var groups: [String: (flag: String, base: Bool, head: Bool, changed: Bool)] = [:]
+        var groups: [String: (flag: String, language: Language)] = [:]
         for path in Set(baseBlobs.keys).union(headBlobs.keys) {
-            guard baseBlobs[path] != headBlobs[path], let (key, f) = flag(for: path) else { continue }
-            var g = groups[key] ?? (f, false, false, false)
-            if baseBlobs[path] != nil { g.base = true }
-            if headBlobs[path] != nil { g.head = true }
-            g.changed = true
-            groups[key] = g
+            guard baseBlobs[path] != headBlobs[path], let (key, f, lang) = flag(for: path) else { continue }
+            groups[key] = (f, lang)
         }
         for (key, g) in groups.sorted(by: { $0.key < $1.key }) {
             let existsBase = baseBlobs.keys.contains { $0 == key || $0.hasPrefix(key + "/") }
             let existsHead = headBlobs.keys.contains { $0 == key || $0.hasPrefix(key + "/") }
             let change: ChangeKind = !existsBase ? .added : !existsHead ? .removed : .body
             var flags = [g.flag]
-            if g.flag == "info-plist-changed", existsBase, existsHead,
-               Self.urlSchemes(baseDir + "/" + key) != Self.urlSchemes(headDir + "/" + key) {
-                flags.append("url-schemes-changed")
+            if existsBase, existsHead {
+                flags += g.language.contractFileFlags(key: key, flag: g.flag, basePath: baseDir + "/" + key, headPath: headDir + "/" + key)
             }
+            flags = flags.map { "\(g.language.id):\($0)" }
             let s: Side = existsHead ? .head : .base
             let comp = nearestComponent(for: key, side: s)
             let lines = (try? String(contentsOfFile: (s == .head ? headDir : baseDir) + "/" + key, encoding: .utf8))?
@@ -740,17 +570,8 @@ struct ModelBuilder {
         for id in Set(b.keys).intersection(h.keys).sorted() {
             let bs = b[id]!.settings, hs = h[id]!.settings
             let keys = Set(bs.keys).union(hs.keys).filter { bs[$0] != hs[$0] }.sorted()
-            guard !keys.isEmpty else { continue }
-            var flags = Set<String>()
-            for k in keys {
-                let lk = k.lowercased()
-                if lk.contains("defaultisolation") || lk.contains("default_actor_isolation") { flags.insert("default-isolation-changed") }
-                else if lk.contains("strict") && lk.contains("concurrency") || lk.contains("approachable") { flags.insert("strict-concurrency-changed") }
-                else if lk.contains("upcomingfeature") || lk.contains("upcoming_feature") || lk.contains("enableexperimentalfeature") { flags.insert("swift-features-changed") }
-                else if lk.contains("swift_version") || lk.contains("swiftlanguagemode") { flags.insert("swift-version-changed") }
-                else if lk.contains("deployment_target") { flags.insert("deployment-target-changed") }
-                else { flags.insert("build-settings-changed") }
-            }
+            guard !keys.isEmpty, let lang = Languages.named(h[id]!.language) else { continue }
+            let flags = Set(keys.map { "\(lang.id):\(lang.settingFlag($0))" })
             func show(_ m: [String: String]) -> String? {
                 let lines = keys.compactMap { k in m[k].map { $0 == "on" ? k : "\(k) = \($0)" } }
                 return lines.isEmpty ? nil : lines.joined(separator: "\n")
@@ -765,14 +586,7 @@ struct ModelBuilder {
         }
     }
 
-    private static func urlSchemes(_ path: String) -> [String] {
-        guard let data = FileManager.default.contents(atPath: path),
-              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
-              let types = plist["CFBundleURLTypes"] as? [[String: Any]] else { return [] }
-        return types.flatMap { ($0["CFBundleURLSchemes"] as? [String]) ?? [] }.sorted()
-    }
-
-    /// The component of the Swift file sharing the longest directory prefix with `path`.
+    /// The component of the source file sharing the longest directory prefix with `path`.
     private mutating func nearestComponent(for path: String, side s: Side) -> String {
         let layout = side(s).layout
         let dirs = path.split(separator: "/").dropLast()
@@ -792,22 +606,7 @@ struct ModelBuilder {
 
     mutating func diffExternalDeps(baseBlobs: [String: String], headBlobs: [String: String], baseDir: String, headDir: String) {
         func pins(_ blobs: [String: String], _ dir: String) -> [String: String] {
-            var result: [String: String] = [:]
-            for path in blobs.keys.sorted() where path.hasSuffix("Package.resolved") {
-                guard let data = FileManager.default.contents(atPath: dir + "/" + path),
-                      let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
-                let list = (obj["pins"] as? [[String: Any]]) ?? ((obj["object"] as? [String: Any])?["pins"] as? [[String: Any]]) ?? []
-                for pin in list {
-                    let identity = (pin["identity"] as? String)
-                        ?? (pin["repositoryURL"] as? String).map(ComponentBuilder.packageIdentity)
-                        ?? (pin["package"] as? String)?.lowercased()
-                    guard let identity else { continue }
-                    let state = pin["state"] as? [String: Any] ?? [:]
-                    let v = (state["version"] as? String) ?? (state["branch"] as? String) ?? (state["revision"] as? String).map { String($0.prefix(8)) } ?? "?"
-                    result[identity.lowercased()] = v
-                }
-            }
-            return result
+            languages.reduce(into: [:]) { result, lang in result.merge(lang.pinnedPackages(blobs: blobs, dir: dir)) { a, _ in a } }
         }
         let b = pins(baseBlobs, baseDir)
         let h = pins(headBlobs, headDir)
@@ -950,7 +749,7 @@ struct ModelBuilder {
             components[id]!.changeScore = maxScore > 0 ? (v / maxScore * 1000).rounded() / 1000 : 0
         }
         externalDepsComponents(&components)
-        // Components without Swift files (e.g. only Info.plist changed) take their paths from their entities.
+        // Components without source files (e.g. only Info.plist changed) take their paths from their entities.
         let entityFiles = Dictionary(grouping: entities.filter { $0.kind != .target }, by: \.component).mapValues { $0.map(\.location.file) }
         for (id, c) in components where c.paths.isEmpty && c.kind != .external {
             components[id]!.paths = Self.minimalDirs(entityFiles[id] ?? [])
@@ -958,7 +757,8 @@ struct ModelBuilder {
 
         let sortedWarnings = warnings.sorted { ($0.kind, $0.file ?? "", $0.line ?? 0, $0.message) < ($1.kind, $1.file ?? "", $1.line ?? 0, $1.message) }
         return ChangeModel(
-            analyzer: AnalyzerInfo(version: Analyzer.version, resolution: index.isEmpty ? "name-based" : "index"),
+            analyzer: AnalyzerInfo(version: Analyzer.version, resolution: index.isEmpty ? "name-based" : "index",
+                                   languages: languages.map(\.id)),
             repo: repo,
             components: components.values.sorted { $0.id < $1.id },
             edges: edges,

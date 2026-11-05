@@ -5,7 +5,7 @@ import ReviewMapCore
 struct ReviewMap: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "reviewmap",
-        abstract: "Structural review map for a Swift change.",
+        abstract: "Structural review map for a code change.",
         discussion: "With no subcommand, `reviewmap` reviews the current branch of the repo in the current directory against main and opens the viewer.",
         version: Analyzer.version,
         subcommands: [Review.self, Analyze.self, Annotate.self, ViewCommand.self],

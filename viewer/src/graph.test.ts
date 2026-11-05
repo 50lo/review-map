@@ -222,7 +222,7 @@ describe("startHere", () => {
     expect(names).not.toContain("Item.price");
     const item = all.find((i) => i.entity.qualifiedName === "Item")!;
     expect(item.members.map((m) => m.qualifiedName)).toContain("Item.currency");
-    expect(item.reasons).toContain("codable-shape");
+    expect(item.reasons).toContain("swift:codable-shape");
   });
 
   it("falls back to contract flags without regions", () => {
@@ -301,6 +301,8 @@ describe("misc", () => {
   it("formats flags", () => {
     expect(flagLabel("async-added")).toBe("async added");
     expect(flagLabel("access-changed:internal->public")).toBe("access changed: internal → public");
+    expect(flagLabel("swift:access-changed:internal->public")).toBe("access changed: internal → public");
+    expect(flagLabel("swift:codable-shape")).toBe("codable shape");
   });
   it("edge keys are stable", () => {
     expect(edgeKey({ from: "a", to: "b" })).toBe("a->b");

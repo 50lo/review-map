@@ -6,7 +6,7 @@ export type Side = "base" | "head";
 
 export interface ChangeModel {
   version: number;
-  analyzer?: { version: string; resolution: string };
+  analyzer?: { version: string; resolution: string; languages?: string[] };
   repo: { root: string; base: string; head: string; baseSha: string; headSha: string; usesMergeBase?: boolean };
   components: Component[];
   edges: Edge[];
@@ -88,6 +88,7 @@ export interface Entity {
   change: "added" | "removed" | "signature" | "body" | "modifiers" | "cosmetic" | string;
   changes?: string[];
   signature: { base?: string; head?: string };
+  /** Prefixed with the language: "swift:codable-shape". Version 1 models have no prefix. */
   contractFlags: string[];
   tags?: string[];
   location: Location;
