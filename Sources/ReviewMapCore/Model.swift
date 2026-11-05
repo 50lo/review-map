@@ -229,6 +229,8 @@ public struct Usage: Codable, Equatable, Hashable {
     /// usedBy: the isolation the reference runs in, when its declaration or an enclosing type says
     /// ("@MainActor", "actor CartStore", "nonisolated").
     public var isolation: String? = nil
+    /// usedBy: "base" for a use that only exists at base (a caller the change removed or moved); missing at head.
+    public var side: Side? = nil
 }
 
 public struct Entity: Codable, Equatable {

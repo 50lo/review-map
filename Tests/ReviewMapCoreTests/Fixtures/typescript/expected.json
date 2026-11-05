@@ -1126,6 +1126,7 @@
           "component" : "npm:@shop/web",
           "file" : "packages/web/src/cart/CartView.tsx",
           "line" : 10,
+          "side" : "base",
           "symbol" : "CartView()"
         },
         {

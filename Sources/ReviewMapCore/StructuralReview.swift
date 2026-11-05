@@ -190,22 +190,29 @@ struct StructuralReview: @unchecked Sendable {
     }
 
     private func usage() -> String {
-        let used = reviewed.filter { !$0.usedBy.isEmpty || !$0.dependsOn.isEmpty }
-        let internalOnly = reviewed.filter { $0.usedBy.isEmpty && !$0.isInterface }
+        // Callers at head only; uses that exist only at base are callers the change removed.
+        let headUses = { (e: Entity) in e.usedBy.filter { $0.side != .base } }
+        let used = reviewed.filter { !headUses($0).isEmpty || !$0.dependsOn.isEmpty }
+        let internalOnly = reviewed.filter { headUses($0).isEmpty && !$0.isInterface }
         var out = "\n## Usage of the changed entities\n"
         out += "Used by lists callers in other components at head, with the isolation the call runs in when known.\n"
         for e in used.prefix(100) {
             out += "- \(e.id)"
-            if !e.usedBy.isEmpty {
-                let comps = Set(e.usedBy.map(\.component)).sorted().map(name)
-                let iso = Dictionary(grouping: e.usedBy, by: { $0.isolation ?? "unknown isolation" }).map { "\($0.value.count) \($0.key)" }.sorted()
-                out += ": used by \(e.usedBy.count) in \(comps.joined(separator: ", ")) (\(iso.joined(separator: ", ")))\n"
-                for u in e.usedBy.prefix(4) {
+            let uses = headUses(e)
+            if !uses.isEmpty {
+                let comps = Set(uses.map(\.component)).sorted().map(name)
+                let iso = Dictionary(grouping: uses, by: { $0.isolation ?? "unknown isolation" }).map { "\($0.value.count) \($0.key)" }.sorted()
+                out += ": used by \(uses.count) in \(comps.joined(separator: ", ")) (\(iso.joined(separator: ", ")))\n"
+                for u in uses.prefix(4) {
                     let text = sources.lines(.head, u.file).dropFirst(u.line - 1).first?.trimmingCharacters(in: .whitespaces) ?? ""
                     out += "    \(u.symbol) at \(u.file):\(u.line): \(String(text.prefix(160)))\n"
                 }
             } else {
                 out += ": no callers in other components\n"
+            }
+            let removed = e.usedBy.filter { $0.side == .base }
+            if !removed.isEmpty {
+                out += "    callers the change removed: \(removed.prefix(4).map { "\($0.symbol) (\(name($0.component)))" }.joined(separator: ", "))\n"
             }
             if !e.dependsOn.isEmpty {
                 out += "    depends on \(Array(Set(e.dependsOn.map { "\($0.symbol) (\(name($0.component)))" })).sorted().prefix(10).joined(separator: ", "))\n"

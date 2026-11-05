@@ -174,5 +174,18 @@ final class ChecksTests: XCTestCase {
             head: ["Lib/Lib.swift": "struct Counter { func tick() { print(1) } }\n"])
         let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Counter.tick()" })
         XCTAssertEqual(Set(e.usedBy.compactMap(\.isolation)), ["@MainActor", "actor Worker"])
+        XCTAssertTrue(e.usedBy.allSatisfy { $0.side == nil }, "uses at both sides count as head uses")
+    }
+
+    func testRemovedCallersAreMarkedBase() throws {
+        let m = try analyze(
+            base: ["Lib/Lib.swift": "struct Counter { func tick() {} }\n",
+                   "App/App.swift": "func tap() { Counter().tick() }\n",
+                   "Jobs/Jobs.swift": "func work() { Counter().tick() }\n"],
+            head: ["Lib/Lib.swift": "struct Counter { func tick() { print(1) } }\n",
+                   "Jobs/Jobs.swift": "func work() {}\n"])
+        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Counter.tick()" })
+        XCTAssertEqual(e.usedBy.first { $0.component == "folder:App" }?.side, nil)
+        XCTAssertEqual(e.usedBy.first { $0.component == "folder:Jobs" }?.side, .base)
     }
 }

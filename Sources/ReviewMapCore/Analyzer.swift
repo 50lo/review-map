@@ -458,7 +458,7 @@ struct ModelBuilder {
             let key = "\(ref.line)|\(ref.targetFile)|\(target.index)"
             guard seen.insert(key).inserted else { continue }
             let usage = Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                              isolation: file.isolation(line: ref.line))
+                              isolation: file.isolation(line: ref.line), side: s)
             let targetPair = pairOf[DeclKey(side: s, file: ref.targetFile, index: target.index)]
             if s == .head, let tp = targetPair { indexCallers[tp, default: []].append(usage) }
             guard targetComp != comp else { continue }
@@ -546,7 +546,7 @@ struct ModelBuilder {
                     let encl = file.enclosingDecl(line: ref.line)
                     if let ti = topLevel["\(target)|\(ref.name)"] {
                         usedBy[ti, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                                                             isolation: file.isolation(line: ref.line)))
+                                                             isolation: file.isolation(line: ref.line), side: s))
                     }
                     if let encl, let idx = file.decls.firstIndex(where: { $0.startLine == encl.startLine && $0.qualifiedName == encl.qualifiedName }),
                        let pi = pairOf[DeclKey(side: s, file: path, index: idx)] {
@@ -557,7 +557,7 @@ struct ModelBuilder {
                     for m in membersByName[ref.name] ?? [] where m.component != comp && resolvedTypes.contains("\(m.component)|\(m.rootType)") {
                         let encl = file.enclosingDecl(line: ref.line)
                         usedBy[m.pair, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                                                                 isolation: file.isolation(line: ref.line)))
+                                                                 isolation: file.isolation(line: ref.line), side: s))
                     }
                 }
             }
@@ -689,11 +689,13 @@ struct ModelBuilder {
             if comp?.isTest == true || ComponentBuilder.isTestPath(loc.file) { tags.append("test") }
             if data.generated.contains(loc.file) { tags.append("generated") }
             let parentId = parentPair(loc, side: s).map { pairs[$0].id }
-            // The same use seen at both sides counts once, with the isolation one side knows.
+            // A use seen at both sides counts once, as a head use. Uses only at base keep side "base".
             var uses: [String: Usage] = [:]
-            for u in usedBy[i] ?? [] {
+            for var u in usedBy[i] ?? [] {
                 let key = "\(u.component)|\(u.symbol)|\(u.file)|\(u.line)"
-                if uses[key]?.isolation == nil || (u.isolation != nil && u.isolation! < uses[key]!.isolation!) { uses[key] = u }
+                if u.side == .head { u.side = nil }
+                if let have = uses[key], have.side == nil { continue }
+                uses[key] = u
             }
             let used = uses.values.sorted { ($0.file, $0.line, $0.symbol, $0.component) < ($1.file, $1.line, $1.symbol, $1.component) }
             let deps = (dependsOn[i] ?? []).filter { u in u.line >= loc.decl.startLine && u.line <= loc.decl.endLine }

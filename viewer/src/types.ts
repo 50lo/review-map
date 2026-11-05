@@ -115,6 +115,8 @@ export interface Usage {
   line: number;
   /** usedBy: the isolation the reference runs in, when known ("@MainActor", "actor CartStore", "nonisolated"). */
   isolation?: string;
+  /** usedBy: "base" for a use only at base (a caller the change removed); missing at head. */
+  side?: Side;
 }
 
 export interface Entity {

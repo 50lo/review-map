@@ -595,6 +595,7 @@
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "isolation" : "nonisolated",
           "line" : 11,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.refresh()"
         },
         {
@@ -686,6 +687,7 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 16,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
       ]
@@ -1154,6 +1156,7 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 14,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         },
         {
@@ -1994,6 +1997,7 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 15,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
       ]
