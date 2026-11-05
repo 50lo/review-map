@@ -1,0 +1,5 @@
+build --macos_minimum_os=14.0
+build:release --compilation_mode=opt
+
+# Machine-specific experiments may add settings here without changing the shared build.
+try-import %workspace%/local.bazelrc

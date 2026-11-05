@@ -17,6 +17,8 @@ reviewmap
 
 Without installing, `swift build -c release` and `.build/release/reviewmap` work too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); the install script and CI do this.
 
+An experimental native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
+
 With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
 
 The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate [model]` runs the LLM annotator on an existing model, and `reviewmap view [model]` opens an existing model. Without a path, `annotate` and `view` use the model of the current branch of the repo in the current directory. Options for the default command and `analyze`:
