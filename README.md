@@ -1,6 +1,6 @@
 # Review Map
 
-A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift and TypeScript; Rust and Go are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
+A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift and TypeScript; Rust, Kotlin, and Go are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
 
 ## Run it
 

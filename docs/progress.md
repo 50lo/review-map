@@ -8,7 +8,10 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 | 2 | Language-neutral core | Done |
 | 3 | TypeScript | Done; index mode still needs a run on a pnpm or yarn monorepo |
 | 4 | Structural review | Done; the LLM review still needs runs with the real `claude` CLI on real PRs |
-| 5 | Faster Swift indexing | Not started |
+| 5 | Go | Not started |
+| 6 | Rust | Not started |
+| 7 | Kotlin | Not started |
+| 8 | Faster Swift indexing | Deferred; only big projects are slow |
 
 ## Step 1 notes
 
