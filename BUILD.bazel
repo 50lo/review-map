@@ -1,0 +1,30 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_binary", "swift_library")
+
+exports_files(["Package.swift", "Package.resolved"])
+
+swift_library(
+    name = "ReviewMapCore",
+    srcs = glob(["Sources/ReviewMapCore/**/*.swift"]),
+    module_name = "ReviewMapCore",
+    copts = ["-swift-version", "5"],
+    deps = [
+        "@swiftpkg_indexstore_db//:IndexStoreDB",
+        "@swiftpkg_pathkit//:PathKit",
+        "@swiftpkg_swift_syntax//:SwiftParser",
+        "@swiftpkg_swift_syntax//:SwiftSyntax",
+        "@swiftpkg_tree_sitter//:TreeSitter",
+        "@swiftpkg_tree_sitter_typescript//:TreeSitterTypeScript",
+        "@swiftpkg_xcodeproj//:XcodeProj",
+        "@swiftpkg_yams//:Yams",
+    ],
+)
+
+swift_binary(
+    name = "reviewmap",
+    srcs = glob(["Sources/reviewmap/*.swift"]),
+    copts = ["-swift-version", "5"],
+    deps = [
+        ":ReviewMapCore",
+        "@swiftpkg_swift_argument_parser//:ArgumentParser",
+    ],
+)

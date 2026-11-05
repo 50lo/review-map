@@ -1,0 +1,67 @@
+module(name = "reviewmap")
+
+bazel_dep(name = "rules_swift", version = "3.6.1", repo_name = "build_bazel_rules_swift")
+bazel_dep(name = "rules_swift_package_manager", version = "1.25.0")
+
+swift_deps = use_extension("@rules_swift_package_manager//:extensions.bzl", "swift_deps")
+swift_deps.from_package(
+    resolved = "//:Package.resolved",
+    swift = "//:Package.swift",
+)
+
+# Both grammar scanners include ../../common/scanner.h. The package manifest's
+# explicit source lists omit it, so declare it as a Bazel compilation input.
+swift_deps.bazel_target_add(
+    attr = "srcs",
+    target = "@swiftpkg_tree_sitter_typescript//:TreeSitterTSX.rspm_c",
+    values = ["common/scanner.h"],
+)
+swift_deps.bazel_target_add(
+    attr = "srcs",
+    target = "@swiftpkg_tree_sitter_typescript//:TreeSitterTypeScript.rspm_c",
+    values = ["common/scanner.h"],
+)
+
+# SwiftPM excludes these from standalone compilation, but LLVM's C++ sources
+# include them textually. Bazel's sandbox needs every input.
+swift_deps.bazel_target_add(
+    attr = "textual_hdrs",
+    target = "@swiftpkg_indexstore_db//:IndexStoreDB_LLVMSupport.rspm_cxx",
+    values = [
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Host.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Memory.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Mutex.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Path.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Process.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Program.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Signals.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Threading.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Unix/Watchdog.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Host.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Memory.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Mutex.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Path.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Process.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Program.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Signals.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Threading.inc",
+        "Sources/IndexStoreDB_LLVMSupport/Windows/Watchdog.inc",
+    ],
+)
+swift_deps.bazel_target_add(
+    attr = "textual_hdrs",
+    target = "@swiftpkg_indexstore_db//:IndexStoreDB_Index.rspm_cxx",
+    values = ["Sources/IndexStoreDB_Index/indexstore_functions.def"],
+)
+use_repo(
+    swift_deps,
+    "swift_package",
+    "swiftpkg_indexstore_db",
+    "swiftpkg_pathkit",
+    "swiftpkg_swift_argument_parser",
+    "swiftpkg_swift_syntax",
+    "swiftpkg_tree_sitter",
+    "swiftpkg_tree_sitter_typescript",
+    "swiftpkg_xcodeproj",
+    "swiftpkg_yams",
+)
