@@ -1,6 +1,6 @@
 # Plan
 
-Review Map becomes the review tool Anton uses as a maintainer, for Swift, TypeScript, Rust, and Go. It's a personal tool, not a product: shortcuts are fine where they save real work, and the code stays simple and maintainable.
+Review Map becomes the review tool Anton uses as a maintainer, for Swift, TypeScript, Go, Rust, and Kotlin. It's a personal tool, not a product: shortcuts are fine where they save real work, and the code stays simple and maintainable.
 
 Progress is tracked in [progress.md](progress.md).
 
@@ -21,7 +21,10 @@ Each step is usable on real PRs before the next starts.
 | 2 | Language-neutral core |
 | 3 | TypeScript |
 | 4 | Structural review |
-| 5 | Faster Swift indexing |
+| 5 | Go |
+| 6 | Rust |
+| 7 | Kotlin |
+| 8 | Faster Swift indexing |
 
 ### 1. Map
 
@@ -49,13 +52,11 @@ The core stays in Swift: git export, diffing, components, regions, risk, the LLM
 
 ### 3. TypeScript
 
-TypeScript is the first new language; Rust and Go follow the same path. It brings tree-sitter with the TypeScript grammar, TypeScript's declarations, its reference and risk queries, and npm workspace and `tsconfig` components. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
+TypeScript is the first new language; Go, Rust, and Kotlin follow the same path (steps 5 to 7). It brings tree-sitter with the TypeScript grammar, TypeScript's declarations, its reference and risk queries, and npm workspace and `tsconfig` components. Exact resolution comes from the language's own indexer, which type-checks the source without a full build. The analyzer installs or downloads dependencies before indexing:
 
 | Language | Indexer | Needs |
 | --- | --- | --- |
 | TypeScript | `scip-typescript` | `tsconfig`; `node_modules` for third-party types |
-| Go | `scip-go` | Downloaded modules |
-| Rust | `rust-analyzer scip` | `cargo metadata`; build scripts and proc macros compile |
 
 Index results are cached per commit, as they are for Swift.
 
@@ -84,7 +85,59 @@ Review Map has both sides of the whole repo, the dependency graph, and usage; CI
 
 Each finding cites its evidence from the usage data (for example, "the only caller is `@MainActor`, so this lock guards nothing"), says what to remove or simplify, and is anchored to a component, an edge, or an entity, so it shows on the map.
 
-### 5. Faster Swift indexing
+### Adding a language
+
+Go, Rust, and Kotlin each go through the same stages, in this order:
+
+1. **Parsing**: the tree-sitter grammar as a SwiftPM package, declarations from a walk over the tree, name references from imports, and test files.
+2. **Components**: the language's manifests, a test component per package, platform modules, and lockfile pins.
+3. **Contracts and risk**: contract flags, settings flags, and a risk table written as tree-sitter queries.
+4. **Structural review**: how the language declares conformance, and isolation where it has one.
+5. **Index mode**: the language's SCIP indexer, cached per commit.
+6. **Viewer**: icon, highlighting, entity kind names, and flag weights.
+7. **Real use**: a fixture pair, and a run on the last 40 commits of a real repo.
+
+Two pieces of shared work come before Go:
+
+- The viewer's language knowledge (extensions, manifests, icon, Shiki language, kind names) becomes one table, so a language is one entry in it.
+- Structural review's Swift and TypeScript assumptions move behind `Language`: public API is Swift's access levels or TypeScript's exports, conformers are found by inheritance clauses, and isolation comes from Swift attributes.
+
+| Language | Grammar | Components | Indexer | Needs |
+| --- | --- | --- | --- | --- |
+| Go | tree-sitter-go | Packages inside `go.mod` modules and `go.work` | `scip-go` | Downloaded modules |
+| Rust | tree-sitter-rust | Cargo workspace members and their targets | `rust-analyzer scip` | `cargo metadata`; build scripts and proc macros compile |
+| Kotlin | tree-sitter-kotlin | Gradle modules and their source sets | `scip-java` with the Kotlin compiler plugin | A Gradle build |
+
+Go comes first: a package is a directory, so components map directly, and scip-go needs no build. Kotlin comes last: it has no indexer that works without a build, so it ships with name matching, and index mode waits for measurements, as Swift's does.
+
+### 5. Go
+
+- **Declarations**: types, functions, methods (scoped to their receiver type), interfaces and their methods, constants, and variables. A capitalized name is exported, which is Go's access level.
+- **References**: `pkg.Name` selectors resolved through the file's imports, including aliases and dot imports.
+- **Components**: one component per package directory, inside the module its `go.mod` declares; `go.work` lists the modules. `_test.go` files go to the package's test component, and `testdata` folders are skipped. Pins come from `go.mod` `require` lines. The standard library is every import path whose first element has no dot.
+- **Contracts and risk**: exported API added, removed, or changed; interface method sets; struct field tags (`json:`, `db:`); `go` and `toolchain` directives. Risk marks: `go` statements, ignored errors, `panic`, `recover`, `unsafe`, and type assertions without `ok`.
+- **Structural review**: interfaces are implicit, so a conformer is a type whose method set includes the interface's methods.
+
+### 6. Rust
+
+- **Declarations**: structs, enums and their variants, traits and their items, `impl` blocks (as extensions; `impl Trait for Type` is a conformance), functions, constants, statics, type aliases, and `macro_rules!`.
+- **References**: `use` paths (`crate::`, `super::`, `self::`, external crates) and qualified paths.
+- **Components**: Cargo workspace members and their targets (library, binaries). `Cargo.toml` is read with a TOML package, so name matching doesn't need Cargo installed. `tests/`, `benches/`, and `#[cfg(test)]` modules count as tests. Pins come from `Cargo.lock` for direct dependencies. `std`, `core`, `alloc`, `proc_macro`, and `test` are platform modules.
+- **Contracts and risk**: `pub` API, trait items, enum variants and `#[non_exhaustive]`, serde derives and attributes, `Send` and `Sync` bounds, `async`; features, edition, and `rust-version`. Risk marks: `unsafe`, `unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!`, `unreachable!`, indexing, `as` casts, and `block_on`.
+- **Structural review**: conformers from `impl Trait for Type`; a trait's default methods count as implementations.
+- **Index mode**: a failed build script leaves the index partial, as a failed install does for TypeScript.
+
+### 7. Kotlin
+
+- **Declarations**: classes (data, sealed, enum, value, annotation), interfaces, objects and companions, functions including extension functions (scoped to their receiver type), properties, and type aliases. Kotlin's default visibility is public.
+- **References**: imports, including star imports, and names from the same package, which need no import.
+- **Components**: Gradle modules from the `include` calls in `settings.gradle.kts` or `settings.gradle`, read as text. Test source sets (`src/test`, `src/androidTest`, Kotlin Multiplatform's `*Test`) go to the module's test component. External dependencies are the ones build files declare, with versions from `gradle/libs.versions.toml`. Packages come from file headers and resolve imports across modules, since a module holds many packages. `kotlin`, `java`, `javax`, and `android` are platform modules. Java files in a module are not parsed.
+- **Contracts and risk**: public API, nullability of parameters and results, `suspend`, data class properties, serialized and persisted shapes (`@Serializable`, Room `@Entity`), sealed subclasses and enum entries, `open`, `final`, and `abstract`; `minSdk`, `targetSdk`, `compileSdk`, `jvmTarget`, and the Kotlin version. `AndroidManifest.xml` is a contract file (permissions, exported components). Risk marks: `!!`, `lateinit`, unchecked `as`, `runBlocking`, `GlobalScope`, `TODO()`, and `error()`.
+- **View code**: `@Composable` functions and subclasses of `View`, `Fragment`, and `Activity`.
+- **Structural review**: conformers from supertype lists; isolation from `@MainThread`, `@UiThread`, and Android UI classes, where the innermost `Dispatchers` block overrides it.
+- **Index mode**: not at first. scip-java with the Kotlin compiler plugin needs a Gradle build, which has Swift's cost, so it is measured on a real project before it is built.
+
+### 8. Faster Swift indexing
 
 Swift has no exact resolution without a build for Xcode and Bazel projects, so the build gets cheaper:
 
@@ -99,3 +152,4 @@ Swift has no exact resolution without a build for Xcode and Bazel projects, so t
 - Add Sublime Text (`subl`) to the editor presets.
 - Resolve `tsconfig` path aliases (`@/`, `~/`) in TypeScript name matching.
 - Parse JavaScript files (`.js`, `.jsx`, `.mjs`, `.cjs`) with the TSX grammar.
+- Parse Java files in Kotlin modules.
