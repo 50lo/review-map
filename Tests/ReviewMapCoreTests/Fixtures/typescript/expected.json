@@ -45,7 +45,7 @@
       ]
     },
     {
-      "changeScore" : 0.108,
+      "changeScore" : 0.107,
       "changedEntities" : 2,
       "id" : "npm:@shop/analytics",
       "interfaceChanges" : 1,
@@ -85,7 +85,7 @@
       ]
     },
     {
-      "changeScore" : 0.157,
+      "changeScore" : 0.155,
       "changedEntities" : 4,
       "id" : "npm:@shop/web",
       "interfaceChanges" : 0,
@@ -98,7 +98,7 @@
       ]
     },
     {
-      "changeScore" : 0.02,
+      "changeScore" : 0.019,
       "changedEntities" : 1,
       "id" : "tsconfig:tools",
       "interfaceChanges" : 0,
@@ -705,9 +705,9 @@
         "side" : "base",
         "startLine" : 13
       },
-      "change" : "body",
+      "change" : "signature",
       "changes" : [
-        "body"
+        "signature"
       ],
       "component" : "npm:@shop/core",
       "contractFlags" : [

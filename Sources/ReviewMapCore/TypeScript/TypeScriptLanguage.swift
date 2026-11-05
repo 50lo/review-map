@@ -111,23 +111,9 @@ struct TypeScriptLanguage: Language {
         return String(first)
     }
 
-    /// The repo-relative path, without its extension, that a relative import in `file` points at:
-    /// "./cart.js" in "src/app/main.ts" -> "src/app/cart". Nil when it leaves the repo.
-    static func resolve(_ spec: String, from file: String) -> String? {
-        var parts = file.split(separator: "/").dropLast().map(String.init)
-        if spec.hasPrefix("/") { parts = [] }
-        for p in spec.split(separator: "/").map(String.init) {
-            switch p {
-            case ".", "": continue
-            case "..":
-                guard !parts.isEmpty else { return nil }
-                parts.removeLast()
-            default: parts.append(p)
-            }
-        }
-        guard var last = parts.popLast() else { return nil }
-        let ext = (last as NSString).pathExtension
-        if importExtensions.contains(ext) { last = (last as NSString).deletingPathExtension }
-        return (parts + [last]).joined(separator: "/")
+    /// A relative import without the extension it may name: "./cart.js" -> "./cart" (`cart.ts` once compiled).
+    static func importPath(_ spec: String) -> String {
+        let ext = (spec as NSString).pathExtension
+        return importExtensions.contains(ext) ? (spec as NSString).deletingPathExtension : spec
     }
 }

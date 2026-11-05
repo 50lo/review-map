@@ -505,7 +505,8 @@ struct ModelBuilder {
                 for ref in file.typeRefs where !seenRef.contains(ref) {
                     seenRef.insert(ref)
                     let target: String
-                    if let source = ref.source, let sourceFile = data.modulePaths[source], let c = layout.fileComponent[sourceFile] {
+                    if let source = ref.source.flatMap({ Paths.resolve($0, from: path) }), let sourceFile = data.modulePaths[source],
+                       let c = layout.fileComponent[sourceFile] {
                         // The language says which file the name comes from.
                         guard c != comp else { continue }
                         target = c

@@ -66,7 +66,7 @@ final class TypeScriptTests: XCTestCase {
         XCTAssertEqual(store?.attributes, ["Injectable"])
         XCTAssertEqual(store?.inherited, ["Base", "Loader", "Saver"])
         XCTAssertEqual(store?.signatureDisplay, "class Store<T> extends Base<T> implements Loader, api.Saver")
-        XCTAssertEqual(store?.signatureCanon, "class Store < T >", "supertypes are compared on their own")
+        XCTAssertEqual(store?.signatureCanon, "class Store < T > extends Base < T > implements Loader , api . Saver")
         XCTAssertTrue(store?.modifiers.contains("export") == true && store?.modifiers.contains("abstract") == true)
 
         let items = decl("Store.items")
@@ -124,6 +124,10 @@ final class TypeScriptTests: XCTestCase {
         XCTAssertEqual(a.signatureCanon, b.signatureCanon)
         XCTAssertEqual(a.bodyCanon, b.bodyCanon)
         XCTAssertNotEqual(a.rawText, b.rawText)
+        let base = TypeScriptExtractor.parse(path: "a.ts", source: "interface R extends Base<string> {}").decls[0]
+        let head = TypeScriptExtractor.parse(path: "a.ts", source: "interface R extends Base<number> {}").decls[0]
+        XCTAssertNotEqual(base.signatureCanon, head.signatureCanon, "a supertype's type arguments are part of the header")
+        XCTAssertEqual(head.inherited, ["Base"])
         XCTAssertTrue(TypeScriptExtractor.parse(path: "empty.ts", source: "").decls.isEmpty)
     }
 
@@ -147,8 +151,8 @@ final class TypeScriptTests: XCTestCase {
         XCTAssertEqual(file.imports.map(\.name), ["react", "@shop/core", "fs"], "packages only; relative imports resolve by path")
         let refs = Set(file.typeRefs.map { "\($0.name)@\($0.line)<\($0.source ?? "-")" })
         XCTAssertTrue(refs.isSuperset(of: [
-            "Price@6<src/app/price", "Cart@8<src/app/cart", "useState@9<-", "fetchCart@10<src/api/client",
-            "Total@11<src/api/client", "format@11<-", "FC@8<-",
+            "Price@6<./price", "Cart@8<./cart", "useState@9<-", "fetchCart@10<../api/client",
+            "Total@11<../api/client", "format@11<-", "FC@8<-",
         ]), "\(refs.sorted())")
         XCTAssertFalse(file.typeRefs.contains { $0.name == "x" || $0.name == "lazy" }, "names that aren't imported aren't references")
         XCTAssertEqual(file.typeRefs.first { $0.name == "format" }?.module, "@shop/core")
@@ -202,10 +206,13 @@ final class TypeScriptTests: XCTestCase {
         XCTAssertEqual(TypeScriptLanguage.packageName("node:fs/promises"), "fs")
         XCTAssertNil(TypeScriptLanguage.packageName("@/components/Button"))
         XCTAssertNil(TypeScriptLanguage.packageName("virtual:pwa"))
-        XCTAssertEqual(TypeScriptLanguage.resolve("./cart.js", from: "src/app/main.ts"), "src/app/cart")
-        XCTAssertEqual(TypeScriptLanguage.resolve("../models", from: "src/app/main.ts"), "src/models")
-        XCTAssertEqual(TypeScriptLanguage.resolve("./foo.service", from: "a.ts"), "foo.service")
-        XCTAssertNil(TypeScriptLanguage.resolve("../../x", from: "src/a.ts"))
+        XCTAssertEqual(TypeScriptLanguage.importPath("./cart.js"), "./cart")
+        XCTAssertEqual(TypeScriptLanguage.importPath("./foo.service"), "./foo.service")
+        XCTAssertEqual(Paths.resolve("./cart", from: "src/app/main.ts"), "src/app/cart")
+        XCTAssertEqual(Paths.resolve("../models", from: "src/app/main.ts"), "src/models")
+        XCTAssertEqual(Paths.resolve("./foo.service", from: "a.ts"), "foo.service")
+        XCTAssertEqual(Paths.resolve("/lib/x", from: "src/a.ts"), "lib/x")
+        XCTAssertNil(Paths.resolve("../../x", from: "src/a.ts"))
     }
 
     func testLockfiles() throws {
@@ -263,6 +270,46 @@ final class TypeScriptTests: XCTestCase {
         let obj = try JSONSerialization.jsonObject(with: Data(TypeScriptComponents.stripJSONComments(text).utf8)) as? [String: Any]
         XCTAssertEqual(obj?["a"] as? String, "http://x")
         XCTAssertEqual((obj?["b"] as? [Int]), [1, 2])
+    }
+
+    /// Writes files into a new temporary directory and returns it; the caller removes it.
+    private func tree(_ files: [String: String]) throws -> String {
+        let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-ts-\(UUID().uuidString)")
+        for (path, text) in files {
+            let full = root + "/" + path
+            try FileManager.default.createDirectory(atPath: (full as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            try text.write(toFile: full, atomically: true, encoding: .utf8)
+        }
+        return root
+    }
+
+    func testIdenticalFilesResolveTheirOwnImports() throws {
+        // a/use.ts and b/c/use.ts have the same contents, so they share one parse; "../model" is model.ts for
+        // the first and b/model.ts (its own component) for the second.
+        let use = "import { Model } from \"../model\";\nexport const m: Model = { id: 1 };\n"
+        let root = try tree([
+            "model.ts": "export type Model = { id: number };\n",
+            "b/model.ts": "export type Model = { id: number; name?: string };\n",
+            "a/use.ts": use,
+            "b/c/use.ts": use,
+        ])
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        func git(_ args: String...) throws {
+            try Shell.run(["git", "-C", root, "-c", "user.email=t@example.com", "-c", "user.name=t"] + args)
+        }
+        try git("init", "-q", "-b", "main")
+        try git("add", "-A")
+        try git("commit", "-qm", "one")
+        let m = try Analyzer.run(AnalyzeOptions(repo: root, base: "main", head: "main"))
+        XCTAssertEqual(m.edges.map { "\($0.from)->\($0.to)" }, ["folder:a->folder:."])
+    }
+
+    func testEmptySettingsAreCompared() throws {
+        let root = try tree(["package.json": #"{ "name": "app" }"#, "tsconfig.json": "{}", "src/a.ts": "export const a = 1;\n"])
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        var layout = ComponentLayout()
+        TypeScriptComponents.add(root: root, files: ["src/a.ts"], layout: &layout)
+        XCTAssertEqual(layout.targetSettings["npm:app"]?.settings, [:])
     }
 
     func testIndexProjects() throws {

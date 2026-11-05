@@ -61,10 +61,8 @@ enum TypeScriptComponents {
                     }
                 }
             }
-            let settings = Self.settings(root: root, project: p)
-            if !settings.isEmpty {
-                layout.targetSettings[p.id] = TargetSettings(file: p.manifest, settings: settings, language: "typescript")
-            }
+            // Registered even when empty, so a project's first setting, or its last, is compared too.
+            layout.targetSettings[p.id] = TargetSettings(file: p.manifest, settings: Self.settings(root: root, project: p), language: "typescript")
         }
     }
 

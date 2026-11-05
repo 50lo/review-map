@@ -13,7 +13,7 @@ enum TypeScriptExtractor {
         let root = tree.root
         var walker = DeclWalker()
         walker.statements(root, ctx: Context())
-        let refs = References(path: path, root: root, query: grammar.references)
+        let refs = References(root: root, query: grammar.references)
         return ParsedFile(path: path, language: "typescript", decls: walker.decls, imports: refs.imports,
                           typeRefs: refs.typeRefs, memberRefs: refs.memberRefs, marks: marks(root, grammar))
     }
@@ -120,7 +120,7 @@ enum TypeScriptExtractor {
             var module: String?
         }
 
-        init(path: String, root: SyntaxNode, query: SyntaxQuery) {
+        init(root: SyntaxNode, query: SyntaxQuery) {
             var bindings: [String: Binding] = [:]
             var body: [SyntaxNode] = []
             for stmt in root.namedChildren {
@@ -129,7 +129,7 @@ enum TypeScriptExtractor {
                     let spec = Self.specifier(stmt.child("source"))
                         ?? stmt.namedChildren.first { $0.type == "import_require_clause" }.flatMap { Self.specifier($0.child("source")) }
                     guard let spec else { continue }
-                    let (source, module) = addImport(spec, path: path, line: stmt.startLine)
+                    let (source, module) = addImport(spec, line: stmt.startLine)
                     for clause in stmt.namedChildren where clause.type == "import_clause" || clause.type == "import_require_clause" {
                         for part in clause.namedChildren {
                             switch part.type {
@@ -149,7 +149,7 @@ enum TypeScriptExtractor {
                 case "export_statement" where stmt.child("source") != nil:
                     // A re-export (`export { Cart } from "./cart"`) uses the names it passes on.
                     guard let spec = Self.specifier(stmt.child("source")) else { continue }
-                    let (source, module) = addImport(spec, path: path, line: stmt.startLine)
+                    let (source, module) = addImport(spec, line: stmt.startLine)
                     for clause in stmt.namedChildren where clause.type == "export_clause" {
                         for s in clause.namedChildren where s.type == "export_specifier" {
                             if let name = s.child("name") { typeRefs.append(NameRef(name: name.text, line: s.startLine, source: source, module: module)) }
@@ -164,7 +164,7 @@ enum TypeScriptExtractor {
                     if let id = match.first("id"), let b = bindings[id.text], let name = b.name {
                         typeRefs.append(NameRef(name: name, line: id.startLine, source: b.source, module: b.module))
                     } else if let module = match.first("module") {
-                        addImport(module.text, path: path, line: module.startLine)
+                        addImport(module.text, line: module.startLine)
                     } else if let member = match.first("member") {
                         if let ns = match.first("ns") {
                             if let b = bindings[ns.text], b.name == nil {
@@ -183,12 +183,12 @@ enum TypeScriptExtractor {
             return string.namedChildren.first { $0.type == "string_fragment" }?.text
         }
 
-        /// Records an import of a package. Returns the repo-relative path a relative import points at (without
-        /// its extension), or the package a bare one names.
+        /// Records an import of a package. Returns the path a relative import names (without its extension), or
+        /// the package a bare one names.
         @discardableResult
-        private mutating func addImport(_ spec: String, path: String, line: Int) -> (source: String?, module: String?) {
+        private mutating func addImport(_ spec: String, line: Int) -> (source: String?, module: String?) {
             if spec.hasPrefix(".") || spec.hasPrefix("/") {
-                return (TypeScriptLanguage.resolve(spec, from: path), nil)
+                return (TypeScriptLanguage.importPath(spec), nil)
             }
             let package = TypeScriptLanguage.packageName(spec)
             if let package { imports.append(NameRef(name: package, line: line)) }
@@ -301,27 +301,23 @@ private struct DeclWalker {
         guard let body = n.child("body") else { return }
         let name = n.child("name")?.text ?? "default"
         var inherited: [String] = []
-        var heritage: [SyntaxNode] = []
         for c in n.namedChildren {
             switch c.type {
             case "class_heritage":
-                heritage.append(c)
                 for clause in c.namedChildren {
                     // `extends` comes first, so the superclass is the first inherited name.
                     inherited += clause.namedChildren.filter { $0.type != "type_arguments" }.map(baseName)
                 }
             case "extends_type_clause":
-                heritage.append(c)
                 inherited += c.namedChildren.map(baseName)
             default: break
             }
         }
         let start = keywordStart(n, keyword) ?? n.startByte
+        // Supertypes stay in the compared header, type arguments included (`Base<string>` -> `Base<number>`).
         let header = n.tokens.filter { $0.startByte >= start && $0.startByte < body.startByte }
-        // Supertypes are compared on their own, so they are not part of the header.
-        let canonHeader = header.filter { t in !heritage.contains { t.startByte >= $0.startByte && t.endByte <= $0.endByte } }
         let index = add(n, ctx: ctx, kind: kind, name: name, labelsKey: name, header: header, body: nil,
-                        canonHeader: canonHeader, inherited: inherited, headerEnd: body)
+                        inherited: inherited, headerEnd: body)
         stack.append(Scope(qualified: qualify(name), index: index, kind: kind))
         switch kind {
         case .enum:
@@ -421,7 +417,7 @@ private struct DeclWalker {
     @discardableResult
     private mutating func add(_ n: SyntaxNode, ctx: Context, kind: EntityKind, name: String, labelsKey: String,
                               qualified: String? = nil, header: [SyntaxNode], body: SyntaxNode?,
-                              canonHeader: [SyntaxNode]? = nil, inherited: [String] = [], headerEnd: SyntaxNode? = nil,
+                              inherited: [String] = [], headerEnd: SyntaxNode? = nil,
                               function: SyntaxNode? = nil, stored: Bool = false, type: SyntaxNode? = nil) -> Int {
         var modifiers = ctx.modifiers
         var access: String?
@@ -451,7 +447,7 @@ private struct DeclWalker {
         var d = Decl(
             kind: kind, name: name, qualifiedName: qualified ?? qualify(name), scope: current.qualified,
             parentIndex: current.index, labelsKey: labelsKey,
-            signatureDisplay: header.display, signatureCanon: canon(canonHeader ?? header),
+            signatureDisplay: header.display, signatureCanon: canon(header),
             modifiersCanon: canonModifiers, bodyCanon: body.map { canon($0.tokens) } ?? "",
             rawText: n.tree.text(startByte, max(startByte, rawEnd)),
             access: access, attributes: decorators.map(decoratorName), modifiers: modifiers, inherited: inherited,

@@ -56,8 +56,9 @@ struct Decl {
 struct NameRef: Hashable {
     var name: String
     var line: Int
-    /// The file the name was imported from, when the language says: repo-relative and without its extension
-    /// ("src/cart" for `import { Cart } from "./cart.js"` in `src/main.ts`).
+    /// The file the name was imported from, when the language says: relative to the referring file's directory
+    /// and without its extension ("./cart" for `import { Cart } from "./cart.js"`). Parses are shared by files
+    /// with the same contents, so the core resolves it against each file's own path.
     var source: String? = nil
     /// The module the name was imported from, when the language says ("@shop/core" for
     /// `import { Cart } from "@shop/core/cart"`).
