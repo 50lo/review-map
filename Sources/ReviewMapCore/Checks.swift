@@ -359,8 +359,10 @@ struct StructuralChecks {
             if added[id] != nil { evidence.append("\(pkg) is new in the lockfile\(version).") }
             evidence += users.prefix(5).map { "\(name($0.from)) → \(pkg)\(refLine($0.refs))" }
             let onlyTests = !users.isEmpty && users.allSatisfy { isTestComponent($0.from) }
+            var names: [String] = []
+            for u in users where !names.contains(name(u.from)) { names.append(name(u.from)) }
             let who = users.isEmpty ? "The change adds \(pkg)\(version)"
-                : "\(users.prefix(3).map { name($0.from) }.joined(separator: ", "))\(users.count > 3 ? " and \(users.count - 3) more" : "") now depend\(users.count == 1 ? "s" : "") on \(pkg)"
+                : "\(names.prefix(3).joined(separator: ", "))\(names.count > 3 ? " and \(names.count - 3) more" : "") now depend\(names.count == 1 ? "s" : "") on \(pkg)"
             out.append(Finding(
                 id: "", source: "check", kind: "new-external", severity: onlyTests ? "low" : added[id] != nil ? "medium" : "low",
                 message: "\(who)\(added[id] != nil && !users.isEmpty ? ", a new package" : "").",
