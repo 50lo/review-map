@@ -45,6 +45,35 @@ final class LanguageTests: XCTestCase {
         }
     }
 
+    func testImplicitCallerRulesStayWithEachLanguage() {
+        let swift = SwiftLanguage()
+        let swiftFile = swift.parse(path: "App.swift", source: """
+            struct Page {
+              init() {}
+              var body: Int { 1 }
+              static func == (a: Page, b: Page) -> Bool { true }
+              @objc func bridged() {}
+              @IBAction func tapped() {}
+              func constructor() {}
+              func plain() {}
+            }
+            """)
+        let swiftImplicit = Set(swiftFile.decls.filter(swift.isImplicitlyCalled).map(\.name))
+        XCTAssertEqual(swiftImplicit, ["init", "body", "==", "bridged", "tapped"])
+
+        let ts = TypeScriptLanguage()
+        let tsFile = ts.parse(path: "page.ts", source: """
+            export class Page {
+              constructor() {}
+              #secret() {}
+              body() {}
+              plain() {}
+            }
+            """)
+        let tsImplicit = Set(tsFile.decls.filter(ts.isImplicitlyCalled).map(\.name))
+        XCTAssertEqual(tsImplicit, ["constructor", "#secret"])
+    }
+
     func testLanguageIsolationKeepsInnermostDeclarationRules() {
         let swift = SwiftLanguage()
         let source = """
@@ -188,11 +217,11 @@ final class LanguageTests: XCTestCase {
     func testUnusedAPICheckDelegatesPublicClassification() throws {
         let language = HookLanguage()
         var builder = try builder(base: ["Lib/API.swift": "func old() {}\n"],
-                                  head: ["Lib/API.swift": "func old() {}\nfunc api() {}\npublic func excluded() {}\n"], language: language)
+                                  head: ["Lib/API.swift": "func old() {}\nfunc api() {}\nfunc entry() {}\npublic func excluded() {}\n"], language: language)
         builder.matchEntities()
         builder.resolveReferences()
         let unused = finish(builder).findings.filter { $0.kind == "unused-api" }
-        XCTAssertEqual(unused.compactMap { $0.anchors.first?.entity }, ["folder:Lib::api()"], "The language hook, rather than Swift access rules, defines public API")
+        XCTAssertEqual(unused.compactMap { $0.anchors.first?.entity }, ["folder:Lib::api()"], "The language hooks, rather than Swift rules, define public API and implicit callers")
     }
 
     private func builder(base: [String: String], head: [String: String], language: Language) throws -> ModelBuilder {
@@ -229,7 +258,8 @@ private final class HookLanguage: Language {
     var conformanceUses: [ConformanceUse] = []
     var sawBaseInterfaceAndConformer = false
 
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool { decl.name == "api" }
+    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool { ["api", "entry"].contains(decl.name) }
+    func isImplicitlyCalled(_ decl: Decl) -> Bool { decl.name == "entry" }
     func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer] {
         conformanceUses.append(use)
         if interface.base != nil && builder.pairs.contains(where: { $0.base?.decl.name == "HiddenConformer" && $0.head != nil }) {

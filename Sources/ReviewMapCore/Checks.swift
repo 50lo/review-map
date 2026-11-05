@@ -56,10 +56,6 @@ private final class WordIndex {
     }
 }
 
-private let implicitNames: Set<String> = ["init", "deinit", "subscript", "default", "constructor", "body", "main"]
-/// Attributes whose declarations are called by a runtime or a framework, not by name.
-private let entryAttributes: Set<String> = ["objc", "IBAction", "IBOutlet", "IBInspectable", "main", "UIApplicationMain", "NSApplicationMain",
-                                            "_cdecl", "_silgen_name", "_spi", "usableFromInline", "inlinable", "dynamicCallable", "dynamicMemberLookup"]
 
 private let severityOrder = ["high": 0, "medium": 1, "low": 2]
 
@@ -149,10 +145,9 @@ struct StructuralChecks {
     /// protocol requirements, and members of a type or extension that conforms to something (they may be witnesses).
     private func calledImplicitly(_ l: Located, _ s: Side) -> Bool {
         let d = l.decl
-        if implicitNames.contains(d.name) || !(d.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false) { return true }
+        if b.language(of: l.file).isImplicitlyCalled(d) { return true }
         if d.kind == .extension || d.kind == .`init` || d.inProtocol { return true }
         if d.modifiers.contains("override") { return true }
-        if d.attributes.contains(where: { entryAttributes.contains($0) || $0.hasPrefix("IB") }) { return true }
         if let p = decl(s, l.file, d.parentIndex), !p.inherited.isEmpty || p.kind == .protocol { return true }
         return false
     }
@@ -555,7 +550,7 @@ extension ModelBuilder {
         let addedHead = Set(pairs.compactMap { p in p.base == nil ? p.head.map { "\($0.file)|\($0.index)" } : nil })
         for path in head.files.keys.sorted() where !head.generated.contains(path) && !ComponentBuilder.isTestPath(path) {
             guard let file = head.files[path], let comp = head.layout.fileComponent[path], head.layout.components[comp]?.isTest != true else { continue }
-            for (i, d) in file.decls.enumerated() where d.kind != .extension && !addedHead.contains("\(path)|\(i)") && !implicitNames.contains(d.name) {
+            for (i, d) in file.decls.enumerated() where d.kind != .extension && !addedHead.contains("\(path)|\(i)") && !language(of: path).isImplicitlyCalled(d) {
                 let w = Set(Self.nameWords(d.name))
                 guard !w.isEmpty else { continue }
                 for x in w { byWord[x, default: []].append(candidates.count) }
@@ -566,7 +561,7 @@ extension ModelBuilder {
         for p in pairs { pairById[p.id] = p }
         var out: [String: [Usage]] = [:]
         for e in entities where e.change == .added && !e.tags.contains("test") && !e.tags.contains("generated") {
-            guard let h = pairById[e.id]?.head, h.decl.kind != .case, !implicitNames.contains(h.decl.name) else { continue }
+            guard let h = pairById[e.id]?.head, h.decl.kind != .case, !language(of: h.file).isImplicitlyCalled(h.decl) else { continue }
             let name = h.decl.name
             let words = Set(Self.nameWords(name))
             var scored: [(Double, Located)] = []

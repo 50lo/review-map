@@ -141,6 +141,19 @@ struct SwiftLanguage: Language {
         ["public", "open", "package"].contains(decl.access ?? "")
     }
 
+    /// Special members, operators, and declarations a runtime or framework calls: `@objc`,
+    /// Interface Builder, `@main`, C entry points, and inlinable code that clients compile in.
+    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+        if Self.implicitNames.contains(decl.name) || !(decl.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false) { return true }
+        return decl.attributes.contains { Self.entryAttributes.contains($0) || $0.hasPrefix("IB") }
+    }
+
+    private static let implicitNames: Set<String> = ["init", "deinit", "subscript", "body", "main"]
+    private static let entryAttributes: Set<String> = [
+        "objc", "main", "UIApplicationMain", "NSApplicationMain", "_cdecl", "_silgen_name", "_spi",
+        "usableFromInline", "inlinable", "dynamicCallable", "dynamicMemberLookup",
+    ]
+
     /// The isolation code at `line` runs in, from the innermost declaration around it that says:
     /// a global actor attribute ("@MainActor"), `nonisolated`, an actor ("actor CartStore"), or a SwiftUI view.
     func isolation(in file: ParsedFile, line: Int) -> String? {

@@ -103,6 +103,11 @@ struct TypeScriptLanguage: Language {
         return top.modifiers.contains("export") && !top.modifiers.contains("default")
     }
 
+    /// Constructors, default exports, and names that aren't plain identifiers (`#private`, computed keys).
+    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+        ["constructor", "default"].contains(decl.name) || !(decl.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false)
+    }
+
     // MARK: Resolution
 
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {
