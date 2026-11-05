@@ -306,7 +306,8 @@ struct StructuralChecks {
 
     private func layering() -> [Finding] {
         guard let layers = config.layers, !layers.isEmpty else { return [] }
-        var out: [Finding] = []
+        // Violations grouped by the targets at their ends, so a manifest dependency and the code under it are one finding.
+        var groups: [String: [(edge: Edge, brokeBefore: Bool)]] = [:]
         for e in edges where e.status != .removed && !e.to.hasPrefix("ext:") && !isTestComponent(e.from) {
             guard let lf = layer(e.from, .head), let lt = layer(e.to, .head),
                   let rf = config.layerRank(lf), let rt = config.layerRank(lt), rt < rf else { continue }
@@ -315,16 +316,28 @@ struct StructuralChecks {
                 return bt < bf
             }()
             if brokeBefore && e.symbolsAdded.isEmpty { continue }
-            let refs = e.refs.filter { $0.side == .head }
+            groups["\(root(e.from, .head))\u{1}\(root(e.to, .head))", default: []].append((e, brokeBefore))
+        }
+        var out: [Finding] = []
+        for key in groups.keys.sorted() {
+            // Code edges first: they say what crosses the boundary.
+            let group = groups[key]!.sorted { ($0.edge.refs.allSatisfy { $0.line == 0 } ? 1 : 0, $0.edge.from) < ($1.edge.refs.allSatisfy { $0.line == 0 } ? 1 : 0, $1.edge.from) }
+            let e = group[0].edge
+            let lf = layer(e.from, .head)!, lt = layer(e.to, .head)!
+            let brokeBefore = group.allSatisfy(\.brokeBefore)
             var evidence = ["\(name(e.from)) is in \(lf), \(name(e.to)) is in \(lt), which sits above it in reviewmap.yml."]
-            if brokeBefore { evidence.append("The edge already broke the layering at base; it now also uses \(e.symbolsAdded.joined(separator: ", ")).") }
+            if brokeBefore {
+                let syms = Array(Set(group.flatMap(\.edge.symbolsAdded))).sorted()
+                evidence.append("The dependency already broke the layering at base; it now also uses \(syms.joined(separator: ", ")).")
+            }
+            let refs = group.flatMap { $0.edge.refs.filter { $0.side == .head } }
             evidence += refs.prefix(3).map { $0.line == 0 ? "\($0.symbol) in \($0.file)" : "\($0.symbol) at \($0.file):\($0.line)" }
             out.append(Finding(
                 id: "", source: "check", kind: "layering", severity: brokeBefore ? "medium" : "high",
                 message: "\(name(e.from)) (\(lf)) depends on \(name(e.to)) (\(lt)), against the declared layering.",
                 evidence: evidence,
                 suggestion: "Move the code that needs \(name(e.to)) up into \(lt), or pass what it needs down through an interface in \(lf).",
-                anchors: [.edge(e.from, e.to), .component(e.from), .component(e.to)]))
+                anchors: group.map { .edge($0.edge.from, $0.edge.to) } + [.component(e.from), .component(e.to)]))
         }
         return out
     }
