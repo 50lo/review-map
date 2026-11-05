@@ -41,6 +41,8 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `--llm-cache <dir>` | Cache directory (default `~/.reviewmap/cache`). It must be outside the target repo. |
 | `--llm-jobs <n>` | Batches run at the same time (default 4). |
 | `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
+| `--description <file>` | The change's description for the structural review, or `-` for stdin. Default: the PR of the head branch from `gh pr view`, else the commit messages. |
+| `--no-review` | Skip the LLM's structural review of the whole change. |
 | `--index`, `--no-index` | Resolve references exactly from each language's index (see Index mode). Default: `index.enabled` in `reviewmap.yml`, else off. |
 | `--index-builder <b>` | Swift: `bazel`, `xcodebuild`, or `swift` (default: `bazel` for a Bazel workspace with targets, else `xcodebuild` where it exists, else `swift build`). |
 | `--index-target <label>` | Swift: Bazel target to build; repeat for several (default: `top_level_targets` of the repo's rules_xcodeproj `xcodeproj` rule). |
@@ -98,20 +100,44 @@ Name matching is fast and needs no build, but it guesses: a common member name (
 
 Index mode runs for each language in the change. To keep it on for a repo, add `index: {enabled: true}` to its `reviewmap.yml`, with `scheme` and `project` if the Swift defaults don't pick the right ones.
 
+## Structural review
+
+Review Map has both sides of the whole repo, the dependency graph, and usage; a CI review agent only sees the diff. The structural review uses that. Its findings go in the model's `findings`, each with a kind, a severity (`high`, `medium`, `low`), a one-sentence message, its evidence, a suggestion when it has one, and the components, edges, or entities it is anchored to.
+
+**Deterministic checks** run in the analyzer, with no LLM:
+
+| Kind | Finds |
+| --- | --- |
+| `cycle` | A dependency cycle between targets that wasn't there at base. Split folders count as their target and external packages are left out. The finding shows the shortest cycle through a new edge, with a reference for each step. |
+| `layering` | An edge from a component to one in a layer above it, against `layers` in `reviewmap.yml`. An edge that already broke the layering at base is only reported when it uses new symbols. Tests are exempt. |
+| `new-external` | A component that newly depends on an external package, and packages new in a lockfile. |
+| `unused-api` | A new public declaration (Swift's `public`, `open`, and `package`; TypeScript's named exports and their public members) that nothing outside tests references. |
+| `orphaned` | A non-public declaration that had references at base and has none outside tests at head: the change removed its last callers. |
+| `conformers` | A new or changed protocol requirement, interface member, or abstract member, and the conformers that have no implementation of it (unless an extension of the protocol provides a default) or whose implementation didn't change with a changed signature. Only conformers that can see the protocol count. |
+| `untested` | Changed functions, initializers, and properties that no test references, one finding per component. Only components that tests reach at all, and not private members or view code. |
+
+Without index mode, "referenced" means the identifier appears somewhere outside the declaration itself (and outside extension headers of a type). That over-counts uses, so `unused-api` and `orphaned` stay quiet when in doubt. With index mode, references come from the index. Initializers, overrides, protocol requirements, entry points (`@objc`, `@IBAction`, `@main`), and members of a type or extension that conforms to something are left out of both, since they are called without being named.
+
+**One LLM review per change** runs with the annotator (below) and asks whether the shape of the change matches its intent, whether responsibilities sit in the right place, what's missing, what's duplicated, and what's more complex than the usage shows it needs to be: checks that can't fail, concurrency protection for impossible scenarios, data structures beyond what the input needs, abstractions without a second use, retries and fallbacks for failures that can't happen, and re-implementations of existing helpers. Its finding kinds are `intent`, `placement`, `missing`, `duplicate`, and `complexity`.
+
+- **Input**: the change's description (`--description`, else the PR from `gh pr view`, else the commit messages), `REVIEW.md`, the changed components, the edge diff with up to three references per edge and their source lines, the interface diff, usage of the changed entities (callers in other components, how many, the isolation each call runs in, and the call-site lines), existing declarations with names similar to new ones (`similar` on added entities), the deterministic findings, and the changed code, riskiest regions first, up to about 80,000 characters.
+- **Reply**: up to 12 findings, each citing evidence from the usage data, with a suggestion and 1 to 3 anchors that must name components, edges, or entities in the model. A reply that fails validation is retried once with the errors; if it fails again, the model keeps only the deterministic findings and an `llm-rejected` warning names the errors.
+- **Cache**: keyed by a hash of the whole prompt, so it is reused until something it shows changes.
+
 ## LLM annotator
 
-The LLM only annotates facts the analyzer already produced. It never adds entities, edges, or regions, and it never changes the deterministic scores; its results sit next to them in `llm` fields.
+The LLM only annotates facts the analyzer already produced. It never adds entities, edges, or regions, and it never changes the deterministic scores; its results sit next to them in `llm` fields. It also runs the structural review above.
 
-- **Tasks**: give every review and removed region a risk from 0 to 1 and one sentence on why it matters; mark each context region as kept or left out, and rank the kept ones; write a one-line behavior summary for each component and each changed entity; tag review regions that add defensive handling for a state that can't occur, or a speculative abstraction, as removal candidates.
+- **Tasks**: give every review and removed region a risk from 0 to 1; mark each context region as kept or left out, and rank the kept ones; write a one-line behavior summary for each component and each changed entity.
 - **Scope**: changed entities outside test components and without `test` or `generated` tags. Cosmetic changes are skipped.
 - **Batches**: one per component, split by size (about 60,000 characters of entity material) for large components. The first batch of a component also asks for its summary.
 - **Prompt**: per entity, its kind, change, contract flags, signatures, usage, the head code (and base code when it changed), its regions with their deterministic risk and reasons, and the lines of each context region that matter. Declarations longer than 150 lines show their first lines and their regions. `REVIEW.md` from the head of the target repo, if there is one, goes in as domain notes. The prompt ends with a reply template that already holds every id, so the reply only fills in values.
 - **Execution**: `claude -p --output-format json --tools "" --no-session-persistence`, or `codex exec --sandbox read-only --output-last-message <file> -`, with the prompt on stdin and `--model` when `--llm-model` is set. Each call runs in an empty temporary directory, so the agent never sees or writes to the target repo.
-- **Validation**: the reply must be the template filled in, with the same entities, regions, and context regions, risks in 0 to 1, one-line notes and summaries, removal kinds `defensive` or `speculative`, and a rank from 1 on every kept context region. Text around the JSON, such as a code fence, is ignored. A batch that fails is retried once with the errors; if it fails again, its regions keep only their deterministic scores and an `llm-rejected` warning names the errors.
+- **Validation**: the reply must be the template filled in, with the same entities, regions, and context regions, risks in 0 to 1, one-line summaries, and a rank from 1 on every kept context region. Text around the JSON, such as a code fence, is ignored. A batch that fails is retried once with the errors; if it fails again, its regions keep only their deterministic scores and an `llm-rejected` warning names the errors.
 - **Cache**: one file per entity and one per component summary, keyed by a hash of the prompt version, tool, model, `REVIEW.md`, and everything the prompt says about the entity. A second run only calls the CLI for entities whose material changed.
 - **Missing CLI**: the annotator is skipped with an `llm-unavailable` warning, and the model has no `llm` fields.
 
-`scripts/fake-llm.sh` stands in for either CLI in tests and demos: it fills the reply template with canned values picked by a hash of each id. `FAKE_LLM_MODE` makes it wrap the JSON in prose (`prose`), return a risk outside 0 to 1 (`invalid`), exit with an error (`fail`), or return claude's `is_error` result (`error`).
+`scripts/fake-llm.sh` stands in for either CLI in tests and demos: it fills the reply template with canned values picked by a hash of each id, and answers the structural review with one canned finding on the first component it lists. `FAKE_LLM_MODE` makes it wrap the JSON in prose (`prose`), return a risk outside 0 to 1 and an unknown finding kind (`invalid`), exit with an error (`fail`), or return claude's `is_error` result (`error`).
 
 ## Viewer
 
@@ -119,12 +145,13 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 
 **Level 1, component map**
 
-- Nodes are components. Split folders are drawn inside their target. A badge shows changed entities and interface changes, and the tint follows `changeScore`. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
+- Nodes are components. Split folders are drawn inside their target. A badge shows changed entities and interface changes, and the tint follows `changeScore`. Components with structural review findings (on themselves or on code in them) carry a findings count on their top border, colored by the most severe one; a collapsed group counts the findings inside it. Edges with findings are labeled with their count. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
 - Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
 - By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
 - A target split into folders can be collapsed into one node (drawn as a stack, with the number of components inside) and expanded again, with the arrow button on the node or in the side panel. Edges into a collapsed group are bundled into one arrow per pair of nodes. Above 40 visible components every group starts collapsed; "Collapse groups" and "Expand groups" in the toolbar do all of them. A focus inside a collapsed group opens it.
 - Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked. Clicking a bundled edge lists the dependencies inside it; picking one opens its group.
 - "Show N more neighbors" in the side panel adds a component's hidden neighbors to the map, whatever the scope.
+- **Structural review**, at the top of the side panel, lists the findings, most severe first, with their evidence, suggestion, and links to what they are anchored to. A finding's message opens its entity, code, edge, or component. The side panel of a component or an edge, and levels 2 and 3, list the findings anchored there.
 - **Start here** lists the highest-risk entities, each scored by its riskiest region, with changed members folded into their type, and opens that region at level 3. "Review regions by risk" starts at the riskiest region. A model without regions is ranked by contract flags.
 - Each component shows a review progress bar.
 
@@ -135,6 +162,7 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 
 **Level 3, implementation view**
 
+- An added entity lists existing declarations with similar names, which it may duplicate.
 - The entity's head code, highlighted (Swift and TypeScript). Review regions are tinted, with a label row above each that shows the risk, the reasons, a Note button, and Open. Removed lines are collapsed markers that expand to the base lines; a removed region's label sits on its marker. Code outside regions is folded. A removed entity shows its base code.
 - Context regions appear after the region they support as one-line labels in a second color ("caller in Checkout", "definition", "state"). A label expands to the lines that matter, with the rest of the declaration folded, and links to the code.
 - Notes attach to a region and show under it.
@@ -144,7 +172,7 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 **LLM layer**
 
 - When the model has LLM annotations, Start here shows a **Ranking** toggle: Deterministic or LLM. It switches the risk that Start here, region order, `j`/`k`, and the risk badges use. The LLM layer is on by default, and the choice is kept in browser storage.
-- With the LLM layer on, entity and component summaries show under their headers (side panel, level 2, level 3). The rest shows on demand: a region's note behind **Why** in its label row, and removal candidates as a tag in the label row and as a list behind their count in the overview. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
+- With the LLM layer on, entity and component summaries show under their headers (side panel, level 2, level 3), and the LLM's structural review findings join the deterministic ones, marked LLM. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
 - Context the LLM left out folds into a "Show N context snippets left out by the LLM" link after the kept ones, which follow the LLM's rank.
 - With the LLM layer off, the viewer shows only deterministic facts, as if the annotator hadn't run.
 - The overview names the CLI that scored the change and the batches that kept deterministic scores, which open their validation errors.
@@ -177,7 +205,13 @@ The dev server reads file contents with `git show <sha>:<file>` in the repo reco
 components:            # glob rules; the first match wins and overrides the inferred component
   - name: Checkout
     paths: ["App/Features/Checkout/**"]
-    layer: domain      # ui | domain | data | infra
+    layer: domain
+layers:                # top to bottom: a component may use its own layer and the ones below it
+  - name: ui
+    components: ["App", "Features/*"]   # component names, as globs; split folders take their target's layer
+  - name: domain       # also has the components whose rule above says `layer: domain`
+  - name: data
+    components: ["Networking", "Persistence"]
 split:
   threshold: 30        # split targets with more source files than this
   maxDepth: 3
@@ -197,13 +231,14 @@ index:                 # index mode; the CLI flags win
 
 The schema is in `Sources/ReviewMapCore/Model.swift`. Fields worth knowing:
 
-- `version` is 2: contract flags carry their language's prefix. `analyzer` has the version, the resolution mode, and the `languages` in the change; `repo` has `usesMergeBase`.
+- `version` is 3: structural review findings, and region annotations without notes or removal candidates. Version 2 added the language prefix on contract flags. `analyzer` has the version, the resolution mode, and the `languages` in the change; `repo` has `usesMergeBase`.
 - Components: `module`, `parent`, `isTest`, `status` (`added`/`removed`), `changedEntities`, `interfaceChanges`.
 - Edges: `symbolsAdded`, `symbolsRemoved`, `refCount`. `refs` is capped, with differing symbols listed first. A ref with `line: 0` comes from a manifest.
 - Entities: `changes`, `parent` (entity id, which may point to an unchanged declaration that isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Entity kinds also include `file` and `target`.
-- `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than entity ids, because the referring declaration usually didn't change and so has no entity.
+- `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than entity ids, because the referring declaration usually didn't change and so has no entity. A `usedBy` entry has `side: "base"` when the use only exists at base (a caller the change removed), and `isolation` when the declaration around the reference, or a type around it, says (`@MainActor`, `nonisolated`, `actor CartStore`, or a SwiftUI view). Added entities have `similar`: up to five existing declarations with close names, in the same shape.
+- `findings`: `{id, source, kind, severity, message, evidence, suggestion?, anchors, location?}`. `source` is `check` or `llm`; each anchor is `{component}`, `{from, to}`, or `{entity}`, the first being the main one; `location` is the declaration a finding is about.
 - Regions: `anchor` (removed regions), and `component` and `lines` (context regions). Region ids are `<entity id>/r<n>` for review and removed regions and `<entity id>/c<n>` for context. A context region's `reasons` holds the qualified name of the declaration shown.
-- LLM annotations: review and removed regions get `llm: {risk, note, removal?: {kind, note}}`, and context regions `llm: {keep, rank?}`. Components and entities get `llm: {summary}`. The top-level `llm` records the tool, model, stand-in command, prompt version, and how many batches ran, came from the cache, and were rejected.
+- LLM annotations: review and removed regions get `llm: {risk}`, and context regions `llm: {keep, rank?}`. Components and entities get `llm: {summary}`. The top-level `llm` records the tool, model, stand-in command, prompt version, how many batches ran, came from the cache, and were rejected, the structural review's outcome (`review`: `ok`, `cached`, `rejected`, or `skipped`), and where the description came from (`description`).
 
 Fields that are `null` are omitted. Consumers should ignore fields they don't know.
 
@@ -213,7 +248,7 @@ Fields that are `null` are omitted. Consumers should ignore fields they don't kn
 swift test
 ```
 
-`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. `Fixtures/indexed` is a package that builds anywhere; the index tests build it with `swift build`, compare index mode with name matching on a common member name and a type declared in two modules, and check the cache and the fallback. They are skipped when the toolchain has no `libIndexStore`. The SCIP tests decode indexes written field by field, without an indexer. `Fixtures/typescript` is an npm workspace with a base and a head tree that covers TypeScript's components, edges, flags, settings, lockfiles, and risk marks, with its own `expected.json`; the TypeScript tests also check the parser on its own. `Fixtures/typescript-indexed` has the common member name case for scip-typescript; its tests are skipped without Node.js or when scip-typescript can't be fetched. The annotator tests run `scripts/fake-llm.sh` on the basic fixture, cover validation, retries, the cache, and both CLIs, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
+`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. `Fixtures/indexed` is a package that builds anywhere; the index tests build it with `swift build`, compare index mode with name matching on a common member name and a type declared in two modules, and check the cache and the fallback. They are skipped when the toolchain has no `libIndexStore`. The SCIP tests decode indexes written field by field, without an indexer. `Fixtures/typescript` is an npm workspace with a base and a head tree that covers TypeScript's components, edges, flags, settings, lockfiles, and risk marks, with its own `expected.json`; the TypeScript tests also check the parser on its own. `Fixtures/typescript-indexed` has the common member name case for scip-typescript; its tests are skipped without Node.js or when scip-typescript can't be fetched. The checks tests build a small two-commit repo per check. The annotator tests run `scripts/fake-llm.sh` on the basic fixture, cover validation, retries, the cache, both CLIs, and the structural review, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
 
 ## Known limits
 
@@ -224,3 +259,4 @@ swift test
 - Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
 - Without `--dump-package`, manifests that build their targets with loops or helper functions are only partly read.
 - The annotator has only run against `scripts/fake-llm.sh`, not yet against the real `claude` or `codex` CLI.
+- The structural checks' notion of a conformer is syntactic: a type conforms when its declaration or an extension lists the protocol. Conformances through a superclass, or a protocol inheriting another, aren't followed.

@@ -13,9 +13,10 @@ import {
   type NodeProps,
 } from "@xyflow/react";
 import { componentEntities, externalChangeOf, isChanged, related, rollup, shortName, within, type Focus, type Index, type MapGraph } from "./graph";
+import { findingCounts, topSeverity } from "./findings";
 import { useReview } from "./review";
 import { layout, type Placed } from "./layout";
-import type { Component, ExternalDepChange } from "./types";
+import type { Component, ExternalDepChange, Finding } from "./types";
 
 export const EDGE_COLORS: Record<string, string> = {
   added: "var(--added)",
@@ -44,7 +45,16 @@ interface NodeData extends Record<string, unknown> {
   /** Change counts and score, rolled up over a collapsed group's contents. */
   counts: { changedEntities: number; interfaceChanges: number };
   score: number;
+  /** Structural review findings anchored to the component or to code in it. */
+  findings?: Finding[];
 }
+
+const FindingBadge = ({ findings, corner }: { findings?: Finding[]; corner?: boolean }) =>
+  findings && findings.length > 0 ? (
+    <span className={`badge finding-badge sev-${topSeverity(findings)}${corner ? " corner" : ""}`} title={findings.map((f) => f.message).join("\n")}>
+      {findings.length} finding{findings.length === 1 ? "" : "s"}
+    </span>
+  ) : null;
 
 const Handles = () => (
   <>
@@ -92,6 +102,7 @@ const ComponentNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
       style={{ ["--score" as string]: score }}
     >
       <Handles />
+      <FindingBadge findings={data.findings} corner />
       <div className="node-head">
         <span className="node-title" title={c.name}>
           {data.label}
@@ -122,6 +133,7 @@ const GroupNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         {data.group && <GroupToggle group={data.group} />}
         <span>{data.label}</span>
         <Badges counts={data.counts} />
+        <FindingBadge findings={data.findings} />
         {c.status && <span className={`tag ${statusClass(c)}`}>{c.status === "added" ? "new" : c.status}</span>}
       </div>
     </div>
@@ -138,6 +150,7 @@ const ExternalNode = memo(({ data }: NodeProps<RFNode<NodeData>>) => {
         {data.label}
       </span>
       {label && <span className="badge ext-badge">{label}</span>}
+      <FindingBadge findings={data.findings} corner />
     </div>
   );
 });
@@ -200,6 +213,8 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
     return out;
   }, [index, graph, reviewed]);
 
+  const found = useMemo(() => findingCounts(index, graph), [index, graph]);
+
   const nodes = useMemo<RFNode<NodeData>[]>(() => {
     if (!placed) return [];
     // React Flow needs parents before their children.
@@ -232,11 +247,12 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
             progress: progress.get(p.id),
             counts: roll ?? comp,
             score: roll ? roll.changeScore : comp.changeScore,
+            findings: found.nodes.get(p.id),
             group: p.isGroup || hides ? { collapsed: !!hides, hides: hides ?? 0, toggle: () => toggleGroup(p.id) } : undefined,
           },
         };
       });
-  }, [placed, index, graph, rel, focus, progress, toggleGroup]);
+  }, [placed, index, graph, rel, focus, progress, toggleGroup, found]);
 
   const edges = useMemo<RFEdge[]>(() => {
     if (!placed) return [];
@@ -248,13 +264,17 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
         const color = !lit ? DIMMED : e.status === "unchanged" && !rel ? QUIET_UNCHANGED : EDGE_COLORS[e.status];
         const selected = (focus?.type === "edge" && focus.key === e.key) || (focus?.type === "bundle" && e.bundle && focus.from === e.from && focus.to === e.to);
         const weight = 1 + Math.min(3, Math.log2(1 + e.refCount) / 2);
+        const flagged = found.edges.get(e.key);
         return {
           id: e.key,
           source: e.from,
           target: e.to,
           zIndex: 2,
           interactionWidth: 18,
-          className: `edge-${e.status}${e.bundle ? " edge-bundle" : ""}`,
+          className: `edge-${e.status}${e.bundle ? " edge-bundle" : ""}${flagged ? ` edge-finding sev-${topSeverity(flagged)}` : ""}`,
+          label: flagged ? `${flagged.length} finding${flagged.length === 1 ? "" : "s"}` : undefined,
+          labelBgPadding: [4, 1] as [number, number],
+          labelBgBorderRadius: 4,
           markerEnd: { type: MarkerType.ArrowClosed, color, width: 16, height: 16 },
           style: {
             stroke: color,
@@ -263,7 +283,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
           },
         };
       });
-  }, [placed, graph.edges, rel, focus, showUnchanged]);
+  }, [placed, graph.edges, rel, focus, showUnchanged, found]);
 
   const bundles = useMemo(() => new Map(graph.edges.filter((e) => e.bundle).map((e) => [e.key, e])), [graph.edges]);
 

@@ -14,19 +14,56 @@ export interface ChangeModel {
   entities: Entity[];
   regions: Region[];
   warnings: Warning[];
+  /** Structural review: the deterministic checks' findings, then the LLM's. Missing before version 3. */
+  findings: Finding[];
   /** Set when the LLM annotator ran. */
-  llm?: { tool: string; model?: string; command?: string; promptVersion: string; batches: number; cached: number; failed: number; reviewNotes?: boolean };
+  llm?: {
+    tool: string;
+    model?: string;
+    command?: string;
+    promptVersion: string;
+    batches: number;
+    cached: number;
+    failed: number;
+    reviewNotes?: boolean;
+    /** The structural review: ok, cached, rejected, or skipped. */
+    review?: string;
+    /** Where the change's description came from: file, pr, or commits. */
+    description?: string;
+  };
+}
+
+/** A component, an edge (from and to), or an entity. */
+export interface Anchor {
+  component?: string;
+  from?: string;
+  to?: string;
+  entity?: string;
+}
+
+export interface Finding {
+  id: string;
+  /** "check" (deterministic) or "llm". */
+  source: "check" | "llm" | string;
+  /** Checks: cycle, layering, new-external, unused-api, orphaned, conformers, untested. LLM: intent, placement, missing, duplicate, complexity. */
+  kind: string;
+  severity: "high" | "medium" | "low" | string;
+  message: string;
+  evidence: string[];
+  suggestion?: string;
+  /** The first anchor is the main one. */
+  anchors: Anchor[];
+  /** The code it is about, when that is one declaration. */
+  location?: Location;
 }
 
 export interface LLMSummary {
   summary: string;
 }
 
-/** Review and removed regions get risk and note (and maybe removal); context regions get keep and rank. */
+/** Review and removed regions get risk; context regions get keep and rank. */
 export interface RegionLLM {
   risk?: number;
-  note?: string;
-  removal?: { kind: "defensive" | "speculative" | string; note: string };
   keep?: boolean;
   rank?: number;
 }
@@ -76,6 +113,10 @@ export interface Usage {
   symbol: string;
   file: string;
   line: number;
+  /** usedBy: the isolation the reference runs in, when known ("@MainActor", "actor CartStore", "nonisolated"). */
+  isolation?: string;
+  /** usedBy: "base" for a use only at base (a caller the change removed); missing at head. */
+  side?: Side;
 }
 
 export interface Entity {
@@ -95,6 +136,8 @@ export interface Entity {
   baseLocation?: Location;
   usedBy?: Usage[];
   dependsOn?: Usage[];
+  /** Added entities: existing declarations with similar names. */
+  similar?: Usage[];
   llm?: LLMSummary;
 }
 

@@ -1126,6 +1126,7 @@
           "component" : "npm:@shop/web",
           "file" : "packages/web/src/cart/CartView.tsx",
           "line" : 10,
+          "side" : "base",
           "symbol" : "CartView()"
         },
         {
@@ -1444,6 +1445,129 @@
       "change" : "added",
       "name" : "zod",
       "to" : "3.23.8"
+    }
+  ],
+  "findings" : [
+    {
+      "anchors" : [
+        {
+          "entity" : "npm:@shop/core::CartRepository.clear()"
+        },
+        {
+          "component" : "npm:@shop/core"
+        }
+      ],
+      "evidence" : [
+        "No clear in MemoryRepository, and no default implementation in an extension of CartRepository."
+      ],
+      "id" : "conformers:1",
+      "kind" : "conformers",
+      "location" : {
+        "endLine" : 60,
+        "file" : "packages/core/src/cart.ts",
+        "side" : "head",
+        "startLine" : 50
+      },
+      "message" : "New requirement CartRepository.clear(): 1 conformer wasn't updated.",
+      "severity" : "high",
+      "source" : "check",
+      "suggestion" : "Implement it in each conformer, or add a default implementation."
+    },
+    {
+      "anchors" : [
+        {
+          "from" : "npm:@shop/web",
+          "to" : "ext:zod"
+        },
+        {
+          "component" : "ext:zod"
+        }
+      ],
+      "evidence" : [
+        "zod is new in the lockfile at 3.23.8.",
+        "@shop/web → zod (dependency zod, packages/web/package.json)"
+      ],
+      "id" : "new-external:1",
+      "kind" : "new-external",
+      "message" : "@shop/web now depends on zod, a new package.",
+      "severity" : "medium",
+      "source" : "check"
+    },
+    {
+      "anchors" : [
+        {
+          "entity" : "npm:@shop/web::ItemSchema"
+        }
+      ],
+      "evidence" : [
+        "The name ItemSchema appears nowhere else in the repo."
+      ],
+      "id" : "unused-api:1",
+      "kind" : "unused-api",
+      "location" : {
+        "endLine" : 3,
+        "file" : "packages/web/src/validate.ts",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "message" : "New public var ItemSchema has no callers outside tests.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Keep it internal until something outside needs it, or drop it."
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "npm:@shop/core"
+        },
+        {
+          "entity" : "npm:@shop/core::Item.name"
+        },
+        {
+          "entity" : "npm:@shop/core::CartRepository.load()"
+        },
+        {
+          "entity" : "npm:@shop/core::CartRepository.clear()"
+        },
+        {
+          "entity" : "npm:@shop/core::Serializable.toJSON()"
+        },
+        {
+          "entity" : "npm:@shop/core::Cart.get size"
+        },
+        {
+          "entity" : "npm:@shop/core::Cart.first()"
+        },
+        {
+          "entity" : "npm:@shop/core::Cart.persist()"
+        },
+        {
+          "entity" : "npm:@shop/core::Cart.toJSON()"
+        },
+        {
+          "entity" : "npm:@shop/core::MemoryRepository.load()"
+        },
+        {
+          "entity" : "npm:@shop/core::round()"
+        }
+      ],
+      "evidence" : [
+        "var Item.name (added)",
+        "func CartRepository.load() (signature)",
+        "func CartRepository.clear() (added)",
+        "func Serializable.toJSON() (added)",
+        "var Cart.get size (added)",
+        "func Cart.first() (added)",
+        "func Cart.persist() (signature)",
+        "func Cart.toJSON() (added)",
+        "func MemoryRepository.load() (signature)",
+        "func round() (signature)"
+      ],
+      "id" : "untested:1",
+      "kind" : "untested",
+      "message" : "No test references 10 changed entities in @shop/core.",
+      "severity" : "low",
+      "source" : "check"
     }
   ],
   "regions" : [
@@ -2244,7 +2368,7 @@
     "root" : "<repo>",
     "usesMergeBase" : true
   },
-  "version" : 2,
+  "version" : 3,
   "warnings" : [
 
   ]

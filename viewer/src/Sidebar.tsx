@@ -10,7 +10,6 @@ import {
   isLowRisk,
   kindLabel,
   llmOf,
-  removalCandidates,
   riskTier,
   startHere,
   stepRegion,
@@ -20,6 +19,8 @@ import {
   type StartItem,
   type Visible,
 } from "./graph";
+import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
+import { FindingsSection } from "./Findings";
 import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
 import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
@@ -78,6 +79,7 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
   const done = toReview.filter((e) => review.reviewed[e.id]).length;
   return (
     <>
+      <ReviewSection index={index} setFocus={setFocus} />
       <section>
         <h2>Start here</h2>
         {index.hasLLM && <RankingToggle on={index.llm} setOn={setLLM} />}
@@ -98,7 +100,6 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
           ))}
         </ol>
       </section>
-      <RemovalSection index={index} setFocus={setFocus} />
       {toReview.length > 0 && (
         <section>
           <h2>Progress</h2>
@@ -230,36 +231,16 @@ function LLMStatus({ index }: { index: Index }) {
   );
 }
 
-const REMOVAL_LABEL: Record<string, string> = { defensive: "defensive handling", speculative: "speculative abstraction" };
-
-/** Regions the LLM tagged as removal candidates, behind their count. */
-function RemovalSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
-  const [open, setOpen] = useState(false);
-  const items = removalCandidates(index);
-  if (items.length === 0) return null;
-  return (
-    <section>
-      <button className="link" onClick={() => setOpen(!open)}>
-        {items.length} removal candidate{items.length === 1 ? "" : "s"}
-      </button>
-      {open && (
-        <ul className="removals">
-          {items.map((r) => {
-            const e = index.entities.get(r.entity)!;
-            return (
-              <li key={r.id}>
-                <button className="link mono small" onClick={() => setFocus({ type: "entity", id: r.entity, region: r.id })}>
-                  {e.qualifiedName}
-                </button>{" "}
-                <span className="muted small">{REMOVAL_LABEL[r.llm!.removal!.kind] ?? r.llm!.removal!.kind}</span>
-                <div className="small">{r.llm!.removal!.note}</div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </section>
-  );
+/** The structural review's findings, most severe first. */
+function ReviewSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
+  const findings = findingsOf(index);
+  const run = index.model.llm;
+  const hidden = !index.llm && (index.model.findings ?? []).some((f) => f.source === "llm");
+  let note: string | undefined;
+  if (findings.length === 0) note = "The structural checks found nothing.";
+  if (hidden) note = "The LLM's findings are hidden while the LLM layer is off.";
+  else if (index.llm && run?.review === "rejected") note = "The LLM's structural review was rejected; only the deterministic checks are shown.";
+  return <FindingsSection index={index} title="Structural review" findings={findings} go={setFocus} note={note} />;
 }
 
 /** Notes on regions, each leading back to its region, and the Markdown export. */
@@ -321,6 +302,7 @@ function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Componen
   const hidden = hiddenNeighbors(index, map.vis, c.id, map.showTests);
   const added = map.expanded.has(c.id);
   const isGroup = isGroupOf(index, map.vis, c.id);
+  const findings = findingsForComponent(index, c.id, { inside: map.graph.collapsed.has(c.id) });
   return (
     <>
       <section>
@@ -369,6 +351,7 @@ function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Componen
         {ext && <p>{ext.change === "bumped" ? `Version ${ext.from} → ${ext.to}` : `Package ${ext.change}${ext.to ? ` at ${ext.to}` : ""}`}</p>}
         {llmOf(index, c) && <LLMSummary text={llmOf(index, c)!.summary} />}
       </section>
+      <FindingsSection index={index} title="Findings" findings={findings} go={setFocus} hideAnchor={(a) => a.component === c.id} />
       {(shown.length > 0 || cosmetic + lowRisk > 0) && (
         <section>
           <h2>
@@ -475,6 +458,7 @@ function EdgePanel({ index, e, setFocus }: { index: Index; e: Edge; setFocus: Pr
   const bySymbol = new Map<string, typeof e.refs>();
   for (const r of e.refs) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), r]);
   const symbolClass = (s: string) => (added.has(s) ? "sym-added" : removed.has(s) ? "sym-removed" : "");
+  const findings = findingsForEdge(index, e.from, e.to);
   return (
     <>
       <section>
@@ -496,6 +480,7 @@ function EdgePanel({ index, e, setFocus }: { index: Index; e: Edge; setFocus: Pr
           </p>
         )}
       </section>
+      <FindingsSection index={index} title="Findings" findings={findings} go={setFocus} hideAnchor={(a) => a.from === e.from && a.to === e.to} />
       <section>
         <h2>
           References <span className="muted">{total}</span>
@@ -530,6 +515,7 @@ function BundlePanel({ index, from, to, setFocus, map }: { index: Index; from: s
   const byStatus = { added: [] as Edge[], removed: [] as Edge[], changed: [] as Edge[], unchanged: [] as Edge[] };
   for (const e of members) byStatus[e.status].push(e);
   const name = (id: string) => index.components.get(id)?.name ?? id;
+  const findings = [...new Set(members.flatMap((e) => findingsForEdge(index, e.from, e.to)))];
   return (
     <>
       <section>
@@ -541,6 +527,7 @@ function BundlePanel({ index, from, to, setFocus, map }: { index: Index; from: s
           map.
         </p>
       </section>
+      <FindingsSection index={index} title="Findings" findings={findings} go={setFocus} />
       <EdgeList title="Dependencies" index={index} byStatus={byStatus} label={(e) => `${name(e.from)} → ${name(e.to)}`} setFocus={setFocus} />
     </>
   );

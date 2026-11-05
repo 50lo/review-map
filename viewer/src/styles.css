@@ -1362,40 +1362,111 @@ code,
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
-.rh-llm {
-  flex: 1 1 100%;
-  margin: 2px 0 2px;
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-  font-size: 12px;
-}
-.rh-llm > div {
-  margin-top: 2px;
-}
 .risk-llm {
   outline: 1px solid var(--accent);
   outline-offset: 1px;
-}
-.removal-tag {
-  border: 1px dashed var(--muted);
-  border-radius: 4px;
-  background: none;
-  color: var(--fg);
-  font-size: 11px;
-  padding: 0 4px;
-  cursor: pointer;
-}
-.removal-tag + .reason::before {
-  content: "";
 }
 .ctx-pruned {
   display: block;
   margin: 4px 0 2px 8px;
 }
-.removals {
+/* Structural review findings. */
+.findings {
   list-style: none;
   padding: 0;
   margin: 6px 0 0;
 }
-.removals li + li {
-  margin-top: 6px;
+.findings > li + li {
+  margin-top: 10px;
+}
+.finding-head {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.sev {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0 5px;
+  border-radius: 4px;
+  border: 1px solid;
+  white-space: nowrap;
+}
+.sev-high {
+  color: var(--removed);
+}
+.sev-medium {
+  color: var(--changed);
+}
+.sev-low {
+  color: var(--muted);
+}
+.finding-kind {
+  font-size: 11px;
+  color: var(--muted);
+}
+.finding-src {
+  font-size: 10px;
+  color: var(--accent);
+}
+.finding-msg {
+  margin: 2px 0 0;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.finding-evidence {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.finding-suggestion {
+  margin: 4px 0 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.finding-anchors {
+  margin: 4px 0 0;
+  font-size: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+}
+.badge.finding-badge {
+  color: #fff;
+  background: var(--muted);
+}
+.badge.finding-badge.sev-high {
+  background: var(--removed);
+}
+.badge.finding-badge.sev-medium {
+  background: var(--changed);
+}
+.react-flow__edge.edge-finding .react-flow__edge-text {
+  font-size: 10px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+.react-flow__edge.edge-finding.sev-high .react-flow__edge-text {
+  fill: var(--removed);
+}
+.react-flow__edge.edge-finding.sev-medium .react-flow__edge-text {
+  fill: var(--changed);
+}
+.react-flow__edge.edge-finding .react-flow__edge-textbg {
+  fill: var(--panel);
+}
+/* On a component node, the findings badge sits on the top border, so it never crowds the counts. */
+.badge.finding-badge.corner {
+  position: absolute;
+  top: -9px;
+  right: 10px;
+  font-weight: 600;
+}
+.node {
+  position: relative;
 }

@@ -17,6 +17,8 @@ import {
   usedByTarget,
 } from "./levels";
 import type { Focus } from "./nav";
+import { findingsForComponent, findingsForEntity } from "./findings";
+import { FindingsSection } from "./Findings";
 import { EdgeList } from "./Sidebar";
 import { canOpenInEditor, editorName, openInEditor } from "./source";
 import { setNote, useReview } from "./review";
@@ -63,6 +65,8 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
         </p>
         {llmOf(index, c) && <LLMSummary text={llmOf(index, c)!.summary} />}
       </header>
+
+      <FindingsSection index={index} title="Findings" findings={findingsForComponent(index, id)} go={go} hideAnchor={(a) => a.component === id} />
 
       {children.length > 0 && (
         <section>
@@ -289,7 +293,6 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
   const review = useReview();
   const [editing, setEditing] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [llmOpen, setLLMOpen] = useState<Record<string, boolean>>({});
 
   const own = useMemo(() => index.regionsByEntity.get(e.id) ?? [], [index, e.id]);
   const { shown: contexts, pruned } = useMemo(() => contextOf(index, e.id), [index, e.id]);
@@ -358,8 +361,6 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
     const risk = regionRisk(index, r);
     const ai = llmOf(index, r);
     const scoredByLLM = ai?.risk !== undefined;
-    const open = !!llmOpen[r.id];
-    const toggle = () => setLLMOpen({ ...llmOpen, [r.id]: !open });
     return (
       <div className="rh">
         <span
@@ -369,11 +370,6 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           {risk.toFixed(2)}
         </span>
         <span className="rh-reasons">
-          {ai?.removal && (
-            <button className="reason removal-tag" onClick={toggle} title="The LLM thinks this code could go">
-              removal candidate
-            </button>
-          )}
           {r.reasons.map((x) => (
             <span key={x} className="reason">
               {flagLabel(x)}
@@ -381,11 +377,6 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           ))}
         </span>
         <span className="rh-actions">
-          {ai?.note && (
-            <button className="link small" onClick={toggle}>
-              {open ? "Hide why" : "Why"}
-            </button>
-          )}
           {!review.notes[r.id] && editing !== r.id && (
             <button className="link small" onClick={() => setEditing(r.id)}>
               Note
@@ -393,16 +384,6 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           )}
           {r.side === "head" && <OpenButton file={r.file} line={r.startLine} compact />}
         </span>
-        {open && ai && (
-          <div className="llm-text rh-llm">
-            {ai.note}
-            {ai.removal && (
-              <div>
-                <span className="muted">Removal candidate ({ai.removal.kind}):</span> {ai.removal.note}
-              </div>
-            )}
-          </div>
-        )}
       </div>
     );
   };
@@ -495,6 +476,29 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
           {!isRemoved && loc.side === "head" && <OpenButton file={loc.file} line={loc.startLine + Math.max(0, firstChanged)} />}
         </div>
       </header>
+
+      <FindingsSection index={index} title="Findings" findings={findingsForEntity(index, e.id)} go={go} hideAnchor={(a) => a.entity === e.id} />
+
+      {(e.similar?.length ?? 0) > 0 && (
+        <section>
+          <h2>
+            Similar existing declarations <span className="count">{e.similar!.length}</span>
+          </h2>
+          <p className="muted small">Names close to this new one. Check that it doesn't duplicate one of them.</p>
+          <ul className="plain">
+            {e.similar!.map((u) => (
+              <li key={`${u.file}:${u.line}`}>
+                <button className="link mono" onClick={() => go({ type: "location", side: "head", file: u.file, line: u.line })}>
+                  {u.symbol}
+                </button>{" "}
+                <span className="muted small">
+                  {compName(index, u.component)} · {u.file}:{u.line}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {members.length > 0 && (
         <section>

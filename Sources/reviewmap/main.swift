@@ -168,9 +168,15 @@ struct LLMOptions: ParsableArguments {
     @Option(name: .customLong("llm-timeout"), help: "Seconds before one LLM call is stopped.")
     var timeout: Int = 300
 
+    @Option(name: .customLong("description"), help: "File with the change's description for the structural review, or - for stdin (default: the PR of the head branch from `gh pr view`, else the commit messages).")
+    var description: String?
+
+    @Flag(name: .customLong("no-review"), help: "Skip the LLM's structural review of the whole change.")
+    var noReview = false
+
     var options: AnnotateOptions {
         AnnotateOptions(tool: tool, command: command, model: model, cacheDir: cache ?? AnnotateOptions.defaultCacheDir,
-                        jobs: jobs, timeout: TimeInterval(timeout))
+                        jobs: jobs, timeout: TimeInterval(timeout), descriptionFile: description, noReview: noReview)
     }
 }
 

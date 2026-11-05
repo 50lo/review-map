@@ -15,13 +15,13 @@ import {
   llmOf,
   regionPosition,
   related,
-  removalCandidates,
   revealFocus,
   rollup,
   startHere,
   stepRegion,
   visible,
 } from "./graph";
+import { findingCounts, findingFocus, findingsForComponent, findingsForEdge, findingsForEntity, findingsOf, topSeverity } from "./findings";
 import { editorFrom, openInEditor } from "../server/repo";
 import { focusToHash, hashToFocus } from "./nav";
 import { layout } from "./layout";
@@ -375,15 +375,58 @@ describe("LLM ranking", () => {
     expect(contextOf(off, entity)).toEqual({ shown: off.contextByEntity.get(entity), pruned: [] });
   });
 
-  it("lists removal candidates only when on", () => {
-    expect(removalCandidates(on).length).toBeGreaterThan(0);
-    expect(removalCandidates(on).every((r) => r.llm?.removal)).toBe(true);
-    expect(removalCandidates(off)).toEqual([]);
+  it("shows the LLM's findings only when on", () => {
+    expect(findingsOf(on).some((f) => f.source === "llm")).toBe(true);
+    expect(findingsOf(off).some((f) => f.source === "llm")).toBe(false);
+    expect(findingsOf(off).length).toBe(annotated.findings.filter((f) => f.source === "check").length);
   });
 
   it("hides summaries when off", () => {
     const e = annotated.entities.find((x) => x.llm)!;
     expect(llmOf(on, e)?.summary).toBeTruthy();
     expect(llmOf(off, e)).toBeUndefined();
+  });
+});
+
+describe("findings", () => {
+  const all = findingsOf(index);
+
+  it("orders by severity", () => {
+    const order = { high: 0, medium: 1, low: 2 } as Record<string, number>;
+    expect(all.length).toBeGreaterThan(0);
+    expect(all.map((f) => order[f.severity])).toEqual([...all.map((f) => order[f.severity])].sort());
+    expect(topSeverity(all)).toBe(all[0].severity);
+  });
+
+  it("finds a component's findings through its entities", () => {
+    const unused = all.find((f) => f.kind === "unused-api")!;
+    const entity = index.entities.get(unused.anchors[0].entity!)!;
+    expect(findingsForEntity(index, entity.id)).toContain(unused);
+    expect(findingsForComponent(index, entity.component)).toContain(unused);
+    expect(findingFocus(index, unused)).toEqual({ type: "entity", id: entity.id });
+  });
+
+  it("counts findings on drawn nodes and edges, and on collapsed groups", () => {
+    const v = visible(index, { scope: "all", showTests: true });
+    const open = findingCounts(index, collapse(index, v, new Set()));
+    const untested = all.find((f) => f.kind === "untested" && f.anchors[0].component === "spm:Features/Checkout")!;
+    expect(open.nodes.get("spm:Features/Checkout")).toContain(untested);
+    const closed = findingCounts(index, collapse(index, v, new Set(["spm:Features"])));
+    expect(closed.nodes.get("spm:Features")).toContain(untested);
+    expect(closed.nodes.has("spm:Features/Checkout")).toBe(false);
+  });
+
+  it("anchors edge findings to the drawn edge", () => {
+    const f = { id: "x:1", source: "check", kind: "layering", severity: "high", message: "m", evidence: [], anchors: [{ from: "spm:Features/Checkout", to: "spm:Networking" }] };
+    const withEdge = buildIndex({ ...model, findings: [f] });
+    const g = collapse(withEdge, visible(withEdge, { scope: "all", showTests: true }), new Set());
+    expect(findingCounts(withEdge, g).edges.get(edgeKey({ from: "spm:Features/Checkout", to: "spm:Networking" }))).toEqual([f]);
+    expect(findingsForEdge(withEdge, "spm:Features/Checkout", "spm:Networking")).toEqual([f]);
+    expect(findingFocus(withEdge, f)).toEqual({ type: "edge", key: "spm:Features/Checkout->spm:Networking" });
+  });
+
+  it("reads models without findings", () => {
+    const { findings: _, ...old } = JSON.parse(fs.readFileSync(fixture, "utf8"));
+    expect(validate(old).findings).toEqual([]);
   });
 });

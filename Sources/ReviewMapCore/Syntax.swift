@@ -90,6 +90,29 @@ struct ParsedFile {
         }
         return best
     }
+
+    /// The isolation code at `line` runs in, from the innermost declaration around it that says:
+    /// a global actor attribute ("@MainActor"), `nonisolated`, an actor ("actor CartStore"), or a SwiftUI view.
+    func isolation(line: Int) -> String? {
+        var cur: Int? = nil
+        var size = Int.max
+        for (i, d) in decls.enumerated() where d.startLine <= line && line <= d.endLine && d.endLine - d.startLine <= size {
+            cur = i
+            size = d.endLine - d.startLine
+        }
+        while let i = cur {
+            let d = decls[i]
+            if d.modifiers.contains(where: { $0.hasPrefix("nonisolated") }) { return "nonisolated" }
+            if let a = d.attributes.first(where: { $0.hasSuffix("Actor") }) { return "@" + a }
+            if d.kind == .actor { return "actor \(d.qualifiedName)" }
+            // SwiftUI's View is @MainActor, and so are the types that conform to it.
+            if language == "swift" && d.isContainer && d.inherited.contains(where: { ModelBuilder.conformanceName($0) == "View" }) {
+                return "@MainActor"
+            }
+            cur = d.parentIndex
+        }
+        return nil
+    }
 }
 
 /// A construct on one line that matters for risk: a crash point, a check, a branch, a concurrency

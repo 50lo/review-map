@@ -34,7 +34,7 @@ export interface Index {
   riskOrder: Region[];
   /** The model carries LLM annotations. */
   hasLLM: boolean;
-  /** The LLM layer is on: ranking uses LLM risk, and LLM notes, summaries, and pruning are available. */
+  /** The LLM layer is on: ranking uses LLM risk, and LLM summaries, pruning, and review findings are available. */
   llm: boolean;
 }
 
@@ -88,8 +88,9 @@ export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
   return index;
 }
 
-/** True when any region or summary came from the LLM annotator. */
-export const hasLLM = (m: ChangeModel) => !!m.llm && (m.regions.some((r) => r.llm) || m.entities.some((e) => e.llm));
+/** True when any region, summary, or finding came from the LLM annotator. */
+export const hasLLM = (m: ChangeModel) =>
+  !!m.llm && (m.regions.some((r) => r.llm) || m.entities.some((e) => e.llm) || (m.findings ?? []).some((f) => f.source === "llm"));
 
 /** The risk a region ranks by: the LLM's when the LLM layer is on and it scored the region, else the deterministic one. */
 export const regionRisk = (index: Index, r: Region) => (index.llm ? r.llm?.risk ?? r.risk : r.risk);
@@ -106,12 +107,6 @@ export function contextOf(index: Index, entity: string): { shown: Region[]; prun
   if (!index.llm || !all.some((c) => c.llm?.keep !== undefined)) return { shown: all, pruned: [] };
   const shown = all.filter((c) => c.llm?.keep !== false).sort((a, b) => (a.llm?.rank ?? 1e9) - (b.llm?.rank ?? 1e9));
   return { shown, pruned: all.filter((c) => c.llm?.keep === false) };
-}
-
-/** Regions the LLM tagged as removal candidates, in risk order. Empty with the LLM layer off. */
-export function removalCandidates(index: Index): Region[] {
-  if (!index.llm) return [];
-  return index.riskOrder.filter((r) => r.llm?.removal);
 }
 
 /** Risk tier for display: high, medium, or low. */

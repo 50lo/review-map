@@ -593,12 +593,15 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "nonisolated",
           "line" : 11,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.refresh()"
         },
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 13,
           "symbol" : "CheckoutViewModel.refresh()"
         }
@@ -684,6 +687,7 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 16,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
       ]
@@ -907,6 +911,7 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 6,
           "symbol" : "PriceCache.price(for:)"
         },
@@ -979,12 +984,14 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 8,
           "symbol" : "PriceCache.price(for:)"
         },
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 9,
           "symbol" : "PriceCache.price(for:)"
         }
@@ -1149,11 +1156,13 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 14,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         },
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 16,
           "symbol" : "CheckoutViewModel.pay(with:)"
         },
@@ -1890,6 +1899,7 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 17,
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
@@ -1987,6 +1997,7 @@
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
           "line" : 15,
+          "side" : "base",
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
       ]
@@ -2201,12 +2212,110 @@
       "to" : "1.2.0"
     }
   ],
+  "findings" : [
+    {
+      "anchors" : [
+        {
+          "component" : "cfg:Core"
+        },
+        {
+          "entity" : "cfg:Core::Cart.add(_:)"
+        }
+      ],
+      "evidence" : [
+        "At base it was used from Cart.add(_:) (Sources/Core/Cart.swift:8)."
+      ],
+      "id" : "orphaned:1",
+      "kind" : "orphaned",
+      "location" : {
+        "endLine" : 3,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "message" : "var Cart.maxItems is no longer used: the change removed its last callers.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Delete it, unless a caller is still to come."
+    },
+    {
+      "anchors" : [
+        {
+          "entity" : "cfg:Core::Cart.first()"
+        }
+      ],
+      "evidence" : [
+        "The name first appears nowhere else in the repo.",
+        "Declared public."
+      ],
+      "id" : "unused-api:1",
+      "kind" : "unused-api",
+      "location" : {
+        "endLine" : 17,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 15
+      },
+      "message" : "New public func Cart.first() has no callers outside tests.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Keep it internal until something outside needs it, or drop it."
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "spm:Features/Checkout"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.client"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.logger"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)"
+        },
+        {
+          "entity" : "spm:Features/Checkout::PriceCache.price(for:)"
+        }
+      ],
+      "evidence" : [
+        "var CheckoutViewModel.client (added)",
+        "var CheckoutViewModel.logger (added)",
+        "func CheckoutViewModel.pay(with:) (signature)",
+        "func PriceCache.price(for:) (signature)"
+      ],
+      "id" : "untested:1",
+      "kind" : "untested",
+      "message" : "No test references 4 changed entities in Features/Checkout.",
+      "severity" : "low",
+      "source" : "check"
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "cfg:Core"
+        }
+      ],
+      "evidence" : [
+        "Every caller is @MainActor."
+      ],
+      "id" : "complexity:1",
+      "kind" : "complexity",
+      "message" : "A lock guards state that only one isolation domain touches.",
+      "severity" : "medium",
+      "source" : "llm",
+      "suggestion" : "Remove the lock."
+    }
+  ],
   "llm" : {
     "batches" : 7,
     "cached" : 0,
     "command" : "fake-llm.sh",
+    "description" : "commits",
     "failed" : 0,
-    "promptVersion" : "1",
+    "promptVersion" : "2",
+    "review" : "ok",
     "reviewNotes" : true,
     "tool" : "claude"
   },
@@ -2219,7 +2328,6 @@
       "id" : "cfg:Core::Cart.add(_:)/r1",
       "kind" : "removed",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.6
       },
       "reasons" : [
@@ -2263,7 +2371,6 @@
       "id" : "cfg:Core::Cart.total()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
         "risk" : 0.55
       },
       "reasons" : [
@@ -2380,7 +2487,6 @@
       "id" : "cfg:Core::Cart.first()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.72
       },
       "reasons" : [
@@ -2448,11 +2554,6 @@
       "id" : "cfg:Core::Cart.price(for:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.52
       },
       "reasons" : [
@@ -2570,7 +2671,6 @@
       "id" : "cfg:Core::Cart.format(_:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
         "risk" : 0.68
       },
       "reasons" : [
@@ -2587,7 +2687,6 @@
       "id" : "cfg:Core::CartRepository/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
         "risk" : 0.14
       },
       "reasons" : [
@@ -2630,7 +2729,6 @@
       "id" : "cfg:Core::CartRepository.items()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
         "risk" : 0.73
       },
       "reasons" : [
@@ -2694,7 +2792,6 @@
       "id" : "cfg:Core::CartRepository.clear()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.48
       },
       "reasons" : [
@@ -2733,7 +2830,6 @@
       "id" : "cfg:Core::Item/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.41
       },
       "reasons" : [
@@ -2874,7 +2970,6 @@
       "id" : "cfg:Core::Item.price/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.41
       },
       "reasons" : [
@@ -2993,7 +3088,6 @@
       "id" : "cfg:Core::Item.currency/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
         "risk" : 0.69
       },
       "reasons" : [
@@ -3010,7 +3104,6 @@
       "id" : "cfg:Core::Item.CodingKeys/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.77
       },
       "reasons" : [
@@ -3027,11 +3120,6 @@
       "id" : "cfg:Core::Item.CodingKeys.currency/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.85
       },
       "reasons" : [
@@ -3049,7 +3137,6 @@
       "id" : "cfg:Core::PaymentMethod/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
         "risk" : 0.44
       },
       "reasons" : [
@@ -3142,7 +3229,6 @@
       "id" : "cfg:Core::PaymentMethod.applePay/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.84
       },
       "reasons" : [
@@ -3159,7 +3245,6 @@
       "id" : "folder:App::App/Info.plist/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.24
       },
       "reasons" : [
@@ -3177,11 +3262,6 @@
       "id" : "folder:App::App/Shop.entitlements/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.13
       },
       "reasons" : [
@@ -3198,7 +3278,6 @@
       "id" : "spm:Features::build settings/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
         "risk" : 0.27
       },
       "reasons" : [
@@ -3215,7 +3294,6 @@
       "id" : "spm:Features/Catalog::extension Banner: Hashable/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
         "risk" : 0.14
       },
       "reasons" : [
@@ -3232,7 +3310,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.05
       },
       "reasons" : [
@@ -3275,11 +3352,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.store/r1",
       "kind" : "removed",
       "llm" : {
-        "note" : "Moves work across an actor boundary; check that state is still read on the main actor.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.19
       },
       "reasons" : [
@@ -3296,7 +3368,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.total/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
         "risk" : 0.64
       },
       "reasons" : [
@@ -3390,11 +3461,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.client/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.11
       },
       "reasons" : [
@@ -3432,11 +3498,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.logger/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.71
       },
       "reasons" : [
@@ -3453,7 +3514,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.refresh()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
         "risk" : 0.21
       },
       "reasons" : [
@@ -3496,7 +3556,6 @@
       "id" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
         "risk" : 0.46
       },
       "reasons" : [
@@ -3562,7 +3621,6 @@
       "id" : "spm:Features/Checkout::PriceCache/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.42
       },
       "reasons" : [
@@ -3579,7 +3637,6 @@
       "id" : "spm:Features/Checkout::PriceCache.cache/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
         "risk" : 0.52
       },
       "reasons" : [
@@ -3623,11 +3680,6 @@
       "id" : "spm:Features/Checkout::PriceCache.price(for:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
-        "removal" : {
-          "kind" : "defensive",
-          "note" : "Handles a nil that the caller never passes."
-        },
         "risk" : 0.46
       },
       "reasons" : [
@@ -3669,7 +3721,6 @@
       "id" : "spm:Networking::PaymentClient.charge(_:method:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Changes what is stored, so data written by the previous version may not decode.",
         "risk" : 0.06
       },
       "reasons" : [
@@ -3757,11 +3808,6 @@
       "id" : "spm:Networking::Transport.send(_:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
-        "removal" : {
-          "kind" : "speculative",
-          "note" : "A protocol with one conformer and no second use in sight."
-        },
         "risk" : 0.32
       },
       "reasons" : [
@@ -3799,7 +3845,6 @@
       "id" : "spm:Persistence::CartStore.items()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
         "risk" : 0.82
       },
       "reasons" : [
@@ -3867,7 +3912,6 @@
       "id" : "spm:Persistence::CartStore.clear()/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
         "risk" : 0.57
       },
       "reasons" : [
@@ -3909,7 +3953,6 @@
       "id" : "spm:Persistence::Order/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Drops a check that guarded an invalid state; confirm the state is now impossible.",
         "risk" : 0.8
       },
       "reasons" : [
@@ -3926,7 +3969,6 @@
       "id" : "spm:Persistence::Order.total/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.05
       },
       "reasons" : [
@@ -3968,7 +4010,6 @@
       "id" : "spm:Persistence::Order.placedAt/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Callers that relied on the old behavior may now take a different path.",
         "risk" : 0.05
       },
       "reasons" : [
@@ -4010,7 +4051,6 @@
       "id" : "spm:Persistence::Order.init(id:total:placedAt:)/r1",
       "kind" : "review",
       "llm" : {
-        "note" : "Mostly layout; low risk unless the view depends on this ordering.",
         "risk" : 0.39
       },
       "reasons" : [
@@ -4027,7 +4067,6 @@
       "id" : "spm:Persistence::Order.init(id:total:placedAt:)/r2",
       "kind" : "review",
       "llm" : {
-        "note" : "Adds a new public entry point that other components can now call.",
         "risk" : 0.4
       },
       "reasons" : [
@@ -4074,7 +4113,7 @@
     "root" : "<repo>",
     "usesMergeBase" : true
   },
-  "version" : 2,
+  "version" : 3,
   "warnings" : [
     {
       "kind" : "ambiguous-name",

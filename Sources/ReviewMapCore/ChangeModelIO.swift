@@ -26,6 +26,10 @@ public enum ChangeModelIO {
             "External packages changed: \(m.externalDeps.count)",
             "Warnings: \(m.warnings.count)",
         ]
+        if !m.findings.isEmpty {
+            let kinds = Dictionary(grouping: m.findings, by: \.kind).map { "\($0.key) \($0.value.count)" }.sorted()
+            lines.append("Findings: \(m.findings.count) (\(kinds.joined(separator: ", ")))")
+        }
         let top = m.components.filter { $0.changeScore > 0 }.sorted { $0.changeScore > $1.changeScore }.prefix(5)
         if !top.isEmpty {
             lines.append("Top components: " + top.map { "\($0.name) (\($0.changeScore))" }.joined(separator: ", "))

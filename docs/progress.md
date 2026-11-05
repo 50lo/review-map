@@ -7,7 +7,7 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 | 1 | Map: selection glitch, collapse and expand, editor command | Done; the glitch fix still needs a check on a large real model |
 | 2 | Language-neutral core | Done |
 | 3 | TypeScript | Done; index mode still needs a run on a pnpm or yarn monorepo |
-| 4 | Structural review | Not started |
+| 4 | Structural review | Done; the LLM review still needs runs with the real `claude` CLI on real PRs |
 | 5 | Faster Swift indexing | Not started |
 
 ## Step 1 notes
@@ -43,3 +43,17 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 - Lockfile pins cover the packages a `package.json` lists; transitive ones are left out. pnpm 10 and later write the lockfile as two YAML documents, and both are read.
 - Index mode installs dependencies with scripts off and runs scip-typescript 0.4.0 through `npx`. A failed install doesn't stop indexing; `SideIndex.warnings` reports it as `index-partial`. SCIP references to modules are skipped, since a module has no declaration to point at.
 - On this repo's viewer change in 2b36566 (Swift and TypeScript together), name matching takes 3s. Index mode, with `npm ci` in `viewer/`, takes 9s per side and finds uses from the viewer tests that name matching misses. On trpc/trpc (a pnpm workspace, 288 components, its last 40 commits), name matching takes 9s; the ambiguity warnings left come from `~/` path aliases.
+
+## Step 4 notes
+
+- Findings are a new top-level `findings` list in the model (version 3). Each has a kind, a severity, a one-sentence message, evidence, an optional suggestion, anchors (components, edges, or entities, the first being the main one), and an optional code location. Deterministic findings come from the analyzer (`Checks.swift`); the LLM's are added by the annotator (`StructuralReview.swift`), and annotating again replaces them.
+- The seven checks from the plan are `cycle`, `layering`, `new-external`, `unused-api`, `orphaned`, `conformers`, and `untested`. The README lists what each one finds.
+- Cycles are found between targets: split folders count as their target, because folders of one module referring to each other is normal. A head cycle is new unless all its targets were already in one cycle at base.
+- The layering is declared with a new `layers` list in `reviewmap.yml`, top to bottom. Layers name components by glob, and component rules can still set `layer`. Split folders take their target's layer. The config comes from the head, so it applies to both sides. Violations are grouped per pair of targets, so a manifest dependency and the code under it are one finding.
+- Without index mode, `unused-api`, `orphaned`, and `untested` use identifier occurrences: a declaration counts as used when its name appears anywhere outside itself. That is conservative for the unused checks and generous for `untested`. With index mode, references come from the index. Initializers, overrides, requirements, entry points, and members of a type or extension with an inheritance clause (possible witnesses) are skipped, since they are called without being named.
+- `untested` is one finding per component, and only for components tests reach at all (a test component depends on them, or they hold test files). Without that limit every script folder got a finding.
+- `conformers` finds conformers by their inheritance clauses; it reports a requirement no conformer implements (unless an extension of the protocol has a default) and implementations that didn't change with a changed signature. On the TypeScript fixture it catches `MemoryRepository`, which doesn't implement the new `clear()`.
+- The usage the LLM review needs is computed by the analyzer: `usedBy` entries carry the isolation the reference runs in (a global actor attribute, `nonisolated`, an actor, or a SwiftUI view), and added entities carry `similar`, existing declarations with close names (same name with at least two words, most of the same words, or a spelling within two edits).
+- The LLM review is one call per change, alongside the per-component batches. The per-component batches keep region risk, context pruning, and summaries; region notes and removal candidates are gone, and the prompt version is 2. The change's description comes from `--description`, else `gh pr view` on the head branch, else the commit messages.
+- In the viewer, the structural review leads the side panel's overview. Components carry a findings count on their top border, collapsed groups count what's inside, and edges with findings are labeled. Component, edge, and bundle panels and levels 2 and 3 list the findings anchored there; level 3 also lists similar existing declarations for an added entity. The LLM's findings follow the LLM toggle.
+- Checked in Chromium at desktop and phone widths, in light and dark mode, on the basic fixture with a `layers` config and the fake CLI. Not yet run on a real PR with the real `claude` CLI, so the prompt and the 12-finding limit are untested against a model.

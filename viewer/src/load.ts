@@ -6,7 +6,7 @@ declare global {
   }
 }
 
-export const SUPPORTED_VERSION = 2;
+export const SUPPORTED_VERSION = 3;
 
 export type ModelOrigin = "embedded" | "server" | "url" | "file";
 let origin: ModelOrigin = "file";
@@ -28,6 +28,7 @@ export function validate(raw: unknown): ChangeModel {
     entities: m.entities ?? [],
     regions: m.regions ?? [],
     warnings: m.warnings ?? [],
+    findings: m.findings ?? [],
     llm: m.llm,
   };
 }

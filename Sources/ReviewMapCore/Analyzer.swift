@@ -40,6 +40,13 @@ public enum Analyzer {
     }
 
     public static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in }) throws -> ChangeModel {
+        try run(options, log: log, index: nil)
+    }
+
+    /// `index`, for tests, stands in for the languages' indexers: given a language and the two sides'
+    /// exported trees, it returns that language's references, or nil for none.
+    static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in },
+                    index injected: ((Language, _ baseDir: String, _ headDir: String) -> [Side: SideIndex]?)?) throws -> ChangeModel {
         let root = try Shell.string(["git", "-C", options.repo, "rev-parse", "--show-toplevel"])
         let git = GitRepo(root: root)
         let headSha = try git.revParse(options.head)
@@ -73,7 +80,9 @@ public enum Analyzer {
 
         var builder = ModelBuilder(base: baseSide, head: headSide, languages: languages, options: options)
         let indexOptions = options.index.merged(with: config.index)
-        if indexOptions.enabled == true {
+        if let injected {
+            for lang in languages { if let idx = injected(lang, baseDir, headDir) { builder.addIndex(idx, language: lang) } }
+        } else if indexOptions.enabled == true {
             for lang in languages {
                 let files = { (s: SideData) in s.files.filter { $0.value.language == lang.id }.keys.sorted() }
                 do {
@@ -100,7 +109,8 @@ public enum Analyzer {
 
         let repo = RepoInfo(root: root, base: options.base, head: options.head, baseSha: baseSha, headSha: headSha,
                             usesMergeBase: options.useMergeBase)
-        return builder.finish(repo: repo)
+        log("Running structural checks…")
+        return builder.finish(repo: repo, config: config)
     }
 }
 
@@ -232,6 +242,8 @@ struct ModelBuilder {
     var index: [Side: SideIndex] = [:]
     /// Index mode: every head reference to a changed declaration, same component included (for caller context).
     var indexCallers: [Int: [Usage]] = [:]
+    /// Ids of the languages whose references came from an index.
+    var indexedLanguages = Set<String>()
 
     init(base: SideData, head: SideData, languages: [Language], options: AnalyzeOptions) {
         self.base = base
@@ -394,6 +406,7 @@ struct ModelBuilder {
     /// fall back to name matching. Test files are left out of the count, because a scheme's build action
     /// often doesn't build test targets.
     mutating func addIndex(_ sides: [Side: SideIndex], language lang: Language) {
+        indexedLanguages.insert(lang.id)
         for (s, idx) in sides {
             index[s, default: SideIndex(refs: [:])].refs.merge(idx.refs) { a, _ in a }
             for w in idx.warnings { warnings.insert(w) }
@@ -444,7 +457,8 @@ struct ModelBuilder {
             if ref.targetFile == path, let encl, target.decl.startLine >= encl.startLine && target.decl.endLine <= encl.endLine { continue }
             let key = "\(ref.line)|\(ref.targetFile)|\(target.index)"
             guard seen.insert(key).inserted else { continue }
-            let usage = Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line)
+            let usage = Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
+                              isolation: file.isolation(line: ref.line), side: s)
             let targetPair = pairOf[DeclKey(side: s, file: ref.targetFile, index: target.index)]
             if s == .head, let tp = targetPair { indexCallers[tp, default: []].append(usage) }
             guard targetComp != comp else { continue }
@@ -531,7 +545,8 @@ struct ModelBuilder {
                     resolvedTypes.insert("\(target)|\(ref.name)")
                     let encl = file.enclosingDecl(line: ref.line)
                     if let ti = topLevel["\(target)|\(ref.name)"] {
-                        usedBy[ti, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line))
+                        usedBy[ti, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
+                                                             isolation: file.isolation(line: ref.line), side: s))
                     }
                     if let encl, let idx = file.decls.firstIndex(where: { $0.startLine == encl.startLine && $0.qualifiedName == encl.qualifiedName }),
                        let pi = pairOf[DeclKey(side: s, file: path, index: idx)] {
@@ -541,7 +556,8 @@ struct ModelBuilder {
                 for ref in Set(file.memberRefs) {
                     for m in membersByName[ref.name] ?? [] where m.component != comp && resolvedTypes.contains("\(m.component)|\(m.rootType)") {
                         let encl = file.enclosingDecl(line: ref.line)
-                        usedBy[m.pair, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line))
+                        usedBy[m.pair, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
+                                                                 isolation: file.isolation(line: ref.line), side: s))
                     }
                 }
             }
@@ -652,7 +668,7 @@ struct ModelBuilder {
 
     // MARK: Output
 
-    func finish(repo: RepoInfo) -> ChangeModel {
+    func finish(repo: RepoInfo, config: Config = Config()) -> ChangeModel {
         // Entities: everything that changed (containers only when their own header changed or they carry flags).
         var entities: [Entity] = []
         for (i, p) in pairs.enumerated() {
@@ -673,7 +689,15 @@ struct ModelBuilder {
             if comp?.isTest == true || ComponentBuilder.isTestPath(loc.file) { tags.append("test") }
             if data.generated.contains(loc.file) { tags.append("generated") }
             let parentId = parentPair(loc, side: s).map { pairs[$0].id }
-            let used = (usedBy[i] ?? []).sorted { ($0.file, $0.line, $0.symbol) < ($1.file, $1.line, $1.symbol) }
+            // A use seen at both sides counts once, as a head use. Uses only at base keep side "base".
+            var uses: [String: Usage] = [:]
+            for var u in usedBy[i] ?? [] {
+                let key = "\(u.component)|\(u.symbol)|\(u.file)|\(u.line)"
+                if u.side == .head { u.side = nil }
+                if let have = uses[key], have.side == nil { continue }
+                uses[key] = u
+            }
+            let used = uses.values.sorted { ($0.file, $0.line, $0.symbol, $0.component) < ($1.file, $1.line, $1.symbol, $1.component) }
             let deps = (dependsOn[i] ?? []).filter { u in u.line >= loc.decl.startLine && u.line <= loc.decl.endLine }
                 .sorted { ($0.component, $0.symbol, $0.line) < ($1.component, $1.symbol, $1.line) }
             entities.append(Entity(
@@ -704,6 +728,8 @@ struct ModelBuilder {
             if interfaceIds.contains(pairs[pp].id) { interfaceIds.insert(pairs[i].id) }
         }
         for i in entities.indices { entities[i].isInterface = interfaceIds.contains(entities[i].id) }
+        let similar = similarDeclarations(entities)
+        for i in entities.indices { entities[i].similar = similar[entities[i].id] }
         entities += fileEntities
         entities.sort { ($0.component, $0.location.file, $0.location.startLine, $0.id) < ($1.component, $1.location.file, $1.location.startLine, $1.id) }
 
@@ -783,6 +809,7 @@ struct ModelBuilder {
             components[id]!.paths = Self.minimalDirs(entityFiles[id] ?? [])
         }
 
+        let findings = StructuralChecks(self, entities: entities, edges: edges, config: config).run()
         let sortedWarnings = warnings.sorted { ($0.kind, $0.file ?? "", $0.line ?? 0, $0.message) < ($1.kind, $1.file ?? "", $1.line ?? 0, $1.message) }
         return ChangeModel(
             analyzer: AnalyzerInfo(version: Analyzer.version, resolution: index.isEmpty ? "name-based" : "index",
@@ -793,7 +820,8 @@ struct ModelBuilder {
             externalDeps: externalDeps,
             entities: entities,
             regions: buildRegions(entities),
-            warnings: sortedWarnings)
+            warnings: sortedWarnings,
+            findings: findings)
     }
 
     private func externalDepsComponents(_ components: inout [String: Component]) {
