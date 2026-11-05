@@ -33,6 +33,7 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `--summary` | Print a short summary to stderr. |
 | `--view`, `--no-view` | Serve the result in the viewer and open the browser; stop it with Ctrl-C. On by default, off for `analyze`. |
 | `--port <n>` | Viewer port (default 5173). |
+| `--editor <e>` | Editor that Open uses: `xcode`, `vscode`, `cursor`, `zed`, `idea`, `webstorm`, `goland`, `rustrover`, or a command with `{file}` and `{line}`, such as `"subl {file}:{line}"` (split on spaces). Default: `$REVIEWMAP_EDITOR`, else `xcode` on macOS. `reviewmap view` takes it too. |
 | `--no-llm` | Skip the LLM annotator. |
 | `--llm <tool>` | CLI that runs the annotator: `claude` (default) or `codex`. |
 | `--llm-model <name>` | Model passed to the CLI. By default the CLI picks. |
@@ -103,7 +104,9 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 - Nodes are components. Split folders are drawn inside their target. A badge shows changed entities and interface changes, and the tint follows `changeScore`. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
 - Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
 - By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
-- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked.
+- A target split into folders can be collapsed into one node (drawn as a stack, with the number of components inside) and expanded again, with the arrow button on the node or in the side panel. Edges into a collapsed group are bundled into one arrow per pair of nodes. Above 40 visible components every group starts collapsed; "Collapse groups" and "Expand groups" in the toolbar do all of them. A focus inside a collapsed group opens it.
+- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed entities. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked. Clicking a bundled edge lists the dependencies inside it; picking one opens its group.
+- "Show N more neighbors" in the side panel adds a component's hidden neighbors to the map, whatever the scope.
 - **Start here** lists the highest-risk entities, each scored by its riskiest region, with changed members folded into their type, and opens that region at level 3. "Review regions by risk" starts at the riskiest region. A model without regions is ranked by contract flags.
 - Each component shows a review progress bar.
 
@@ -114,11 +117,11 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 
 **Level 3, implementation view**
 
-- The entity's head code, highlighted. Review regions are tinted, with a label row above each that shows the risk, the reasons, a Note button, and Open in Xcode. Removed lines are collapsed markers that expand to the base lines; a removed region's label sits on its marker. Code outside regions is folded. A removed entity shows its base code.
+- The entity's head code, highlighted. Review regions are tinted, with a label row above each that shows the risk, the reasons, a Note button, and Open. Removed lines are collapsed markers that expand to the base lines; a removed region's label sits on its marker. Code outside regions is folded. A removed entity shows its base code.
 - Context regions appear after the region they support as one-line labels in a second color ("caller in Checkout", "definition", "state"). A label expands to the lines that matter, with the rest of the declaration folded, and links to the code.
 - Notes attach to a region and show under it.
 - Previous and Next step through the component's entities. Changed type names and dependencies in the code are links. Callers in unchanged code open as a code location.
-- **Open in Xcode** runs `xed --line` on the file in your working copy (macOS, local server only).
+- **Open** opens the file at the line in your working copy, in the editor set with `--editor` (local server only).
 
 **LLM layer**
 
@@ -141,7 +144,7 @@ To work on the viewer directly:
 ```sh
 cd viewer
 npm ci
-REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model, sources, and Open in Xcode
+REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model, sources, and Open (REVIEWMAP_EDITOR picks the editor)
 npm test                                                  # logic tests against the analyzer fixture
 REVIEWMAP_MODEL=/path/to/change-model.json npm run build:single
 ```

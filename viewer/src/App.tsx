@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ChangeModel } from "./types";
-import { buildIndex, edgeKey, mapFocus, stepRegion, visible, type Index, type MapOptions } from "./graph";
+import { buildIndex, collapse, defaultCollapsed, edgeKey, isGroupOf, mapFocus, revealFocus, stepRegion, visible, type Index, type MapOptions } from "./graph";
 import { lastName } from "./levels";
 import { loadFile, loadInitialModel } from "./load";
 import { MapView } from "./MapView";
@@ -45,6 +45,8 @@ function crumbs(index: Index, f: Focus): Crumb[] {
       const e = index.model.edges.find((x) => edgeKey(x) === f.key);
       return [{ label: e ? `${name(e.from)} → ${name(e.to)}` : f.key }];
     }
+    case "bundle":
+      return [{ label: `${name(f.from)} → ${name(f.to)}` }];
     case "interface":
       return [{ label: name(f.id) }];
     case "entity": {
@@ -190,7 +192,42 @@ function Viewer({ model }: { model: ChangeModel }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [setFocus, index]);
 
-  const vis = useMemo(() => visible(index, opts), [index, opts.scope, opts.showTests]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Components whose unchanged neighbors were added to the map, and groups drawn as one node.
+  // Both start over when the scope or the test filter changes.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
+  const vis = useMemo(() => visible(index, opts, expanded), [index, opts.scope, opts.showTests, expanded]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [collapsed, setCollapsed] = useState(() => revealFocus(index, defaultCollapsed(index, vis), focus));
+  const scopeKey = `${opts.scope}|${opts.showTests}`;
+  const [lastScope, setLastScope] = useState(scopeKey);
+  if (scopeKey !== lastScope) {
+    // Adjusting state during render, so the map never draws the new scope with the old groups.
+    const base = visible(index, opts);
+    setLastScope(scopeKey);
+    setExpanded(new Set());
+    setCollapsed(revealFocus(index, defaultCollapsed(index, base), focus));
+  }
+  // A focus inside a collapsed group opens the group, so the map shows it.
+  useEffect(() => setCollapsed((c) => revealFocus(index, c, focus)), [index, focus]);
+  const graph = useMemo(() => collapse(index, vis, collapsed), [index, vis, collapsed]);
+  const groups = useMemo(() => [...vis.nodes].filter((id) => isGroupOf(index, vis, id)), [index, vis]);
+  const toggleGroup = useCallback(
+    (id: string) =>
+      setCollapsed((c) => {
+        const next = new Set(c);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      }),
+    [],
+  );
+  const toggleNeighbors = useCallback(
+    (id: string) =>
+      setExpanded((x) => {
+        const next = new Set(x);
+        if (!next.delete(id)) next.add(id);
+        return next;
+      }),
+    [],
+  );
 
   const level = levelOf(focus);
   const trail = crumbs(index, focus);
@@ -251,11 +288,16 @@ function Viewer({ model }: { model: ChangeModel }) {
             <input type="checkbox" checked={opts.showUnchanged} onChange={(e) => setOpts({ ...opts, showUnchanged: e.target.checked })} />
             Unchanged edges
           </label>
+          {groups.length > 0 && (
+            <button className="link" onClick={() => setCollapsed(graph.collapsed.size > 0 ? new Set() : revealFocus(index, new Set(groups), focus))}>
+              {graph.collapsed.size > 0 ? "Expand groups" : "Collapse groups"}
+            </button>
+          )}
         </div>
       </header>
-      <main className="body">
+      <main className={`body ${level > 1 ? "paged" : ""}`}>
         <section className="map">
-          <MapView index={index} vis={vis} focus={focus} setFocus={onMapFocus} showUnchanged={opts.showUnchanged} />
+          <MapView index={index} graph={graph} focus={focus} setFocus={onMapFocus} showUnchanged={opts.showUnchanged} toggleGroup={toggleGroup} />
           {(vis.hiddenUnrelated > 0 || vis.hiddenTests > 0) && (
             <div className="hidden-note">
               {vis.hiddenUnrelated > 0 && (
@@ -271,7 +313,13 @@ function Viewer({ model }: { model: ChangeModel }) {
             </div>
           )}
         </section>
-        <Sidebar index={index} focus={focus} setFocus={setFocus} setLLM={setLLM} />
+        <Sidebar
+          index={index}
+          focus={focus}
+          setFocus={setFocus}
+          setLLM={setLLM}
+          map={{ vis, graph, showTests: opts.showTests, expanded, toggleNeighbors, toggleGroup }}
+        />
         {level > 1 && (
           <div className="page">
             {focus?.type === "interface" && <InterfacePage index={index} id={focus.id} go={setFocus} />}

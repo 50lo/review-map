@@ -26,8 +26,8 @@ enum ViewerLauncher {
             + "Run scripts/install.sh again, or set REVIEWMAP_VIEWER to the viewer directory.")
     }
 
-    /// Runs until the server is stopped (Ctrl-C).
-    static func run(model: String, port: Int, open: Bool) throws {
+    /// Runs until the server is stopped (Ctrl-C). `editor` overrides REVIEWMAP_EDITOR.
+    static func run(model: String, port: Int, open: Bool, editor: String? = nil) throws {
         let dir = try directory()
         let modelPath = URL(fileURLWithPath: model).standardizedFileURL.path
         guard FileManager.default.fileExists(atPath: modelPath) else {
@@ -40,8 +40,13 @@ enum ViewerLauncher {
         var args = ["npm", "run", "dev", "--", "--port", String(port), "--strictPort"]
         if open { args.append("--open") }
         log("Serving \(modelPath) at http://localhost:\(port)/ (Ctrl-C to stop)")
-        try exec(args, in: dir, env: ["REVIEWMAP_MODEL": modelPath])
+        var env = ["REVIEWMAP_MODEL": modelPath]
+        if let editor { env["REVIEWMAP_EDITOR"] = editor }
+        try exec(args, in: dir, env: env)
     }
+
+    static let editorHelp = "Editor that Open uses: xcode, vscode, cursor, zed, idea, webstorm, goland, rustrover, "
+        + "or a command with {file} and {line}, such as \"subl {file}:{line}\" (default: $REVIEWMAP_EDITOR, else xcode on macOS)."
 
     private static func exec(_ args: [String], in dir: URL, env: [String: String] = [:]) throws {
         let p = Process()
@@ -76,7 +81,10 @@ struct ViewCommand: ParsableCommand {
     @Flag(name: .customLong("no-open"), help: "Don't open a browser.")
     var noOpen = false
 
+    @Option(help: ArgumentHelp(ViewerLauncher.editorHelp))
+    var editor: String?
+
     func run() throws {
-        try ViewerLauncher.run(model: try model ?? ModelPath.current(), port: port, open: !noOpen)
+        try ViewerLauncher.run(model: try model ?? ModelPath.current(), port: port, open: !noOpen, editor: editor)
     }
 }

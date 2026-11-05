@@ -18,7 +18,7 @@ import {
 } from "./levels";
 import type { Focus } from "./nav";
 import { EdgeList } from "./Sidebar";
-import { canOpenInXcode, openInXcode } from "./source";
+import { canOpenInEditor, editorName, openInEditor } from "./source";
 import { setNote, useReview } from "./review";
 import type { Entity, Region, Usage } from "./types";
 import { ChangeTag, Chips, LLMSummary, ReviewedBox, Signature } from "./ui";
@@ -247,13 +247,14 @@ function bySymbol(usages: Usage[]): Array<{ symbol: string; usages: Usage[] }> {
 // ---------------------------------------------------------------------------
 // Level 3
 
-function XcodeButton({ file, line, compact }: { file: string; line: number; compact?: boolean }) {
+function OpenButton({ file, line, compact }: { file: string; line: number; compact?: boolean }) {
   const [msg, setMsg] = useState<string | null>(null);
-  if (!canOpenInXcode()) return null;
+  if (!canOpenInEditor()) return null;
+  const name = editorName()!;
   return (
-    <span className="xcode">
-      <button className={compact ? "link small" : "btn"} onClick={() => openInXcode(file, line).then(setMsg)} title={`${file}:${line} in your working copy`}>
-        {compact ? "Xcode" : "Open in Xcode"}
+    <span className="open-in">
+      <button className={compact ? "link small" : "btn"} onClick={() => openInEditor(file, line).then(setMsg)} title={`${file}:${line} in your working copy`}>
+        {compact ? name : `Open in ${name}`}
       </button>
       {msg && <span className="muted small"> {msg}</span>}
     </span>
@@ -390,7 +391,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
               Note
             </button>
           )}
-          {r.side === "head" && <XcodeButton file={r.file} line={r.startLine} compact />}
+          {r.side === "head" && <OpenButton file={r.file} line={r.startLine} compact />}
         </span>
         {open && ai && (
           <div className="llm-text rh-llm">
@@ -491,7 +492,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
               ›
             </button>
           </span>
-          {!isRemoved && loc.side === "head" && <XcodeButton file={loc.file} line={loc.startLine + Math.max(0, firstChanged)} />}
+          {!isRemoved && loc.side === "head" && <OpenButton file={loc.file} line={loc.startLine + Math.max(0, firstChanged)} />}
         </div>
       </header>
 
@@ -665,7 +666,7 @@ export function LocationPage({ index, side, file, line, go }: { index: Index; si
           {file.split("/").pop()}:{line}
         </h1>
         <p className="muted small mono">{file}</p>
-        <div className="page-actions">{side === "head" && <XcodeButton file={file} line={line} />}</div>
+        <div className="page-actions">{side === "head" && <OpenButton file={file} line={line} />}</div>
       </header>
       <section>
         <CodeView key={`${side}:${file}:${line}`} side={side} file={file} startLine={1} focusLine={line} context={8} foldLabel="more lines" symbols={symbols} go={go} />

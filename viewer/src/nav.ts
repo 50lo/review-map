@@ -8,6 +8,8 @@ export type Focus =
   | { type: "component"; id: string }
   /** Level 1: an edge selected on the map. */
   | { type: "edge"; key: string }
+  /** Level 1: the edges between two drawn nodes when one is a collapsed group. */
+  | { type: "bundle"; from: string; to: string }
   /** Level 2: one component's interface view. */
   | { type: "interface"; id: string }
   /** Level 3: one entity's implementation view, optionally at one of its regions. */
@@ -29,6 +31,8 @@ export function focusToHash(f: Focus): string {
       return `c=${enc(f.id)}`;
     case "edge":
       return `e=${enc(f.key)}`;
+    case "bundle":
+      return `b=${enc(f.from)}&t=${enc(f.to)}`;
     case "interface":
       return `i=${enc(f.id)}`;
     case "entity":
@@ -44,6 +48,9 @@ export function hashToFocus(hash: string): Focus {
   if (c) return { type: "component", id: c };
   const e = h.get("e");
   if (e) return { type: "edge", key: e };
+  const b = h.get("b");
+  const t = h.get("t");
+  if (b && t) return { type: "bundle", from: b, to: t };
   const i = h.get("i");
   if (i) return { type: "interface", id: i };
   const n = h.get("n");

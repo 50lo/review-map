@@ -45,6 +45,9 @@ struct AnalyzeArgs: ParsableArguments {
     @Option(help: "Port for the viewer server.")
     var port: Int = 5173
 
+    @Option(help: ArgumentHelp(ViewerLauncher.editorHelp))
+    var editor: String?
+
     @Flag(name: .customLong("no-llm"), help: "Skip the LLM annotator.")
     var noLLM = false
 
@@ -78,7 +81,7 @@ struct AnalyzeArgs: ParsableArguments {
         }
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
         if view {
-            try ViewerLauncher.run(model: output, port: port, open: true)
+            try ViewerLauncher.run(model: output, port: port, open: true, editor: editor)
         }
     }
 }

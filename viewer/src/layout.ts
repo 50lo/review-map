@@ -4,7 +4,6 @@
 
 import ELK, { type ElkNode, type ElkExtendedEdge } from "elkjs/lib/elk.bundled.js";
 import type { Index } from "./graph";
-import type { Edge } from "./types";
 
 export const NODE_W = 210;
 export const NODE_H = 60;
@@ -24,7 +23,7 @@ export interface Placed {
 
 const elk = new ELK();
 
-export async function layout(index: Index, nodes: Set<string>, edges: Edge[]): Promise<Map<string, Placed>> {
+export async function layout(index: Index, nodes: Set<string>, edges: Array<{ from: string; to: string }>): Promise<Map<string, Placed>> {
   const groupOf = (id: string) => {
     const p = index.components.get(id)?.parent;
     return p && nodes.has(p) ? p : undefined;

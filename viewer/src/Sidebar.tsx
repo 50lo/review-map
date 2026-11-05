@@ -1,8 +1,11 @@
 import { useState, type ReactNode } from "react";
 import {
+  bundleMembers,
   componentEdges,
   componentEntities,
   edgeKey,
+  hiddenNeighbors,
+  isGroupOf,
   externalChangeOf,
   isLowRisk,
   llmOf,
@@ -12,26 +15,42 @@ import {
   stepRegion,
   type Focus,
   type Index,
+  type MapGraph,
   type StartItem,
+  type Visible,
 } from "./graph";
 import { notesMarkdown, useReview } from "./review";
 import type { Component, Edge, Entity } from "./types";
 import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
+
+/** What the map shows, and the controls that change it. */
+export interface MapControls {
+  vis: Visible;
+  graph: MapGraph;
+  showTests: boolean;
+  /** Components whose neighbors were added. */
+  expanded: Set<string>;
+  toggleNeighbors: (id: string) => void;
+  toggleGroup: (id: string) => void;
+}
 
 interface Props {
   index: Index;
   focus: Focus;
   setFocus: (f: Focus) => void;
   setLLM: (on: boolean) => void;
+  map: MapControls;
 }
 
-export function Sidebar({ index, focus, setFocus, setLLM }: Props) {
+export function Sidebar({ index, focus, setFocus, setLLM, map }: Props) {
   let body: ReactNode;
   if (focus?.type === "component" && index.components.has(focus.id)) {
-    body = <ComponentPanel index={index} c={index.components.get(focus.id)!} setFocus={setFocus} />;
+    body = <ComponentPanel index={index} c={index.components.get(focus.id)!} setFocus={setFocus} map={map} />;
   } else if (focus?.type === "edge") {
     const e = index.model.edges.find((x) => edgeKey(x) === focus.key);
     body = e ? <EdgePanel index={index} e={e} setFocus={setFocus} /> : <Overview index={index} setFocus={setFocus} setLLM={setLLM} />;
+  } else if (focus?.type === "bundle" && index.components.has(focus.from) && index.components.has(focus.to)) {
+    body = <BundlePanel index={index} from={focus.from} to={focus.to} setFocus={setFocus} map={map} />;
   } else {
     body = <Overview index={index} setFocus={setFocus} setLLM={setLLM} />;
   }
@@ -293,11 +312,14 @@ function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setF
 
 // ---------------------------------------------------------------------------
 
-function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; setFocus: Props["setFocus"] }) {
+function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Component; setFocus: Props["setFocus"]; map: MapControls }) {
   const { shown, cosmetic, lowRisk } = componentEntities(index, c.id);
   const edges = componentEdges(index.model, c.id);
   const ext = externalChangeOf(index, c);
   const children = index.children.get(c.id) ?? [];
+  const hidden = hiddenNeighbors(index, map.vis, c.id, map.showTests);
+  const added = map.expanded.has(c.id);
+  const isGroup = isGroupOf(index, map.vis, c.id);
   return (
     <>
       <section>
@@ -306,6 +328,20 @@ function ComponentPanel({ index, c, setFocus }: { index: Index; c: Component; se
           <button className="btn primary open-iface" onClick={() => setFocus({ type: "interface", id: c.id })}>
             Open interface view ›
           </button>
+        )}
+        {(hidden.length > 0 || added || isGroup) && (
+          <p className="small map-actions">
+            {(hidden.length > 0 || added) && (
+              <button className="btn" onClick={() => map.toggleNeighbors(c.id)}>
+                {added ? "Hide added neighbors" : `Show ${hidden.length} more neighbor${hidden.length === 1 ? "" : "s"}`}
+              </button>
+            )}
+            {isGroup && (
+              <button className="btn" onClick={() => map.toggleGroup(c.id)}>
+                {map.graph.collapsed.has(c.id) ? "Expand group" : "Collapse group"}
+              </button>
+            )}
+          </p>
         )}
         <p className="muted small">
           {[kindLabel(c.kind), c.module && c.module !== c.name ? `module ${c.module}` : null, c.layer, c.isTest ? "tests" : null, c.status]
@@ -378,12 +414,16 @@ export function EdgeList({
   index,
   byStatus,
   other,
+  label,
   setFocus,
 }: {
   title: string;
   index: Index;
   byStatus: Record<Edge["status"], Edge[]>;
-  other: (e: Edge) => string;
+  /** The component at the other end, named in each row. */
+  other?: (e: Edge) => string;
+  /** Or the whole row label. */
+  label?: (e: Edge) => string;
   setFocus: Props["setFocus"];
 }) {
   const [open, setOpen] = useState(false);
@@ -394,7 +434,7 @@ export function EdgeList({
     <li key={edgeKey(e)}>
       <StatusDot status={e.status} />{" "}
       <button className="link" onClick={() => setFocus({ type: "edge", key: edgeKey(e) })}>
-        {index.components.get(other(e))?.name ?? other(e)}
+        {label ? label(e) : (index.components.get(other!(e))?.name ?? other!(e))}
       </button>{" "}
       <span className="muted small">
         {e.status !== "unchanged" ? `${e.status}, ` : ""}
@@ -469,6 +509,31 @@ function EdgePanel({ index, e, setFocus }: { index: Index; e: Edge; setFocus: Pr
           ))}
         </ul>
       </section>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** The edges behind one arrow into or out of a collapsed group. */
+function BundlePanel({ index, from, to, setFocus, map }: { index: Index; from: string; to: string; setFocus: Props["setFocus"]; map: MapControls }) {
+  const drawn = map.graph.edges.find((e) => e.bundle && e.from === from && e.to === to);
+  const members = drawn?.members ?? bundleMembers(index, from, to);
+  const byStatus = { added: [] as Edge[], removed: [] as Edge[], changed: [] as Edge[], unchanged: [] as Edge[] };
+  for (const e of members) byStatus[e.status].push(e);
+  const name = (id: string) => index.components.get(id)?.name ?? id;
+  return (
+    <>
+      <section>
+        <h2 className="title">
+          <Name index={index} id={from} setFocus={setFocus} /> → <Name index={index} id={to} setFocus={setFocus} />
+        </h2>
+        <p className="small muted">
+          {members.length} dependenc{members.length === 1 ? "y" : "ies"} between the components inside. Pick one to see its references; its group opens on the
+          map.
+        </p>
+      </section>
+      <EdgeList title="Dependencies" index={index} byStatus={byStatus} label={(e) => `${name(e.from)} → ${name(e.to)}`} setFocus={setFocus} />
     </>
   );
 }

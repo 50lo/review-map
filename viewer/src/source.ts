@@ -35,10 +35,15 @@ export function sourceHint(): string {
   return "Code is shown when the viewer runs with `reviewmap --view`, which can read the repo.";
 }
 
-/** Open in Xcode works only through the local server, on the machine that has the repo. */
-export const canOpenInXcode = () => modelOrigin() === "server" && !window.__REVIEWMAP_SOURCES__;
+/** Name of the editor the local server opens files in, or null. Set from REVIEWMAP_EDITOR at server start. */
+declare const __REVIEWMAP_EDITOR__: string | null;
 
-export async function openInXcode(file: string, line: number): Promise<string> {
+export const editorName = (): string | null => (typeof __REVIEWMAP_EDITOR__ === "undefined" ? null : __REVIEWMAP_EDITOR__);
+
+/** Opening in the editor works only through the local server, on the machine that has the repo. */
+export const canOpenInEditor = () => modelOrigin() === "server" && !window.__REVIEWMAP_SOURCES__ && !!editorName();
+
+export async function openInEditor(file: string, line: number): Promise<string> {
   try {
     const r = await fetch(`/api/open?file=${encodeURIComponent(file)}&line=${line}`, { method: "POST" });
     return await r.text();

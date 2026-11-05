@@ -10,7 +10,7 @@ export const SUPPORTED_VERSION = 1;
 
 export type ModelOrigin = "embedded" | "server" | "url" | "file";
 let origin: ModelOrigin = "file";
-/** Where the model came from. Only the local server can read sources from the repo and open Xcode. */
+/** Where the model came from. Only the local server can read sources from the repo and open files in the editor. */
 export const modelOrigin = () => origin;
 
 export function validate(raw: unknown): ChangeModel {

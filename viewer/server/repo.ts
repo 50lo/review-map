@@ -1,5 +1,5 @@
 // Node-side helpers for the local server and the single-file build: file contents at base and
-// head (read with `git show`, which never writes to the repo) and Open in Xcode.
+// head (read with `git show`, which never writes to the repo) and opening a file in an editor.
 
 import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -93,15 +93,47 @@ export function collectSources(model: ModelLike, maxBytes: number): { sources: R
   return { sources, skipped };
 }
 
-/** Opens a file at a line in Xcode with `xed`. Only on macOS, and only inside the repo. */
-export function openInXcode(repo: RepoInfo, file: string, line: number): Promise<{ ok: boolean; message: string }> {
-  if (process.platform !== "darwin") return Promise.resolve({ ok: false, message: "Open in Xcode needs macOS with Xcode installed." });
+/** The command that opens a file at a line: a display name and its arguments, with {file} and {line} placeholders. */
+export interface Editor {
+  name: string;
+  args: string[];
+}
+
+export const EDITOR_PRESETS: Record<string, Editor> = {
+  xcode: { name: "Xcode", args: ["xed", "--line", "{line}", "{file}"] },
+  vscode: { name: "VS Code", args: ["code", "-g", "{file}:{line}"] },
+  cursor: { name: "Cursor", args: ["cursor", "-g", "{file}:{line}"] },
+  zed: { name: "Zed", args: ["zed", "{file}:{line}"] },
+  idea: { name: "IntelliJ IDEA", args: ["idea", "--line", "{line}", "{file}"] },
+  webstorm: { name: "WebStorm", args: ["webstorm", "--line", "{line}", "{file}"] },
+  goland: { name: "GoLand", args: ["goland", "--line", "{line}", "{file}"] },
+  rustrover: { name: "RustRover", args: ["rustrover", "--line", "{line}", "{file}"] },
+};
+
+/**
+ * The editor from REVIEWMAP_EDITOR: a preset name, or a command with {file} and {line}, split on
+ * spaces (so no argument can contain one). Unset means Xcode on macOS and none elsewhere.
+ */
+export function editorFrom(value: string | undefined, platform: string = process.platform): Editor | null {
+  const v = value?.trim();
+  if (!v) return platform === "darwin" ? EDITOR_PRESETS.xcode : null;
+  const preset = EDITOR_PRESETS[v.toLowerCase()];
+  if (preset) return preset;
+  if (!v.includes("{file}")) return null;
+  const args = v.split(/\s+/);
+  return { name: args[0].split("/").pop()!, args };
+}
+
+/** Opens a file at a line in the editor. Only inside the repo's working copy. */
+export function openInEditor(editor: Editor, repo: RepoInfo, file: string, line: number): Promise<{ ok: boolean; message: string }> {
   if (!safeRelative(file)) return Promise.resolve({ ok: false, message: "Invalid path." });
   const full = path.join(repo.root, file);
   if (!fs.existsSync(full)) return Promise.resolve({ ok: false, message: `${file} isn't in the working copy at ${repo.root}.` });
+  const ln = String(Math.max(1, Math.floor(line)));
+  const [cmd, ...args] = editor.args.map((a) => a.replaceAll("{file}", full).replaceAll("{line}", ln));
   return new Promise((resolve) => {
-    execFile("xed", ["--line", String(Math.max(1, Math.floor(line))), full], (err) =>
-      resolve(err ? { ok: false, message: `xed failed: ${err.message}` } : { ok: true, message: "Opened in Xcode" }),
+    execFile(cmd, args, (err) =>
+      resolve(err ? { ok: false, message: `${cmd} failed: ${err.message}` } : { ok: true, message: `Opened in ${editor.name}` }),
     );
   });
 }

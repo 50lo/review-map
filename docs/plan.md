@@ -2,6 +2,8 @@
 
 Review Map becomes the review tool Anton uses as a maintainer, for Swift, TypeScript, Rust, and Go. It's a personal tool, not a product: shortcuts are fine where they save real work, and the code stays simple and maintainable.
 
+Progress is tracked in [progress.md](progress.md).
+
 What carries over from the prototype (see [archive/progress.md](archive/progress.md)):
 
 - The visual map of the change, the code behind each block and arrow, and opening changed code in the IDE are the valuable parts.
@@ -90,3 +92,8 @@ Swift has no exact resolution without a build for Xcode and Bazel projects, so t
 - Keep one warm output base or DerivedData per repo instead of a fresh one per build, so the head builds incrementally on top of the base.
 - Build only the changed modules and the modules that depend on them.
 - Improve the name fallback: infer the receiver's type from local declarations (`let x: T`, `T(...)`, typed parameters and properties), and draw links that stay guesses differently from exact ones.
+
+## Future improvements
+
+- Add SwiftFormat to the project.
+- Add Sublime Text (`subl`) to the editor presets.
