@@ -100,7 +100,7 @@ Go, Rust, and Kotlin each go through the same stages, in this order:
 Two pieces of shared work come before Go:
 
 - The viewer's language knowledge (extensions, manifests, icon, Shiki language, kind names) becomes one table, so a language is one entry in it.
-- Structural review's two Swift assumptions move behind `Language`: conformers are found by inheritance clauses, and isolation comes from Swift attributes.
+- Structural review's Swift and TypeScript assumptions move behind `Language`: public API is Swift's access levels or TypeScript's exports, conformers are found by inheritance clauses, and isolation comes from Swift attributes.
 
 | Language | Grammar | Components | Indexer | Needs |
 | --- | --- | --- | --- | --- |
@@ -131,10 +131,10 @@ Go comes first: a package is a directory, so components map directly, and scip-g
 
 - **Declarations**: classes (data, sealed, enum, value, annotation), interfaces, objects and companions, functions including extension functions (scoped to their receiver type), properties, and type aliases. Kotlin's default visibility is public.
 - **References**: imports, including star imports, and names from the same package, which need no import.
-- **Components**: Gradle modules from the `include` calls in `settings.gradle.kts` or `settings.gradle`, read as text. Test source sets (`src/test`, `src/androidTest`, Kotlin Multiplatform's `*Test`) go to the module's test component. Pins come from `gradle/libs.versions.toml`. `kotlin`, `java`, `javax`, and `android` are platform modules. Java files in a module are not parsed.
+- **Components**: Gradle modules from the `include` calls in `settings.gradle.kts` or `settings.gradle`, read as text. Test source sets (`src/test`, `src/androidTest`, Kotlin Multiplatform's `*Test`) go to the module's test component. External dependencies are the ones build files declare, with versions from `gradle/libs.versions.toml`. Packages come from file headers and resolve imports across modules, since a module holds many packages. `kotlin`, `java`, `javax`, and `android` are platform modules. Java files in a module are not parsed.
 - **Contracts and risk**: public API, nullability of parameters and results, `suspend`, data class properties, serialized and persisted shapes (`@Serializable`, Room `@Entity`), sealed subclasses and enum entries, `open`, `final`, and `abstract`; `minSdk`, `targetSdk`, `compileSdk`, `jvmTarget`, and the Kotlin version. `AndroidManifest.xml` is a contract file (permissions, exported components). Risk marks: `!!`, `lateinit`, unchecked `as`, `runBlocking`, `GlobalScope`, `TODO()`, and `error()`.
 - **View code**: `@Composable` functions and subclasses of `View`, `Fragment`, and `Activity`.
-- **Structural review**: conformers from supertype lists; isolation from `@MainThread`, `@UiThread`, and `withContext(Dispatchers.Main)`.
+- **Structural review**: conformers from supertype lists; isolation from `@MainThread`, `@UiThread`, and Android UI classes, where the innermost `Dispatchers` block overrides it.
 - **Index mode**: not at first. scip-java with the Kotlin compiler plugin needs a Gradle build, which has Swift's cost, so it is measured on a real project before it is built.
 
 ### 8. Faster Swift indexing
