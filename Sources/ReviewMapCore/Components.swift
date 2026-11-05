@@ -85,6 +85,22 @@ enum ComponentBuilder {
             }
         }
 
+        // 5. Layers that name components take them (and their split folders) unless a rule already gave one.
+        for layer in config.layers ?? [] {
+            let globs = (layer.components ?? []).map(Glob.init)
+            guard !globs.isEmpty else { continue }
+            for (id, info) in layout.components where info.layer == nil && info.kind != .external {
+                if globs.contains(where: { $0.matches(info.name) }) { layout.components[id]!.layer = layer.name }
+            }
+        }
+        for (id, info) in layout.components where info.layer == nil {
+            var p = info.parent
+            while let pid = p, let parent = layout.components[pid] {
+                if let l = parent.layer { layout.components[id]!.layer = l; break }
+                p = parent.parent
+            }
+        }
+
         // A module root left with no files and no children (all its files moved by config rules)
         // hands its role to the component holding most of the module's files.
         let used = Set(layout.fileComponent.values)

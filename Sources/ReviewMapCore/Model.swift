@@ -3,7 +3,8 @@
 
 public struct ChangeModel: Codable, Equatable {
     /// 2: contract flags carry their language's prefix ("swift:codable-shape").
-    public var version: Int = 2
+    /// 3: structural review findings; region annotations no longer carry notes or removal candidates.
+    public var version: Int = 3
     public var analyzer: AnalyzerInfo
     public var repo: RepoInfo
     public var components: [Component]
@@ -12,8 +13,81 @@ public struct ChangeModel: Codable, Equatable {
     public var entities: [Entity]
     public var regions: [Region]
     public var warnings: [Warning]
+    /// Structural review: the deterministic checks' findings, then the LLM review's.
+    public var findings: [Finding] = []
     /// Set when the LLM annotator ran.
     public var llm: LLMRun? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case version, analyzer, repo, components, edges, externalDeps, entities, regions, warnings, findings, llm
+    }
+
+    public init(version: Int = 3, analyzer: AnalyzerInfo, repo: RepoInfo, components: [Component], edges: [Edge],
+                externalDeps: [ExternalDepChange], entities: [Entity], regions: [Region], warnings: [Warning],
+                findings: [Finding] = [], llm: LLMRun? = nil) {
+        self.version = version
+        self.analyzer = analyzer
+        self.repo = repo
+        self.components = components
+        self.edges = edges
+        self.externalDeps = externalDeps
+        self.entities = entities
+        self.regions = regions
+        self.warnings = warnings
+        self.findings = findings
+        self.llm = llm
+    }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        version = try c.decode(Int.self, forKey: .version)
+        analyzer = try c.decode(AnalyzerInfo.self, forKey: .analyzer)
+        repo = try c.decode(RepoInfo.self, forKey: .repo)
+        components = try c.decode([Component].self, forKey: .components)
+        edges = try c.decode([Edge].self, forKey: .edges)
+        externalDeps = try c.decode([ExternalDepChange].self, forKey: .externalDeps)
+        entities = try c.decode([Entity].self, forKey: .entities)
+        regions = try c.decode([Region].self, forKey: .regions)
+        warnings = try c.decode([Warning].self, forKey: .warnings)
+        // Models written before structural review have no findings.
+        findings = try c.decodeIfPresent([Finding].self, forKey: .findings) ?? []
+        llm = try c.decodeIfPresent(LLMRun.self, forKey: .llm)
+    }
+}
+
+/// Something the structural review found, anchored to the parts of the map it is about.
+public struct Finding: Codable, Equatable {
+    /// "<check>:<n>", stable within one model.
+    public var id: String
+    /// "check" for the deterministic checks, "llm" for the LLM review.
+    public var source: String
+    /// Deterministic: "cycle", "layering", "new-external", "unused-api", "orphaned", "conformers", "untested".
+    /// LLM: "intent", "placement", "missing", "duplicate", "complexity".
+    public var kind: String
+    /// "high", "medium", or "low".
+    public var severity: String
+    /// One sentence: what was found.
+    public var message: String
+    /// The facts behind it, one per line ("the only caller is @MainActor, so this lock guards nothing").
+    public var evidence: [String]
+    /// What to remove, simplify, or add, when the finding suggests something.
+    public var suggestion: String?
+    /// Where it shows on the map; the first anchor is the main one.
+    public var anchors: [Anchor]
+    /// The code it is about, when that is one declaration.
+    public var location: Location? = nil
+}
+
+/// A component, an edge (from and to), or an entity.
+public struct Anchor: Codable, Equatable, Hashable {
+    public var component: String?
+    public var from: String?
+    public var to: String?
+    public var entity: String?
+
+    public static func component(_ id: String) -> Anchor { Anchor(component: id) }
+    public static func edge(_ from: String, _ to: String) -> Anchor { Anchor(from: from, to: to) }
+    public static func entity(_ id: String) -> Anchor { Anchor(entity: id) }
 }
 
 /// How the LLM annotator ran. Annotations themselves sit on components, entities, and regions.
@@ -31,6 +105,10 @@ public struct LLMRun: Codable, Equatable {
     public var failed: Int
     /// True when the target repo has a REVIEW.md that went into the prompt.
     public var reviewNotes: Bool
+    /// The structural review of the whole change: "ok", "cached", "rejected", or "skipped" (nothing to review).
+    public var review: String? = nil
+    /// Where the change's description came from: "file", "pr" (gh pr view), "commits", or nil when there was none.
+    public var description: String? = nil
 }
 
 /// A one-line behavior summary written by the LLM.
@@ -38,21 +116,12 @@ public struct LLMSummary: Codable, Equatable {
     public var summary: String
 }
 
-/// LLM annotation of a region. Review and removed regions get `risk` and `note` (and maybe
-/// `removal`); context regions get `keep` and, when kept, `rank` (1 is the most needed).
+/// LLM annotation of a region. Review and removed regions get `risk`; context regions get `keep`
+/// and, when kept, `rank` (1 is the most needed).
 public struct RegionLLM: Codable, Equatable {
     public var risk: Double?
-    public var note: String?
-    public var removal: RemovalCandidate?
     public var keep: Bool?
     public var rank: Int?
-}
-
-/// Code the LLM thinks could go: defensive handling for a state that can't occur, or a speculative abstraction.
-public struct RemovalCandidate: Codable, Equatable {
-    /// "defensive" or "speculative".
-    public var kind: String
-    public var note: String
 }
 
 public struct AnalyzerInfo: Codable, Equatable {
@@ -157,6 +226,9 @@ public struct Usage: Codable, Equatable, Hashable {
     public var symbol: String
     public var file: String
     public var line: Int
+    /// usedBy: the isolation the reference runs in, when its declaration or an enclosing type says
+    /// ("@MainActor", "actor CartStore", "nonisolated").
+    public var isolation: String? = nil
 }
 
 public struct Entity: Codable, Equatable {
@@ -181,6 +253,8 @@ public struct Entity: Codable, Equatable {
     public var usedBy: [Usage]
     /// Declarations in other components that this entity references.
     public var dependsOn: [Usage]
+    /// Added entities: existing declarations with similar names, which the new code may duplicate.
+    public var similar: [Usage]? = nil
     public var llm: LLMSummary? = nil
 }
 

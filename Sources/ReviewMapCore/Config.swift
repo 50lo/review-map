@@ -10,6 +10,12 @@ import Yams
 ///     split:
 ///       threshold: 30   # targets with more source files than this are split by folder
 ///       maxDepth: 3
+///     layers:           # top to bottom: a component may use its own layer and the ones below it
+///       - name: app
+///         components: ["App", "App/*"]   # component names, as globs
+///       - name: domain               # also gets the components whose rule above says `layer: domain`
+///       - name: core
+///         components: ["Networking", "Persistence"]
 ///     exclude: ["**/Pods/**"]
 ///     generated: ["**/*.generated.swift"]
 ///     index:            # exact references from a build (see IndexOptions)
@@ -23,6 +29,11 @@ public struct Config: Codable, Equatable {
         public var name: String
         public var paths: [String]
         public var layer: String?
+    }
+    public struct Layer: Codable, Equatable {
+        public var name: String
+        /// Component names (globs) that belong to the layer, on top of rules that name it.
+        public var components: [String]?
     }
     public struct Split: Codable, Equatable {
         public var threshold: Int?
@@ -41,6 +52,7 @@ public struct Config: Codable, Equatable {
     }
 
     public var components: [ComponentRule]?
+    public var layers: [Layer]?
     public var split: Split?
     public var exclude: [String]?
     public var generated: [String]?
@@ -52,6 +64,12 @@ public struct Config: Codable, Equatable {
         let text = try String(contentsOfFile: path, encoding: .utf8)
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return Config() }
         return try YAMLDecoder().decode(Config.self, from: text)
+    }
+
+    /// The position of a layer, 0 at the top; nil when `layers` doesn't list it.
+    func layerRank(_ name: String?) -> Int? {
+        guard let name else { return nil }
+        return layers?.firstIndex { $0.name == name }
     }
 
     var splitThreshold: Int { split?.threshold ?? 30 }
@@ -68,7 +86,7 @@ public struct Config: Codable, Equatable {
     lazy var generatedMatchers: [Glob] = (Config.defaultGenerated + (generated ?? [])).map(Glob.init)
 
     enum CodingKeys: String, CodingKey {
-        case components, split, exclude, generated, index
+        case components, layers, split, exclude, generated, index
     }
 }
 

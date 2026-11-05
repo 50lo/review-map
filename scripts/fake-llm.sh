@@ -1,7 +1,8 @@
 #!/bin/sh
 # A stand-in for `claude -p --output-format json` and `codex exec`, for testing the LLM annotator
 # without a model. It reads the prompt on stdin, fills the <reply-template> with canned values
-# picked by a hash of each id, and prints the reply the way the real CLI does.
+# picked by a hash of each id, and prints the reply the way the real CLI does. The structural
+# review prompt has no template; its reply is one canned finding on the first component listed.
 #
 #   reviewmap <repo> --llm-command scripts/fake-llm.sh             # imitates claude
 #   reviewmap <repo> --llm codex --llm-command scripts/fake-llm.sh # imitates codex
@@ -26,15 +27,21 @@ if [ "$mode" = "fail" ]; then
   exit 1
 fi
 
-reply=$(awk -v mode="$mode" '
+prompt=$(cat)
+
+if printf '%s' "$prompt" | grep -q '^You are reviewing the structure'; then
+  reply=$(printf '%s\n' "$prompt" | awk -v mode="$mode" '
+/^## Components$/ { inside = 1; next }
+inside && /^- / { id = $2; exit }
+END {
+  kind = mode == "invalid" ? "style" : "complexity"
+  if (id == "") { print "{\"findings\": []}"; exit }
+  printf "{\"findings\": [{\"kind\": \"%s\", \"severity\": \"medium\", \"message\": \"A lock guards state that only one isolation domain touches.\", \"evidence\": [\"Every caller is @MainActor.\"], \"suggestion\": \"Remove the lock.\", \"anchors\": [{\"component\": \"%s\"}]}]}\n", kind, id
+}')
+else
+reply=$(printf '%s\n' "$prompt" | awk -v mode="$mode" '
 BEGIN {
   for (i = 32; i < 127; i++) ord[sprintf("%c", i)] = i
-  notes[0] = "Callers that relied on the old behavior may now take a different path."
-  notes[1] = "Changes what is stored, so data written by the previous version may not decode."
-  notes[2] = "Moves work across an actor boundary; check that state is still read on the main actor."
-  notes[3] = "Drops a check that guarded an invalid state; confirm the state is now impossible."
-  notes[4] = "Mostly layout; low risk unless the view depends on this ordering."
-  notes[5] = "Adds a new public entry point that other components can now call."
   sums[0] = "Loads the data asynchronously and reports failures to the caller."
   sums[1] = "Stores one more field and keeps older payloads readable."
   sums[2] = "Runs on the main actor instead of a background queue."
@@ -51,12 +58,7 @@ function idof(line,   s) { s = line; sub(/^.*"id": "/, "", s); sub(/".*$/, "", s
   id = idof($0); x = h(id)
   risk = (x % 90 + 5) / 100
   if (mode == "invalid" && !bad) { risk = 1.7; bad = 1 }
-  removal = "null"
-  if (x % 7 == 0) removal = "{\"kind\": \"defensive\", \"note\": \"Handles a nil that the caller never passes.\"}"
-  else if (x % 11 == 0) removal = "{\"kind\": \"speculative\", \"note\": \"A protocol with one conformer and no second use in sight.\"}"
   sub(/"risk": null/, "\"risk\": " risk)
-  sub(/"note": ""/, "\"note\": \"" notes[x % 6] "\"")
-  sub(/"removal": null/, "\"removal\": " removal)
   print; next
 }
 /"keep": null/ {
@@ -74,6 +76,7 @@ function idof(line,   s) { s = line; sub(/^.*"id": "/, "", s); sub(/".*$/, "", s
 /"regions": \[/ { rank = 0 }
 { print }
 ')
+fi
 
 if [ "$mode" = "prose" ]; then
   reply=$(printf 'Here is the annotation.\n\n```json\n%s\n```\n' "$reply")

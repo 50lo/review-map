@@ -1,10 +1,11 @@
 import Foundation
 
 // The LLM annotator. It only annotates facts the analyzer produced: it re-ranks review and removed
-// regions, prunes and ranks context regions, writes one-line summaries for components and changed
-// entities, and tags removal candidates. It runs a coding-agent CLI (`claude -p` or `codex exec`)
-// once per component batch, validates the reply strictly against the model, and caches accepted
-// results per entity. A batch that fails validation leaves the deterministic scores in place.
+// regions, prunes and ranks context regions, and writes one-line summaries for components and changed
+// entities, in one batch or more per component. Then one structural review of the whole change looks
+// at its shape (see StructuralReview.swift). It runs a coding-agent CLI (`claude -p` or `codex exec`),
+// validates every reply strictly against the model, and caches accepted results. A batch that fails
+// validation leaves the deterministic scores in place.
 
 public struct AnnotateOptions {
     /// "claude" or "codex".
@@ -21,10 +22,15 @@ public struct AnnotateOptions {
     public var timeout: TimeInterval
     /// Prompt size per batch, in characters of entity material.
     public var maxBatchChars: Int
+    /// A file with the change's description (a PR's title and body). Without one, the annotator asks
+    /// `gh pr view` about the head branch, then falls back to the commit messages.
+    public var descriptionFile: String?
+    /// Skip the structural review of the whole change.
+    public var noReview: Bool
 
     public init(tool: String = "claude", command: String? = nil, model: String? = nil,
                 cacheDir: String = AnnotateOptions.defaultCacheDir, jobs: Int = 4, timeout: TimeInterval = 300,
-                maxBatchChars: Int = 60_000) {
+                maxBatchChars: Int = 60_000, descriptionFile: String? = nil, noReview: Bool = false) {
         self.tool = tool
         self.command = command
         self.model = model
@@ -32,6 +38,8 @@ public struct AnnotateOptions {
         self.jobs = jobs
         self.timeout = timeout
         self.maxBatchChars = maxBatchChars
+        self.descriptionFile = descriptionFile
+        self.noReview = noReview
     }
 
     public static var defaultCacheDir: String {
@@ -46,7 +54,7 @@ public struct AnnotateOptions {
 
 public enum Annotator {
     /// Bump when the prompt or the reply format changes, so cached results are not reused.
-    public static let promptVersion = "1"
+    public static let promptVersion = "2"
 
     public static func run(_ model: ChangeModel, options: AnnotateOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeModel {
         guard ["claude", "codex"].contains(options.tool) else {
@@ -111,6 +119,13 @@ public enum Annotator {
             }
         }
 
+        // The structural review of the whole change, unless its reply for the same prompt is cached.
+        let description = try ChangeDescription.load(model: model, file: options.descriptionFile)
+        let review = options.noReview ? nil : StructuralReview(model: model, sources: sources, reviewNotes: reviewNotes, description: description)
+        let reviewPrompt = review?.prompt()
+        let reviewKey = reviewPrompt.map { Hash.hex(fingerprint + "\u{4}" + $0) }
+        let cachedReview = reviewKey.flatMap { key in cache.review(key).flatMap { review!.validate($0).isEmpty ? $0 : nil } }
+
         log("LLM annotator: \(batches.count) batch\(batches.count == 1 ? "" : "es") to run with \(options.tool)\(options.model.map { " (\($0))" } ?? ""), \(cachedBatches) component\(cachedBatches == 1 ? "" : "s") from cache…")
 
         let runner = CLIRunner(options: options)
@@ -130,6 +145,25 @@ public enum Annotator {
                     log("  \(batch.label): ok")
                 case .rejected(let errors):
                     log("  \(batch.label): rejected, deterministic scores kept (\(errors.prefix(3).joined(separator: "; ")))")
+                case .unavailable:
+                    break
+                }
+            }
+        }
+        final class ReviewBox: @unchecked Sendable { var outcome: StructuralReview.Outcome? }
+        let reviewBox = ReviewBox()
+        if let review, let reviewPrompt, let reviewKey, cachedReview == nil {
+            log("LLM annotator: structural review of the whole change…")
+            queue.addOperation {
+                if results.unavailable { return }
+                let outcome = review.run(prompt: reviewPrompt, runner: runner)
+                reviewBox.outcome = outcome
+                switch outcome {
+                case .accepted(let reply):
+                    cache.store(review: reply, key: reviewKey)
+                    log("  structural review: \(reply.findings.count) finding\(reply.findings.count == 1 ? "" : "s")")
+                case .rejected(let errors):
+                    log("  structural review: rejected (\(errors.prefix(3).joined(separator: "; ")))")
                 case .unavailable:
                     break
                 }
@@ -158,16 +192,34 @@ public enum Annotator {
                 break
             }
         }
+        var reviewStatus: String? = review == nil ? nil : "skipped"
+        var reviewReply = cachedReview
+        if cachedReview != nil { reviewStatus = "cached" }
+        switch reviewBox.outcome {
+        case .accepted(let reply)?:
+            reviewReply = reply
+            reviewStatus = "ok"
+        case .rejected(let errors)?:
+            reviewStatus = "rejected"
+            out.warnings.append(Warning(kind: "llm-rejected",
+                                        message: "LLM structural review failed validation: \(errors.prefix(5).joined(separator: "; "))"))
+        case .unavailable(let message)?:
+            unavailable = message
+        case nil:
+            break
+        }
         if let unavailable {
             log(unavailable)
             out.warnings.append(Warning(kind: "llm-unavailable", message: unavailable))
-            if entityReplies.isEmpty { return out }
+            if entityReplies.isEmpty && reviewReply == nil { return out }
         }
         apply(&out, entities: entityReplies, components: componentSummaries)
+        out.findings.removeAll { $0.source == "llm" }
+        if let reviewReply { out.findings += StructuralReview.findings(reviewReply) }
         out.llm = LLMRun(tool: options.tool, model: options.model,
                          command: options.command.map { ($0 as NSString).lastPathComponent }, promptVersion: promptVersion,
                          batches: batches.count + cachedBatches, cached: cachedBatches, failed: failed,
-                         reviewNotes: reviewNotes != nil)
+                         reviewNotes: reviewNotes != nil, review: reviewStatus, description: description?.source)
         log("LLM annotator: \(entityReplies.count) entities annotated, \(failed) batch\(failed == 1 ? "" : "es") rejected.")
         return out
     }
@@ -205,12 +257,16 @@ public enum Annotator {
     }
 
     static func parseReply(_ text: String) -> Result<BatchReply, AnnotatorError> {
+        parseJSON(text, as: BatchReply.self)
+    }
+
+    static func parseJSON<T: Decodable>(_ text: String, as: T.Type) -> Result<T, AnnotatorError> {
         guard let start = text.firstIndex(of: "{"), let end = text.lastIndex(of: "}"), start < end else {
             return .failure(AnnotatorError("reply has no JSON object"))
         }
         let json = String(text[start...end])
         do {
-            return .success(try JSONDecoder().decode(BatchReply.self, from: Data(json.utf8)))
+            return .success(try JSONDecoder().decode(T.self, from: Data(json.utf8)))
         } catch let DecodingError.keyNotFound(key, ctx) {
             return .failure(AnnotatorError("missing \(key.stringValue) at \(path(ctx))"))
         } catch let DecodingError.typeMismatch(_, ctx), let DecodingError.valueNotFound(_, ctx) {
@@ -255,11 +311,6 @@ public enum Annotator {
         for id in own.subtracting(regionIds) { errors.append("region \(id) missing") }
         for g in r.regions where own.contains(g.id) {
             if !(0...1).contains(g.risk) || g.risk.isNaN { errors.append("risk of \(g.id) is outside 0...1") }
-            errors += checkText(g.note, "note of \(g.id)", max: 300)
-            if let rm = g.removal {
-                if !["defensive", "speculative"].contains(rm.kind) { errors.append("removal kind of \(g.id) must be defensive or speculative") }
-                errors += checkText(rm.note, "removal note of \(g.id)", max: 300)
-            }
         }
         let contextIds = (r.context ?? []).map(\.id)
         if Set(contextIds).count != contextIds.count { errors.append("a context region of \(e.id) appears twice") }
@@ -271,7 +322,7 @@ public enum Annotator {
         return errors
     }
 
-    private static func checkText(_ s: String, _ what: String, max: Int) -> [String] {
+    static func checkText(_ s: String, _ what: String, max: Int) -> [String] {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if t.isEmpty { return ["\(what) is empty"] }
         if t.contains("\n") { return ["\(what) is more than one line"] }
@@ -286,12 +337,6 @@ public enum Annotator {
         r.entities = r.entities.map { e in
             var e = e
             e.summary = e.summary.trimmingCharacters(in: .whitespacesAndNewlines)
-            e.regions = e.regions.map { g in
-                var g = g
-                g.note = g.note.trimmingCharacters(in: .whitespacesAndNewlines)
-                g.removal = g.removal.map { RemovalCandidate(kind: $0.kind, note: $0.note.trimmingCharacters(in: .whitespacesAndNewlines)) }
-                return g
-            }
             if var ctx = e.context {
                 let kept = ctx.enumerated().filter { $0.element.keep }.sorted { ($0.element.rank ?? 0, $0.offset) < ($1.element.rank ?? 0, $1.offset) }
                 for (n, k) in kept.enumerated() { ctx[k.offset].rank = n + 1 }
@@ -321,7 +366,7 @@ public enum Annotator {
         for i in m.regions.indices {
             let id = m.regions[i].id
             if let g = regionReply[id] {
-                m.regions[i].llm = RegionLLM(risk: (g.risk * 100).rounded() / 100, note: g.note, removal: g.removal)
+                m.regions[i].llm = RegionLLM(risk: (g.risk * 100).rounded() / 100)
             } else if let c = contextReply[id] {
                 m.regions[i].llm = RegionLLM(keep: c.keep, rank: c.rank)
             } else {
@@ -355,8 +400,6 @@ struct EntityReply: Codable, Equatable {
     struct RegionReply: Codable, Equatable {
         var id: String
         var risk: Double
-        var note: String
-        var removal: RemovalCandidate?
     }
     struct ContextReply: Codable, Equatable {
         var id: String
@@ -551,19 +594,15 @@ struct PromptBuilder: @unchecked Sendable {
         Tasks:
         1. Every review and removed region: a risk from 0 to 1 for how closely a reviewer must read it to catch \
         a real problem (callers that break, persisted or network data that no longer decodes, isolation or \
-        concurrency mistakes, removed checks, changed behavior), and a note: one sentence, at most 25 words, on \
-        why it matters. The deterministic risk is a hint, not an anchor.
+        concurrency mistakes, removed checks, changed behavior). The deterministic risk is a hint, not an anchor.
         2. Every context region: keep true only when the reviewer needs it to understand the region it supports, \
         and rank the kept ones of each entity from 1 (most needed). Use rank null when keep is false.
         3. A one-line behavior summary, at most 20 words, for each entity\(b.wantsSummary ? " and for the component" : ""): \
         what the code does now that it didn't before, not which lines changed.
-        4. Removal candidates: set removal on a review region when it adds defensive handling for a state that \
-        can't occur, or a speculative abstraction (a protocol, parameter, option, or layer with one use and no \
-        clear need), as {"kind": "defensive" or "speculative", "note": "<one sentence>"}. Otherwise leave it null.
 
-        Reply with only the JSON object in <reply-template>, filled in: replace every null risk and keep, every \
-        empty summary and note, and set rank and removal where they apply. Keep every id and the structure \
-        exactly. No prose and no code fences.
+        Reply with only the JSON object in <reply-template>, filled in: replace every null risk and keep and \
+        every empty summary, and set rank where it applies. Keep every id and the structure exactly. No prose \
+        and no code fences.
 
         """
         if let notes = reviewNotes {
@@ -599,7 +638,7 @@ struct PromptBuilder: @unchecked Sendable {
             lines.append("      \"regions\": [")
             let own = reviewRegions(e.id)
             for (j, r) in own.enumerated() {
-                lines.append("        {\"id\": \(q(r.id)), \"risk\": null, \"note\": \"\", \"removal\": null}" + (j < own.count - 1 ? "," : ""))
+                lines.append("        {\"id\": \(q(r.id)), \"risk\": null}" + (j < own.count - 1 ? "," : ""))
             }
             lines.append("      ],")
             lines.append("      \"context\": [")
@@ -668,6 +707,15 @@ struct AnnotationCache: @unchecked Sendable {
     func component(_ key: String) -> String? {
         guard let data = FileManager.default.contents(atPath: path(key)) else { return nil }
         return (try? JSONDecoder().decode(BatchReply.ComponentReply.self, from: data))?.summary
+    }
+
+    func review(_ key: String) -> StructuralReview.Reply? {
+        guard let data = FileManager.default.contents(atPath: path("review-" + key)) else { return nil }
+        return try? JSONDecoder().decode(StructuralReview.Reply.self, from: data)
+    }
+
+    func store(review: StructuralReview.Reply, key: String) {
+        write(try? JSONEncoder().encode(review), "review-" + key)
     }
 
     func store(entity: EntityReply, key: String) {

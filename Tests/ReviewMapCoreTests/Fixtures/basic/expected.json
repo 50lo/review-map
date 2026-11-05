@@ -566,12 +566,14 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "nonisolated",
           "line" : 11,
           "symbol" : "CheckoutViewModel.refresh()"
         },
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 13,
           "symbol" : "CheckoutViewModel.refresh()"
         }
@@ -859,6 +861,7 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 6,
           "symbol" : "PriceCache.price(for:)"
         },
@@ -928,12 +931,14 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 8,
           "symbol" : "PriceCache.price(for:)"
         },
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/PriceCache.swift",
+          "isolation" : "actor PriceCache",
           "line" : 9,
           "symbol" : "PriceCache.price(for:)"
         }
@@ -1091,6 +1096,7 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 16,
           "symbol" : "CheckoutViewModel.pay(with:)"
         },
@@ -1779,6 +1785,7 @@
         {
           "component" : "spm:Features/Checkout",
           "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
+          "isolation" : "@MainActor",
           "line" : 17,
           "symbol" : "CheckoutViewModel.pay(with:)"
         }
@@ -2067,6 +2074,86 @@
       "from" : "1.1.0",
       "name" : "swift-collections",
       "to" : "1.2.0"
+    }
+  ],
+  "findings" : [
+    {
+      "anchors" : [
+        {
+          "component" : "cfg:Core"
+        },
+        {
+          "entity" : "cfg:Core::Cart.add(_:)"
+        }
+      ],
+      "evidence" : [
+        "At base it was used from Cart.add(_:) (Sources/Core/Cart.swift:8)."
+      ],
+      "id" : "orphaned:1",
+      "kind" : "orphaned",
+      "location" : {
+        "endLine" : 3,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "message" : "var Cart.maxItems is no longer used: the change removed its last callers.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Delete it, unless a caller is still to come."
+    },
+    {
+      "anchors" : [
+        {
+          "entity" : "cfg:Core::Cart.first()"
+        }
+      ],
+      "evidence" : [
+        "The name first appears nowhere else in the repo.",
+        "Declared public."
+      ],
+      "id" : "unused-api:1",
+      "kind" : "unused-api",
+      "location" : {
+        "endLine" : 17,
+        "file" : "Sources/Core/Cart.swift",
+        "side" : "head",
+        "startLine" : 15
+      },
+      "message" : "New public func Cart.first() has no callers outside tests.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Keep it internal until something outside needs it, or drop it."
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "spm:Features/Checkout"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.client"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.logger"
+        },
+        {
+          "entity" : "spm:Features/Checkout::CheckoutViewModel.pay(with:)"
+        },
+        {
+          "entity" : "spm:Features/Checkout::PriceCache.price(for:)"
+        }
+      ],
+      "evidence" : [
+        "var CheckoutViewModel.client (added)",
+        "var CheckoutViewModel.logger (added)",
+        "func CheckoutViewModel.pay(with:) (signature)",
+        "func PriceCache.price(for:) (signature)"
+      ],
+      "id" : "untested:1",
+      "kind" : "untested",
+      "message" : "No test references 4 changed entities in Features/Checkout.",
+      "severity" : "low",
+      "source" : "check"
     }
   ],
   "regions" : [
@@ -3579,7 +3666,7 @@
     "root" : "<repo>",
     "usesMergeBase" : true
   },
-  "version" : 2,
+  "version" : 3,
   "warnings" : [
     {
       "kind" : "ambiguous-name",

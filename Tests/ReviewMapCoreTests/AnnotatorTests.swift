@@ -85,7 +85,6 @@ final class AnnotatorTests: XCTestCase {
                 if llm.keep == true { XCTAssertGreaterThanOrEqual(llm.rank ?? 0, 1) } else { XCTAssertNil(llm.rank) }
             } else {
                 XCTAssertTrue((0...1).contains(llm.risk ?? -1), r.id)
-                XCTAssertFalse((llm.note ?? "").isEmpty)
             }
         }
         for c in m.components where c.kind != .external && !c.isTest && c.changedEntities > 0 {
@@ -94,6 +93,73 @@ final class AnnotatorTests: XCTestCase {
         // Deterministic facts are untouched.
         XCTAssertEqual(m.regions.map(\.risk), plain.regions.map(\.risk))
         XCTAssertEqual(m.entities.map(\.id), plain.entities.map(\.id))
+        XCTAssertEqual(m.findings.filter { $0.source == "check" }, plain.findings)
+    }
+
+    func testStructuralReview() throws {
+        let plain = try plainModel()
+        let m = try annotate(plain)
+        XCTAssertEqual(m.llm?.review, "ok")
+        XCTAssertEqual(m.llm?.description, "commits", "no PR, so the commit messages describe the change")
+        let llm = m.findings.filter { $0.source == "llm" }
+        XCTAssertEqual(llm.count, 1)
+        let f = try XCTUnwrap(llm.first)
+        XCTAssertEqual(f.kind, "complexity")
+        XCTAssertEqual(f.id, "complexity:1")
+        XCTAssertEqual(f.evidence, ["Every caller is @MainActor."])
+        let anchored = try XCTUnwrap(f.anchors.first?.component)
+        XCTAssertTrue(m.components.contains { $0.id == anchored })
+        // Annotating again replaces the LLM's findings instead of adding to them.
+        let again = try annotate(m)
+        XCTAssertEqual(again.findings.filter { $0.source == "llm" }, llm)
+        XCTAssertEqual(again.llm?.review, "cached")
+    }
+
+    func testStructuralReviewPrompt() throws {
+        let m = try plainModel()
+        let sources = SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha)
+        let review = StructuralReview(model: m, sources: sources, reviewNotes: nil,
+                                      description: ChangeDescription(text: "Pay with Apple Pay at checkout.", source: "pr"))
+        let prompt = try XCTUnwrap(review.prompt())
+        XCTAssertTrue(prompt.contains("Pay with Apple Pay at checkout."))
+        XCTAssertTrue(prompt.contains("## Dependency edges that changed"))
+        XCTAssertTrue(prompt.contains("spm:Features/Checkout → spm:Networking"))
+        XCTAssertTrue(prompt.contains("## Interface diff"))
+        XCTAssertTrue(prompt.contains("## Usage of the changed entities"))
+        XCTAssertTrue(prompt.contains("## Changed code, riskiest first"))
+        XCTAssertFalse(prompt.contains("<reply-template>"))
+    }
+
+    func testStructuralReviewValidation() throws {
+        let m = try plainModel()
+        let sources = SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha)
+        let review = StructuralReview(model: m, sources: sources, reviewNotes: nil, description: nil)
+        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Cart.add(_:)" })
+        let edge = try XCTUnwrap(m.edges.first { $0.status == .added })
+        let good = StructuralReview.Reply(findings: [
+            .init(kind: "complexity", severity: "low", message: "The guard can't fail.", evidence: ["Every caller passes a positive quantity."],
+                  suggestion: "Remove it.", anchors: [.entity(e.id), .edge(edge.from, edge.to)]),
+        ])
+        XCTAssertEqual(review.validate(good), [])
+        var bad = good
+        bad.findings[0].kind = "style"
+        bad.findings[0].evidence = []
+        bad.findings[0].anchors = [.entity("nope"), .edge(edge.to, "nowhere"), Anchor()]
+        let errors = review.validate(bad)
+        XCTAssertTrue(errors.contains { $0.contains("kind of finding 1") })
+        XCTAssertTrue(errors.contains { $0.contains("cites no evidence") })
+        XCTAssertTrue(errors.contains { $0.contains("unknown entity nope") })
+        XCTAssertTrue(errors.contains { $0.contains("no edge") })
+        XCTAssertTrue(errors.contains { $0.contains("names no entity") })
+    }
+
+    func testDescriptionFile() throws {
+        let file = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-desc-\(UUID().uuidString).md")
+        try "Add Apple Pay.\n".write(toFile: file, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(atPath: file) }
+        let d = try XCTUnwrap(try ChangeDescription.load(model: try plainModel(), file: file))
+        XCTAssertEqual(d.source, "file")
+        XCTAssertEqual(d.text, "Add Apple Pay.\n")
     }
 
     /// Fixtures/basic/annotated.json: the fixture annotated by the fake CLI, which the viewer tests read.
@@ -142,6 +208,9 @@ final class AnnotatorTests: XCTestCase {
         XCTAssertTrue(m.regions.allSatisfy { $0.llm == nil })
         XCTAssertTrue(m.entities.allSatisfy { $0.llm == nil })
         XCTAssertTrue(m.warnings.contains { $0.kind == "llm-rejected" && $0.message.contains("outside 0...1") })
+        XCTAssertEqual(m.llm?.review, "rejected")
+        XCTAssertTrue(m.warnings.contains { $0.kind == "llm-rejected" && $0.message.contains("structural review") })
+        XCTAssertFalse(m.findings.contains { $0.source == "llm" })
     }
 
     func testFailingCLIKeepsDeterministicScores() throws {
@@ -183,7 +252,7 @@ final class AnnotatorTests: XCTestCase {
         let context = builder.contextRegions(e.id)
         XCTAssertFalse(regions.isEmpty)
         let good = EntityReply(id: e.id, summary: "Adds an item without checking the quantity.",
-                               regions: regions.map { .init(id: $0.id, risk: 0.5, note: "Drops the quantity guard.", removal: nil) },
+                               regions: regions.map { .init(id: $0.id, risk: 0.5) },
                                context: context.map { .init(id: $0.id, keep: false, rank: nil) })
         XCTAssertEqual(Annotator.validate(good, against: e, builder: builder), [])
 
@@ -192,16 +261,16 @@ final class AnnotatorTests: XCTestCase {
         XCTAssertTrue(Annotator.validate(missing, against: e, builder: builder).contains { $0.contains("missing") })
 
         var unknown = good
-        unknown.regions.append(.init(id: e.id + "/r99", risk: 0.1, note: "x", removal: nil))
+        unknown.regions.append(.init(id: e.id + "/r99", risk: 0.1))
         XCTAssertTrue(Annotator.validate(unknown, against: e, builder: builder).contains { $0.contains("unknown region") })
 
         var twoLines = good
         twoLines.summary = "One.\nTwo."
         XCTAssertTrue(Annotator.validate(twoLines, against: e, builder: builder).contains { $0.contains("more than one line") })
 
-        var badKind = good
-        badKind.regions[0].removal = RemovalCandidate(kind: "dead", note: "Unused.")
-        XCTAssertFalse(Annotator.validate(badKind, against: e, builder: builder).isEmpty)
+        var badRisk = good
+        badRisk.regions[0].risk = 1.5
+        XCTAssertTrue(Annotator.validate(badRisk, against: e, builder: builder).contains { $0.contains("outside 0...1") })
 
         if !context.isEmpty {
             var unranked = good
