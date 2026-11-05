@@ -516,6 +516,7 @@ code,
   border-color: var(--muted);
 }
 .node-title {
+  min-width: 0;
   font-weight: 600;
   font-size: 13px;
   white-space: nowrap;
@@ -594,6 +595,27 @@ code,
 .node.ext .node-title {
   font-weight: 500;
   font-size: 12px;
+}
+.language-badges {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 4px;
+  margin-left: auto;
+}
+.language-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  background: #fff;
+}
+.node.ext {
+  gap: 6px;
+}
+.node.dim .language-icon,
+.group.dim .language-icon {
+  filter: grayscale(1);
 }
 .ext-badge {
   margin-left: 6px;
