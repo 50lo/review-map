@@ -8,7 +8,7 @@ import XCTest
 final class GoIndexTests: XCTestCase {
     static var repo: String?
     static var cache: String?
-    static var indexed: ChangeModel?
+    static var indexed: ChangeReport?
     static var available: Bool?
 
     override class func tearDown() {
@@ -29,11 +29,11 @@ final class GoIndexTests: XCTestCase {
         return repo
     }
 
-    func analyze(index: IndexOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeModel {
+    func analyze(index: IndexOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeReport {
         try Analyzer.run(AnalyzeOptions(repo: try fixtureRepo(), base: "base", head: "main", index: index), log: log)
     }
 
-    func indexedModel() throws -> ChangeModel {
+    func indexedReport() throws -> ChangeReport {
         try requireIndexer()
         if let m = Self.indexed { return m }
         _ = try fixtureRepo()
@@ -45,31 +45,31 @@ final class GoIndexTests: XCTestCase {
         return m
     }
 
-    func entity(_ m: ChangeModel, _ name: String) throws -> Entity {
-        try XCTUnwrap(m.entities.first { $0.qualifiedName == name }, "no entity \(name)")
+    func reviewItem(_ m: ChangeReport, _ name: String) throws -> ReviewItem {
+        try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == name }, "no review item \(name)")
     }
 
     func testExactMemberUsage() throws {
-        let m = try indexedModel()
+        let m = try indexedReport()
         XCTAssertEqual(m.analyzer.resolution, "index")
         XCTAssertFalse(m.warnings.contains { $0.kind.hasPrefix("index-") }, "\(m.warnings)")
-        XCTAssertEqual(try entity(m, "Store.Load()").usedBy.map(\.symbol), ["start()"])
-        XCTAssertEqual(try entity(m, "Cache.Load()").usedBy, [], "the app never calls Cache.Load()")
+        XCTAssertEqual(try reviewItem(m, "Store.Load()").usedBy.map(\.symbol), ["start()"])
+        XCTAssertEqual(try reviewItem(m, "Cache.Load()").usedBy, [], "the app never calls Cache.Load()")
 
         let named = try analyze(index: IndexOptions())
         XCTAssertEqual(named.analyzer.resolution, "name-based")
-        XCTAssertEqual(try entity(named, "Cache.Load()").usedBy.map(\.symbol), ["start()"], "name matching over-counts")
+        XCTAssertEqual(try reviewItem(named, "Cache.Load()").usedBy.map(\.symbol), ["start()"], "name matching over-counts")
     }
 
     func testEdgesMatchNameMatching() throws {
-        let m = try indexedModel()
+        let m = try indexedReport()
         let edge = try XCTUnwrap(m.edges.first { $0.from == "go:example.com/demo/app" && $0.to == "go:example.com/demo/cache" })
         XCTAssertEqual(edge.status, .unchanged)
         XCTAssertTrue(edge.refs.map(\.symbol).contains("Cache"))
     }
 
     func testCacheAndFallback() throws {
-        _ = try indexedModel()
+        _ = try indexedReport()
         var lines: [String] = []
         let again = try analyze(index: IndexOptions(enabled: true, cacheDir: Self.cache!)) { lines.append($0) }
         XCTAssertEqual(again.analyzer.resolution, "index")

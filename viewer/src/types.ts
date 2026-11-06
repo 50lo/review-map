@@ -4,14 +4,14 @@
 export type EdgeStatus = "added" | "removed" | "changed" | "unchanged";
 export type Side = "base" | "head";
 
-export interface ChangeModel {
+export interface ChangeReport {
   version: number;
   analyzer?: { version: string; resolution: string; languages?: string[] };
   repo: { root: string; base: string; head: string; baseSha: string; headSha: string; usesMergeBase?: boolean };
   components: Component[];
   edges: Edge[];
   externalDeps: ExternalDepChange[];
-  entities: Entity[];
+  reviewItems: ReviewItem[];
   regions: Region[];
   warnings: Warning[];
   /** Structural review: the deterministic checks' findings, then the LLM's. Missing before version 3. */
@@ -33,12 +33,12 @@ export interface ChangeModel {
   };
 }
 
-/** A component, an edge (from and to), or an entity. */
+/** A component, an edge (from and to), or a review item. */
 export interface Anchor {
   component?: string;
   from?: string;
   to?: string;
-  entity?: string;
+  reviewItem?: string;
 }
 
 export interface Finding {
@@ -78,7 +78,7 @@ export interface Component {
   isTest?: boolean;
   paths: string[];
   status?: "added" | "removed" | string;
-  changedEntities: number;
+  changedReviewItems: number;
   interfaceChanges: number;
   changeScore: number;
   llm?: LLMSummary;
@@ -119,7 +119,7 @@ export interface Usage {
   side?: Side;
 }
 
-export interface Entity {
+export interface ReviewItem {
   id: string;
   component: string;
   kind: string;
@@ -129,21 +129,21 @@ export interface Entity {
   change: "added" | "removed" | "signature" | "body" | "modifiers" | "cosmetic" | string;
   changes?: string[];
   signature: { base?: string; head?: string };
-  /** Prefixed with the language: "swift:codable-shape". Version 1 models have no prefix. */
+  /** Prefixed with the language: "swift:codable-shape". Version 1 reports have no prefix. */
   contractFlags: string[];
   tags?: string[];
   location: Location;
   baseLocation?: Location;
   usedBy?: Usage[];
   dependsOn?: Usage[];
-  /** Added entities: existing declarations with similar names. */
+  /** Added review items: existing declarations with similar names. */
   similar?: Usage[];
   llm?: LLMSummary;
 }
 
 export interface Region {
   id: string;
-  entity: string;
+  reviewItem: string;
   kind: "review" | "context" | "removed" | string;
   file: string;
   startLine: number;
@@ -159,7 +159,7 @@ export interface Region {
   component?: string;
   /** Context: the lines that matter. Missing means all of them. */
   lines?: number[];
-  /** Removed regions inside a changed entity: the head line the removed code followed. */
+  /** Removed regions inside a changed review item: the head line the removed code followed. */
   anchor?: number;
   llm?: RegionLLM;
 }

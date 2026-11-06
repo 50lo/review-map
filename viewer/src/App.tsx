@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChangeModel } from "./types";
+import type { ChangeReport } from "./types";
 import { buildIndex, collapse, defaultCollapsed, edgeKey, isGroupOf, mapFocus, revealFocus, stepRegion, visible, type Index, type MapOptions } from "./graph";
 import { lastName } from "./levels";
-import { loadFile, loadInitialModel } from "./load";
+import { loadFile, loadInitialReport } from "./load";
 import { MapView } from "./MapView";
 import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
-import { EntityPage, InterfacePage, LocationPage } from "./Pages";
+import { ReviewItemPage, InterfacePage, LocationPage } from "./Pages";
 import { initReview } from "./review";
 import { Sidebar } from "./Sidebar";
 
@@ -18,11 +18,11 @@ function writeFocus(f: Focus) {
   history.pushState(null, "", hash ? `#${hash}` : location.pathname + location.search);
 }
 
-/** One level up: entity → its component's interface view → that component on the map → the map. */
+/** One level up: review item → its component's interface view → that component on the map → the map. */
 function parentFocus(index: Index, f: Focus): Focus {
   if (!f) return null;
-  if (f.type === "entity") {
-    const e = index.entities.get(f.id);
+  if (f.type === "reviewItem") {
+    const e = index.reviewItems.get(f.id);
     return e ? { type: "interface", id: e.component } : null;
   }
   if (f.type === "interface") return { type: "component", id: f.id };
@@ -42,15 +42,15 @@ function crumbs(index: Index, f: Focus): Crumb[] {
     case "component":
       return [{ label: name(f.id) }];
     case "edge": {
-      const e = index.model.edges.find((x) => edgeKey(x) === f.key);
+      const e = index.report.edges.find((x) => edgeKey(x) === f.key);
       return [{ label: e ? `${name(e.from)} → ${name(e.to)}` : f.key }];
     }
     case "bundle":
       return [{ label: `${name(f.from)} → ${name(f.to)}` }];
     case "interface":
       return [{ label: name(f.id) }];
-    case "entity": {
-      const e = index.entities.get(f.id);
+    case "reviewItem": {
+      const e = index.reviewItems.get(f.id);
       if (!e) return [{ label: f.id }];
       return [{ label: name(e.component), focus: { type: "interface", id: e.component } }, { label: lastName(e.qualifiedName) }];
     }
@@ -80,33 +80,33 @@ function readOptions(): MapOptions & { showUnchanged: boolean } {
 }
 
 export function App() {
-  const [model, setModel] = useState<ChangeModel | null>(null);
+  const [report, setReport] = useState<ChangeReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadInitialModel()
+    loadInitialReport()
       .then(async (m) => {
         if (m) await initReview(m);
-        setModel(m);
+        setReport(m);
       })
       .catch((e) => setError(String(e?.message ?? e)))
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="empty">Loading change model…</div>;
-  if (!model) return <Picker error={error} onModel={setModel} onError={setError} />;
-  return <Viewer model={model} />;
+  if (loading) return <div className="empty">Loading change report…</div>;
+  if (!report) return <Picker error={error} onReport={setReport} onError={setError} />;
+  return <Viewer report={report} />;
 }
 
-function Picker({ error, onModel, onError }: { error: string | null; onModel: (m: ChangeModel) => void; onError: (e: string) => void }) {
+function Picker({ error, onReport, onError }: { error: string | null; onReport: (m: ChangeReport) => void; onError: (e: string) => void }) {
   const [over, setOver] = useState(false);
   const take = (f?: File) =>
     f &&
     loadFile(f).then(
       async (m) => {
         await initReview(m);
-        onModel(m);
+        onReport(m);
       },
       (e) => onError(String(e?.message ?? e)),
     );
@@ -125,7 +125,7 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
       }}
     >
       <h1>Review Map</h1>
-      <p>Drop a change-model.json here, or choose one.</p>
+      <p>Drop a change-report.json here, or choose one.</p>
       <input type="file" accept=".json,application/json" onChange={(e) => take(e.target.files?.[0])} />
       <p className="muted">
         Or run <code>reviewmap</code> in a repo to review its current branch against main here.
@@ -135,9 +135,9 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
   );
 }
 
-function Viewer({ model }: { model: ChangeModel }) {
+function Viewer({ report }: { report: ChangeReport }) {
   const [llm, setLLMState] = useState(readLLM);
-  const index = useMemo(() => buildIndex(model, { llm }), [model, llm]);
+  const index = useMemo(() => buildIndex(report, { llm }), [report, llm]);
   const [opts, setOpts] = useState(readOptions);
   const setLLM = useCallback((on: boolean) => {
     setLLMState(on);
@@ -168,7 +168,7 @@ function Viewer({ model }: { model: ChangeModel }) {
     writeFocus(f);
     setFocusState(f);
     // A region focus scrolls to the region once its code is shown.
-    if (changesPage && !(f?.type === "entity" && f.region)) document.querySelector(".page")?.scrollTo(0, 0);
+    if (changesPage && !(f?.type === "reviewItem" && f.region)) document.querySelector(".page")?.scrollTo(0, 0);
   }, []);
 
   useEffect(() => {
@@ -268,8 +268,8 @@ function Viewer({ model }: { model: ChangeModel }) {
             </span>
           ))}
         </nav>
-        <div className="repo muted" title={`${model.repo.root}\nbase ${model.repo.baseSha}\nhead ${model.repo.headSha}`}>
-          {model.repo.base || short(model.repo.baseSha)} → {model.repo.head || short(model.repo.headSha)}
+        <div className="repo muted" title={`${report.repo.root}\nbase ${report.repo.baseSha}\nhead ${report.repo.headSha}`}>
+          {report.repo.base || short(report.repo.baseSha)} → {report.repo.head || short(report.repo.headSha)}
         </div>
         <div className="toggles" hidden={level > 1}>
           <label>
@@ -323,7 +323,7 @@ function Viewer({ model }: { model: ChangeModel }) {
         {level > 1 && (
           <div className="page">
             {focus?.type === "interface" && <InterfacePage index={index} id={focus.id} go={setFocus} />}
-            {focus?.type === "entity" && <EntityPage index={index} id={focus.id} region={focus.region} go={setFocus} />}
+            {focus?.type === "reviewItem" && <ReviewItemPage index={index} id={focus.id} region={focus.region} go={setFocus} />}
             {focus?.type === "location" && <LocationPage index={index} side={focus.side} file={focus.file} line={focus.line} go={setFocus} />}
           </div>
         )}

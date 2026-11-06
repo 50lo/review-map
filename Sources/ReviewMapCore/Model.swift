@@ -1,16 +1,17 @@
-// The change model: the only contract between the analyzer and the viewer.
+// The change report: the only contract between the analyzer and the viewer.
 // Versioned; consumers must ignore fields they don't know.
 
-public struct ChangeModel: Codable, Equatable {
+public struct ChangeReport: Codable, Equatable {
     /// 2: contract flags carry their language's prefix ("swift:codable-shape").
     /// 3: structural review findings; region annotations no longer carry notes or removal candidates.
-    public var version: Int = 3
+    /// 4: "entities" became "reviewItems", "entity" became "reviewItem", and "changedEntities" became "changedReviewItems".
+    public var version: Int = 4
     public var analyzer: AnalyzerInfo
     public var repo: RepoInfo
     public var components: [Component]
     public var edges: [Edge]
     public var externalDeps: [ExternalDepChange]
-    public var entities: [Entity]
+    public var reviewItems: [ReviewItem]
     public var regions: [Region]
     public var warnings: [Warning]
     /// Structural review: the deterministic checks' findings, then the LLM review's.
@@ -19,11 +20,11 @@ public struct ChangeModel: Codable, Equatable {
     public var llm: LLMRun? = nil
 
     enum CodingKeys: String, CodingKey {
-        case version, analyzer, repo, components, edges, externalDeps, entities, regions, warnings, findings, llm
+        case version, analyzer, repo, components, edges, externalDeps, reviewItems, regions, warnings, findings, llm
     }
 
-    public init(version: Int = 3, analyzer: AnalyzerInfo, repo: RepoInfo, components: [Component], edges: [Edge],
-                externalDeps: [ExternalDepChange], entities: [Entity], regions: [Region], warnings: [Warning],
+    public init(version: Int = 4, analyzer: AnalyzerInfo, repo: RepoInfo, components: [Component], edges: [Edge],
+                externalDeps: [ExternalDepChange], reviewItems: [ReviewItem], regions: [Region], warnings: [Warning],
                 findings: [Finding] = [], llm: LLMRun? = nil) {
         self.version = version
         self.analyzer = analyzer
@@ -31,7 +32,7 @@ public struct ChangeModel: Codable, Equatable {
         self.components = components
         self.edges = edges
         self.externalDeps = externalDeps
-        self.entities = entities
+        self.reviewItems = reviewItems
         self.regions = regions
         self.warnings = warnings
         self.findings = findings
@@ -41,15 +42,19 @@ public struct ChangeModel: Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         version = try c.decode(Int.self, forKey: .version)
+        guard version >= 4 else {
+            throw DecodingError.dataCorruptedError(forKey: .version, in: c, debugDescription:
+                "This change report was written by an older reviewmap (version \(version)). Run reviewmap again to update it.")
+        }
         analyzer = try c.decode(AnalyzerInfo.self, forKey: .analyzer)
         repo = try c.decode(RepoInfo.self, forKey: .repo)
         components = try c.decode([Component].self, forKey: .components)
         edges = try c.decode([Edge].self, forKey: .edges)
         externalDeps = try c.decode([ExternalDepChange].self, forKey: .externalDeps)
-        entities = try c.decode([Entity].self, forKey: .entities)
+        reviewItems = try c.decode([ReviewItem].self, forKey: .reviewItems)
         regions = try c.decode([Region].self, forKey: .regions)
         warnings = try c.decode([Warning].self, forKey: .warnings)
-        // Models written before structural review have no findings.
+        // Reports written before structural review have no findings.
         findings = try c.decodeIfPresent([Finding].self, forKey: .findings) ?? []
         llm = try c.decodeIfPresent(LLMRun.self, forKey: .llm)
     }
@@ -57,7 +62,7 @@ public struct ChangeModel: Codable, Equatable {
 
 /// Something the structural review found, anchored to the parts of the map it is about.
 public struct Finding: Codable, Equatable {
-    /// "<check>:<n>", stable within one model.
+    /// "<check>:<n>", stable within one change report.
     public var id: String
     /// "check" for the deterministic checks, "llm" for the LLM review.
     public var source: String
@@ -78,19 +83,19 @@ public struct Finding: Codable, Equatable {
     public var location: Location? = nil
 }
 
-/// A component, an edge (from and to), or an entity.
+/// A component, an edge (from and to), or a review item.
 public struct Anchor: Codable, Equatable, Hashable {
     public var component: String?
     public var from: String?
     public var to: String?
-    public var entity: String?
+    public var reviewItem: String?
 
     public static func component(_ id: String) -> Anchor { Anchor(component: id) }
     public static func edge(_ from: String, _ to: String) -> Anchor { Anchor(from: from, to: to) }
-    public static func entity(_ id: String) -> Anchor { Anchor(entity: id) }
+    public static func reviewItem(_ id: String) -> Anchor { Anchor(reviewItem: id) }
 }
 
-/// How the LLM annotator ran. Annotations themselves sit on components, entities, and regions.
+/// How the LLM annotator ran. Annotations themselves sit on components, review items, and regions.
 public struct LLMRun: Codable, Equatable {
     /// "claude" or "codex".
     public var tool: String
@@ -159,7 +164,7 @@ public struct Component: Codable, Equatable {
     public var paths: [String]
     /// "added" / "removed" when the component exists on one side only.
     public var status: String?
-    public var changedEntities: Int
+    public var changedReviewItems: Int
     public var interfaceChanges: Int
     /// 0..1, drives emphasis on the map.
     public var changeScore: Double
@@ -194,7 +199,7 @@ public struct Ref: Codable, Equatable, Hashable {
     public var side: Side
 }
 
-public enum EntityKind: String, Codable {
+public enum ReviewItemKind: String, Codable {
     case `struct`, `class`, `enum`, actor, `protocol`, `extension`
     case `func`, `init`, `var`, `case`, `typealias`
     /// Non-code contract file: Info.plist, entitlements, privacy manifest, Core Data model.
@@ -219,7 +224,7 @@ public struct Signature: Codable, Equatable {
     public var head: String?
 }
 
-/// A reference from code in another component to an entity (or from an entity to another component).
+/// A reference from code in another component to a review item (or from a review item to another component).
 public struct Usage: Codable, Equatable, Hashable {
     public var component: String
     /// Qualified name of the declaration that contains the reference (or the referenced declaration for dependsOn).
@@ -233,12 +238,12 @@ public struct Usage: Codable, Equatable, Hashable {
     public var side: Side? = nil
 }
 
-public struct Entity: Codable, Equatable {
+public struct ReviewItem: Codable, Equatable {
     public var id: String
     public var component: String
-    public var kind: EntityKind
+    public var kind: ReviewItemKind
     public var qualifiedName: String
-    /// Entity id of the enclosing declaration, if any (may refer to an unchanged entity that is not listed).
+    /// Id of the enclosing declaration, if any. It may be an unchanged declaration, which is not a review item and is not listed.
     public var parent: String?
     public var isInterface: Bool
     public var change: ChangeKind
@@ -251,11 +256,11 @@ public struct Entity: Codable, Equatable {
     public var tags: [String]
     public var location: Location
     public var baseLocation: Location?
-    /// Declarations in other components that reference this entity.
+    /// Declarations in other components that reference this review item.
     public var usedBy: [Usage]
-    /// Declarations in other components that this entity references.
+    /// Declarations in other components that this review item references.
     public var dependsOn: [Usage]
-    /// Added entities: existing declarations with similar names, which the new code may duplicate.
+    /// Added review items: existing declarations with similar names, which the new code may duplicate.
     public var similar: [Usage]? = nil
     public var llm: LLMSummary? = nil
 }
@@ -264,10 +269,10 @@ public struct Entity: Codable, Equatable {
 /// regions are deleted base lines, and `context` regions are unchanged code that helps to
 /// understand the review regions they support.
 public struct Region: Codable, Equatable {
-    /// "<entity id>/r<n>" for review and removed regions, "<entity id>/c<n>" for context.
+    /// "<review item id>/r<n>" for review and removed regions, "<review item id>/c<n>" for context.
     public var id: String
-    /// The changed entity the region belongs to (for context: the entity it explains).
-    public var entity: String
+    /// The changed review item the region belongs to (for context: the review item it explains).
+    public var reviewItem: String
     /// "review", "removed", or "context".
     public var kind: String
     public var file: String
@@ -287,7 +292,7 @@ public struct Region: Codable, Equatable {
     public var component: String?
     /// Context: the lines that matter (signature and referencing lines). Missing means all of them.
     public var lines: [Int]?
-    /// Removed regions inside a changed entity: the head line the removed code followed.
+    /// Removed regions inside a changed review item: the head line the removed code followed.
     public var anchor: Int?
     public var llm: RegionLLM? = nil
 }

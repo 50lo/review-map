@@ -1,7 +1,7 @@
 import Foundation
 
 /// What a language plugs into the language-neutral core. The core exports both trees, matches
-/// declarations, resolves references, and builds edges, regions, and the model. A language supplies
+/// declarations, resolves references, and builds edges, regions, and the change report. A language supplies
 /// what depends on its syntax, its build system, and its platform.
 protocol Language {
     /// Short id, also the prefix of its contract flags ("swift" makes "swift:codable-shape").
@@ -34,7 +34,7 @@ protocol Language {
     // MARK: Contracts and risk
 
     /// Contract flags of the language's matched declarations (indices into `builder.pairs`), without the prefix.
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]]
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]]
     /// A non-code file that is part of a contract (a plist, a data model): the path it is reported under,
     /// and its flag.
     func contractFile(_ path: String) -> (key: String, flag: String)?
@@ -46,18 +46,18 @@ protocol Language {
     func flagRisk(_ flag: String, isInterface: Bool) -> Double
     /// View code, where control flow is mostly layout. `inherits` holds what the enclosing type and,
     /// for a type, the type itself conform to or inherit from.
-    func isViewCode(_ decl: Decl, inherits: Set<String>) -> Bool
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool
 
     // MARK: Structural review
 
     /// Whether this declaration is public API. `enclosing` is its parent chain, innermost first;
     /// it excludes the declaration itself. This classifies API for unused-code checks, not usage.
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool
     /// Whether a runtime, framework, or language convention may call this declaration without naming
     /// it, by its name or attributes (Swift's `@objc` or `body`, TypeScript's `constructor`). Unused-code
     /// checks skip these, and so do similar-name suggestions. Rules that follow from the shared
     /// declaration shape (initializers, overrides, protocol requirements, possible witnesses) stay in the core.
-    func isImplicitlyCalled(_ decl: Decl) -> Bool
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool
     /// Head declarations that conform to the matched interface. `builder` contains both sides,
     /// all components, and their matched declaration pairs: implicit conformances may need the
     /// base interface's method set even when a type no longer conforms at head.
@@ -65,7 +65,7 @@ protocol Language {
     /// The inheritance-based default preserves the existing check and context lookup rules;
     /// implicit conformance need not require an import.
     /// Implementations are supplied by the language so method-set matching can consider arity.
-    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder,
                     for use: ConformanceUse) -> [Conformer]
     /// The isolation of a reference at a 1-based line, from the language's parsed file facts.
     /// The default is no known isolation.
@@ -79,7 +79,7 @@ protocol Language {
 }
 
 extension Language {
-    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder,
                     for use: ConformanceUse) -> [Conformer] {
         let name: String
         switch use {
@@ -109,7 +109,7 @@ extension Language {
                 implementations = (builder.headMembers["\(type)|\(member.name)"] ?? []).filter { implementation in
                     switch use {
                     case .check:
-                        return implementation.decl.kind == member.kind || ModelBuilder.kindGroup(implementation.decl.kind) == ModelBuilder.kindGroup(member.kind)
+                        return implementation.decl.kind == member.kind || ChangeReportBuilder.kindGroup(implementation.decl.kind) == ChangeReportBuilder.kindGroup(member.kind)
                     case .context:
                         return implementation.component == candidate.component
                     }

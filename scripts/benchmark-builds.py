@@ -95,7 +95,7 @@ def main():
     # Change executable code so both systems must compile, rather than just touching a file.
     edits = [
         ("cli-edit", ROOT / "Sources/reviewmap/main.swift", 'msg + "\\n"', 'msg + " [benchmark {n}]\\n"'),
-        ("core-edit", ROOT / "Sources/ReviewMapCore/ChangeModelIO.swift", '"Warnings: ', '"Warnings [benchmark {n}]: '),
+        ("core-edit", ROOT / "Sources/ReviewMapCore/ChangeReportIO.swift", '"Warnings: ', '"Warnings [benchmark {n}]: '),
     ]
     for _, path, old, _ in edits:
         if path.read_text().count(old) != 1:

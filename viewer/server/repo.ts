@@ -13,7 +13,7 @@ export interface RepoInfo {
 
 interface ModelLike {
   repo?: { root?: string; baseSha?: string; headSha?: string };
-  entities?: Array<{
+  reviewItems?: Array<{
     location?: { file: string; side: "base" | "head" };
     baseLocation?: { file: string; side: "base" | "head" };
     usedBy?: Array<{ file: string }>;
@@ -59,7 +59,7 @@ function gitShowSync(repo: RepoInfo, side: "base" | "head", file: string): strin
 }
 
 /**
- * Sources for the single-file build, keyed "side:file". Files the entities live in come
+ * Sources for the single-file build, keyed "side:file". Files the review items live in come
  * first; files of their context regions and callers are added while the total stays under
  * `maxBytes`.
  */
@@ -68,12 +68,12 @@ export function collectSources(model: ModelLike, maxBytes: number): { sources: R
   if (!repo) return { sources: {}, skipped: 0 };
   const primary = new Set<string>();
   const secondary = new Set<string>();
-  for (const e of model.entities ?? []) {
+  for (const e of model.reviewItems ?? []) {
     if (e.location) primary.add(`${e.location.side}:${e.location.file}`);
     if (e.baseLocation) primary.add(`base:${e.baseLocation.file}`);
   }
   for (const r of model.regions ?? []) (r.kind === "context" ? secondary : primary).add(`${r.side}:${r.file}`);
-  for (const e of model.entities ?? []) {
+  for (const e of model.reviewItems ?? []) {
     for (const u of e.usedBy ?? []) secondary.add(`head:${u.file}`);
   }
   const sources: Record<string, string> = {};

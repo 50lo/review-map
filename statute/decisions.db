@@ -1,0 +1,49 @@
+- id: D261106-ngpqq
+  timestamp: 2026-11-06T00:32:46Z
+  actor: agent
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-06T08:45:35Z
+  summary: Introduce five foundational terms for discussing Review Map.
+  rationale: Start with a small vocabulary in plain language, with concrete examples and code mappings recorded separately. Align the source types with ReviewItem and ChangeReport, and save reports as change-report.json. Preserve the JSON schema. Leave rules for later discussion.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Change
+  - Component
+  - Review item
+  - Dependency
+  - Change report
+- id: D261106-49z62
+  timestamp: 2026-11-06T07:43:18Z
+  actor: user
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-06T08:45:35Z
+  summary: Add Finding, Region, and Declaration to the Review Map vocabulary.
+  rationale: Extend the foundational vocabulary with the shorter definitions reviewed by the user. Map the terms to Finding, Region, and Declaration, renaming Decl to Declaration as requested; Usage describes a reference rather than a declaration.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Finding
+  - Region
+  - Declaration
+- id: D261106-639at
+  timestamp: 2026-11-06T10:05:01Z
+  actor: agent
+  status: proposed
+  approved_by: null
+  summary: Use the Review item and Change report names everywhere, including the change report's JSON.
+  rationale: Code, viewer text, LLM prompts and docs now say review item and change report instead of entity and model. The JSON keys become reviewItems, reviewItem, and changedReviewItems, and the report version goes to 4, replacing the earlier choice to preserve the JSON schema. Review item maps to ReviewItemKind instead of EntityKind, and Declaration's not entry names the term Review item.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Review item
+  - Declaration

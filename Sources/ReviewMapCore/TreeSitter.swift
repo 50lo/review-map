@@ -30,7 +30,7 @@ final class SyntaxTree {
     }
 }
 
-/// A node of a `SyntaxTree`. Lines are 1-based, like the rest of the model.
+/// A node of a `SyntaxTree`. Lines are 1-based, like the rest of the change report.
 struct SyntaxNode {
     let raw: TSNode
     let tree: SyntaxTree

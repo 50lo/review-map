@@ -44,7 +44,7 @@ struct TypeScriptLanguage: Language {
 
     // MARK: Contracts and risk
 
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] {
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] {
         TypeScriptFlags(builder, pairs: pairs).compute()
     }
 
@@ -86,7 +86,7 @@ struct TypeScriptLanguage: Language {
 
     /// React components: declarations that return JSX, members of class components, and declarations typed
     /// as components or elements.
-    func isViewCode(_ d: Decl, inherits: Set<String>) -> Bool {
+    func isViewCode(_ d: Declaration, inherits: Set<String>) -> Bool {
         if d.traits.contains("jsx") || inherits.contains("Component") || inherits.contains("PureComponent") { return true }
         let types = d.signatureDisplay + " " + (d.typeAnnotation ?? "")
         return ["JSX.Element", "ReactNode", "ReactElement", "FC<", "FunctionComponent", "ComponentType"].contains(where: types.contains)
@@ -95,7 +95,7 @@ struct TypeScriptLanguage: Language {
     // MARK: Structural review
 
     /// Named exports and their public members; default exports keep their existing exclusion.
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool {
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
         if decl.modifiers.contains("default") { return false }
         guard !decl.isTopLevel else { return decl.modifiers.contains("export") }
         if let access = decl.access, access != "public" { return false }
@@ -104,7 +104,7 @@ struct TypeScriptLanguage: Language {
     }
 
     /// Constructors, default exports, and names that aren't plain identifiers (`#private`, computed keys).
-    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool {
         ["constructor", "default"].contains(decl.name) || !(decl.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false)
     }
 

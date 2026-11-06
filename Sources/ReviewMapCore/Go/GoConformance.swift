@@ -4,9 +4,9 @@ import Foundation
 /// interface. Methods match by name and parameter count; full type checking is index mode's job. Both value and
 /// pointer receivers count, and embedded interfaces add their methods.
 struct GoConformance {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
 
-    init(_ builder: ModelBuilder) { b = builder }
+    init(_ builder: ChangeReportBuilder) { b = builder }
 
     /// A type or method: "<directory>|<type>". A package is a directory, and methods are declared in their type's package.
     private typealias TypeKey = String
@@ -61,7 +61,7 @@ struct GoConformance {
         return out
     }
 
-    static func arity(_ d: Decl) -> Int { d.labelsKey.filter { $0 == ":" }.count }
+    static func arity(_ d: Declaration) -> Int { d.labelsKey.filter { $0 == ":" }.count }
 
     private func implements(_ type: TypeKey, _ set: [String: Int], _ f: SideFacts) -> Bool {
         let methods = f.methods[type] ?? [:]

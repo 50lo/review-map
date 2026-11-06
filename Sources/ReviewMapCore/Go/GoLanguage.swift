@@ -53,7 +53,7 @@ struct GoLanguage: Language {
 
     // MARK: Contracts and risk
 
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] {
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] {
         GoFlags(builder, pairs: pairs).compute()
     }
 
@@ -79,12 +79,12 @@ struct GoLanguage: Language {
         return isInterface ? RiskWeight.high : RiskWeight.medium
     }
 
-    func isViewCode(_ decl: Decl, inherits: Set<String>) -> Bool { false }
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { false }
 
     // MARK: Structural review
 
     /// Exported names: capitalized, with a capitalized type for a method or field.
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool {
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
         guard decl.name.first?.isUppercase == true else { return false }
         return decl.scope.map { $0.first?.isUppercase == true } ?? true
     }
@@ -98,7 +98,7 @@ struct GoLanguage: Language {
 
     /// `main` and `init`, test functions the go tool runs, methods of standard interfaces, and embedded
     /// fields, which are used through the methods and fields they promote.
-    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool {
         if decl.traits.contains("embedded") { return true }
         if decl.scope != nil { return decl.kind == .func && Self.wellKnownMethods.contains(decl.name) }
         if decl.name == "main" || decl.name == "init" { return true }
@@ -108,7 +108,7 @@ struct GoLanguage: Language {
     }
 
     /// Go interfaces are implicit: see `GoConformance`.
-    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder,
                     for use: ConformanceUse) -> [Conformer] {
         GoConformance(builder).conformers(of: interface, requirement: requirement, for: use)
     }

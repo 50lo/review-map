@@ -12,16 +12,16 @@ export type Focus =
   | { type: "bundle"; from: string; to: string }
   /** Level 2: one component's interface view. */
   | { type: "interface"; id: string }
-  /** Level 3: one entity's implementation view, optionally at one of its regions. */
-  | { type: "entity"; id: string; region?: string }
-  /** Level 3: a code location that has no entity, such as a caller that didn't change. */
+  /** Level 3: one review item's implementation view, optionally at one of its regions. */
+  | { type: "reviewItem"; id: string; region?: string }
+  /** Level 3: a code location that has no review item, such as a caller that didn't change. */
   | { type: "location"; side: Side; file: string; line: number }
   | null;
 
 export type Level = 1 | 2 | 3;
 
 export const levelOf = (f: Focus): Level =>
-  f?.type === "interface" ? 2 : f?.type === "entity" || f?.type === "location" ? 3 : 1;
+  f?.type === "interface" ? 2 : f?.type === "reviewItem" || f?.type === "location" ? 3 : 1;
 
 export function focusToHash(f: Focus): string {
   if (!f) return "";
@@ -35,7 +35,7 @@ export function focusToHash(f: Focus): string {
       return `b=${enc(f.from)}&t=${enc(f.to)}`;
     case "interface":
       return `i=${enc(f.id)}`;
-    case "entity":
+    case "reviewItem":
       return f.region ? `n=${enc(f.id)}&r=${enc(f.region)}` : `n=${enc(f.id)}`;
     case "location":
       return `l=${f.side}:${f.line}:${enc(f.file)}`;
@@ -56,7 +56,7 @@ export function hashToFocus(hash: string): Focus {
   const n = h.get("n");
   if (n) {
     const r = h.get("r");
-    return r ? { type: "entity", id: n, region: r } : { type: "entity", id: n };
+    return r ? { type: "reviewItem", id: n, region: r } : { type: "reviewItem", id: n };
   }
   const l = h.get("l");
   if (l) {

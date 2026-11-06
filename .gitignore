@@ -1,6 +1,6 @@
 .build/
 .swiftpm/
-/change-model.json
+/change-report.json
 *.xcodeproj/xcuserdata/
 .DS_Store
 /bazel-*

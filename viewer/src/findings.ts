@@ -1,5 +1,5 @@
 // Structural review findings: which ones show, what they are anchored to on the map, and where a
-// finding leads. Kept free of React so it can be unit tested against the fixture models.
+// finding leads. Kept free of React so it can be unit tested against the fixture reports.
 
 import { within, type Focus, type Index, type MapGraph } from "./graph";
 import type { Anchor, Finding } from "./types";
@@ -23,17 +23,17 @@ export const KIND_LABEL: Record<string, string> = {
 
 /** The findings that show: every deterministic one, and the LLM's when the LLM layer is on. Most severe first. */
 export function findingsOf(index: Index): Finding[] {
-  const all = (index.model.findings ?? []).filter((f) => f.source !== "llm" || index.llm);
+  const all = (index.report.findings ?? []).filter((f) => f.source !== "llm" || index.llm);
   return all
     .map((f, i) => ({ f, i }))
     .sort((a, b) => (SEVERITY_ORDER[a.f.severity] ?? 3) - (SEVERITY_ORDER[b.f.severity] ?? 3) || a.i - b.i)
     .map((x) => x.f);
 }
 
-/** The component an anchor sits on: its own, its entity's, or (for an edge) none. */
-const anchorComponent = (index: Index, a: Anchor) => a.component ?? (a.entity ? index.entities.get(a.entity)?.component : undefined);
+/** The component an anchor sits on: its own, its review item's, or (for an edge) none. */
+const anchorComponent = (index: Index, a: Anchor) => a.component ?? (a.reviewItem ? index.reviewItems.get(a.reviewItem)?.component : undefined);
 
-/** Findings anchored to a component, to an entity in it, or to an edge out of or into it. */
+/** Findings anchored to a component, to a review item in it, or to an edge out of or into it. */
 export function findingsForComponent(index: Index, id: string, opts: { inside?: boolean } = {}): Finding[] {
   const hit = (c?: string) => !!c && (opts.inside ? within(index, c, id) : c === id);
   return findingsOf(index).filter((f) => f.anchors.some((a) => hit(anchorComponent(index, a))));
@@ -43,8 +43,8 @@ export function findingsForEdge(index: Index, from: string, to: string): Finding
   return findingsOf(index).filter((f) => f.anchors.some((a) => a.from === from && a.to === to));
 }
 
-export function findingsForEntity(index: Index, id: string): Finding[] {
-  return findingsOf(index).filter((f) => f.anchors.some((a) => a.entity === id));
+export function findingsForReviewItem(index: Index, id: string): Finding[] {
+  return findingsOf(index).filter((f) => f.anchors.some((a) => a.reviewItem === id));
 }
 
 /** Findings per drawn node and per drawn edge key, with collapsed groups standing for what they hide. */
@@ -80,10 +80,10 @@ export function findingCounts(index: Index, graph: MapGraph): { nodes: Map<strin
   return { nodes, edges };
 }
 
-/** Where a finding leads: the code it is about, its main entity, edge, or component. */
+/** Where a finding leads: the code it is about, its main review item, edge, or component. */
 export function findingFocus(index: Index, f: Finding): Focus {
   const main = f.anchors[0];
-  if (main?.entity && index.entities.has(main.entity)) return { type: "entity", id: main.entity };
+  if (main?.reviewItem && index.reviewItems.has(main.reviewItem)) return { type: "reviewItem", id: main.reviewItem };
   if (f.location && f.location.side === "head") return { type: "location", side: "head", file: f.location.file, line: f.location.startLine };
   if (main?.from && main.to) return { type: "edge", key: `${main.from}->${main.to}` };
   if (main?.component && index.components.has(main.component)) return { type: "component", id: main.component };

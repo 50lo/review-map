@@ -8,8 +8,8 @@ import XCTest
 final class IndexTests: XCTestCase {
     static var repo: String?
     static var cache: String?
-    static var indexed: ChangeModel?
-    static var named: ChangeModel?
+    static var indexed: ChangeReport?
+    static var named: ChangeReport?
 
     override class func tearDown() {
         for dir in [repo, cache].compactMap({ $0 }) { try? FileManager.default.removeItem(atPath: dir) }
@@ -28,11 +28,11 @@ final class IndexTests: XCTestCase {
         return repo
     }
 
-    func analyze(index: IndexOptions) throws -> ChangeModel {
+    func analyze(index: IndexOptions) throws -> ChangeReport {
         try Analyzer.run(AnalyzeOptions(repo: try fixtureRepo(), base: "base", head: "main", index: index))
     }
 
-    func indexedModel() throws -> ChangeModel {
+    func indexedReport() throws -> ChangeReport {
         try requireIndexStore()
         if let m = Self.indexed { return m }
         _ = try fixtureRepo()
@@ -41,72 +41,72 @@ final class IndexTests: XCTestCase {
         return m
     }
 
-    func namedModel() throws -> ChangeModel {
+    func namedReport() throws -> ChangeReport {
         if let m = Self.named { return m }
         let m = try analyze(index: IndexOptions())
         Self.named = m
         return m
     }
 
-    func entity(_ m: ChangeModel, _ name: String) throws -> Entity {
-        try XCTUnwrap(m.entities.first { $0.qualifiedName == name }, "no entity \(name)")
+    func reviewItem(_ m: ChangeReport, _ name: String) throws -> ReviewItem {
+        try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == name }, "no review item \(name)")
     }
 
     func testResolutionIsRecorded() throws {
-        XCTAssertEqual(try indexedModel().analyzer.resolution, "index")
-        XCTAssertEqual(try namedModel().analyzer.resolution, "name-based")
-        XCTAssertFalse(try indexedModel().warnings.contains { $0.kind.hasPrefix("index-") })
+        XCTAssertEqual(try indexedReport().analyzer.resolution, "index")
+        XCTAssertEqual(try namedReport().analyzer.resolution, "name-based")
+        XCTAssertFalse(try indexedReport().warnings.contains { $0.kind.hasPrefix("index-") })
     }
 
     func testCommonMemberNameIsNotCountedAsUse() throws {
         // Feed.cached() calls Cache.load(); name matching counts it as a use of Store.load().
-        XCTAssertEqual(Set(try entity(try namedModel(), "Store.load()").usedBy.map(\.symbol)), ["Feed.items()", "Feed.cached()"])
-        XCTAssertEqual(try entity(try indexedModel(), "Store.load()").usedBy.map(\.symbol), ["Feed.items()"])
+        XCTAssertEqual(Set(try reviewItem(try namedReport(), "Store.load()").usedBy.map(\.symbol)), ["Feed.items()", "Feed.cached()"])
+        XCTAssertEqual(try reviewItem(try indexedReport(), "Store.load()").usedBy.map(\.symbol), ["Feed.items()"])
     }
 
     func testCallerContextIsExact() throws {
-        let m = try indexedModel()
-        let load = try entity(m, "Store.load()")
-        let callers = m.regions.filter { $0.entity == load.id && $0.relation == "caller" }
+        let m = try indexedReport()
+        let load = try reviewItem(m, "Store.load()")
+        let callers = m.regions.filter { $0.reviewItem == load.id && $0.relation == "caller" }
         XCTAssertEqual(callers.map { $0.reasons[0] }, ["Feed.items()"])
     }
 
     func testModuleQualifiedReferenceMakesAnEdgeChange() throws {
         // Feed.limit() uses Storage.Config, new at head. Name matching doesn't see it.
-        let edge = { (m: ChangeModel) in m.edges.first { $0.from == "spm:Feed" && $0.to == "spm:Storage" } }
-        XCTAssertEqual(edge(try namedModel())?.status, .unchanged)
-        let e = try XCTUnwrap(edge(try indexedModel()))
+        let edge = { (m: ChangeReport) in m.edges.first { $0.from == "spm:Feed" && $0.to == "spm:Storage" } }
+        XCTAssertEqual(edge(try namedReport())?.status, .unchanged)
+        let e = try XCTUnwrap(edge(try indexedReport()))
         XCTAssertEqual(e.status, .changed)
         XCTAssertEqual(e.symbolsAdded, ["Config"])
         // The other Config (Settings) is used on both sides, so that edge stays unchanged.
-        XCTAssertEqual(try indexedModel().edges.first { $0.from == "spm:Feed" && $0.to == "spm:Settings" }?.status, .unchanged)
+        XCTAssertEqual(try indexedReport().edges.first { $0.from == "spm:Feed" && $0.to == "spm:Settings" }?.status, .unchanged)
     }
 
     func testDependsOnAndDefinitionsPointAtTheRightModule() throws {
-        let m = try indexedModel()
-        let limit = try entity(m, "Feed.limit()")
+        let m = try indexedReport()
+        let limit = try reviewItem(m, "Feed.limit()")
         XCTAssertTrue(limit.dependsOn.contains { $0.component == "spm:Storage" && $0.symbol == "Config.limit" })
         XCTAssertFalse(limit.dependsOn.contains { $0.component == "spm:Settings" })
-        let defs = m.regions.filter { $0.entity == limit.id && $0.relation == "definition" }
+        let defs = m.regions.filter { $0.reviewItem == limit.id && $0.relation == "definition" }
         XCTAssertTrue(defs.contains { $0.reasons[0] == "Config" && $0.file == "Sources/Storage/Config.swift" })
         XCTAssertFalse(defs.contains { $0.file.hasPrefix("Sources/Settings") })
     }
 
     func testCachedStoreIsReusedWithoutBuilding() throws {
-        _ = try indexedModel()
+        _ = try indexedReport()
         // An unknown builder would fail if a build were attempted.
         let again = try analyze(index: IndexOptions(enabled: true, builder: "none", cacheDir: Self.cache!))
         XCTAssertEqual(again.analyzer.resolution, "index")
-        XCTAssertEqual(again.edges, try indexedModel().edges)
-        XCTAssertEqual(again.entities, try indexedModel().entities)
+        XCTAssertEqual(again.edges, try indexedReport().edges)
+        XCTAssertEqual(again.reviewItems, try indexedReport().reviewItems)
     }
 
     func testFailedBuildFallsBackToNamesAndKeepsTheCache() throws {
-        _ = try indexedModel()
+        _ = try indexedReport()
         let failed = try analyze(index: IndexOptions(enabled: true, builder: "none", cacheDir: Self.cache!, rebuild: true))
         XCTAssertEqual(failed.analyzer.resolution, "name-based")
         XCTAssertTrue(failed.warnings.contains { $0.kind == "index-unavailable" })
-        XCTAssertEqual(failed.entities, try namedModel().entities)
+        XCTAssertEqual(failed.reviewItems, try namedReport().reviewItems)
         // The stores from the earlier build are still there.
         XCTAssertEqual(try analyze(index: IndexOptions(enabled: true, builder: "none", cacheDir: Self.cache!)).analyzer.resolution, "index")
     }
@@ -308,7 +308,7 @@ final class IndexBazelTests: XCTestCase {
         let cache = tmp + "/cache"
         let m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main", index: IndexOptions(enabled: true, cacheDir: cache)))
         XCTAssertEqual(m.analyzer.resolution, "index", "\(m.warnings)")
-        XCTAssertEqual(try XCTUnwrap(m.entities.first { $0.qualifiedName == "Store.load()" }).usedBy.map(\.symbol), ["Feed.items()"])
+        XCTAssertEqual(try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Store.load()" }).usedBy.map(\.symbol), ["Feed.items()"])
         let logs = try fm.subpathsOfDirectory(atPath: cache).filter { $0.hasSuffix("build.log") }
         XCTAssertEqual(logs.count, 2)
         let log = try String(contentsOfFile: cache + "/" + logs[0], encoding: .utf8)

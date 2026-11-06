@@ -7,7 +7,7 @@ import Foundation
 
 enum SCIP {
     struct Occurrence: Equatable {
-        /// 1-based, like the rest of the model (SCIP lines are 0-based).
+        /// 1-based, like the rest of the change report (SCIP lines are 0-based).
         var line: Int
         var symbol: String
         var roles: Int32

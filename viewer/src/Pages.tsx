@@ -1,4 +1,4 @@
-// Levels 2 and 3 of the viewer: a component's interface view, an entity's implementation view,
+// Levels 2 and 3 of the viewer: a component's interface view, a review item's implementation view,
 // and a plain code location.
 
 import { useEffect, useMemo, useState } from "react";
@@ -7,7 +7,7 @@ import { lineChanges } from "./diff";
 import { componentEdges, contextOf, flagLabel, kindLabel, llmOf, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
 import {
   dependsOnTarget,
-  findEntity,
+  findReviewItem,
   groupUsages,
   interfaceModel,
   lastName,
@@ -17,12 +17,12 @@ import {
   usedByTarget,
 } from "./levels";
 import type { Focus } from "./nav";
-import { findingsForComponent, findingsForEntity } from "./findings";
+import { findingsForComponent, findingsForReviewItem } from "./findings";
 import { FindingsSection } from "./FindingsSection";
 import { EdgeList } from "./Sidebar";
 import { canOpenInEditor, editorName, openInEditor } from "./source";
 import { setNote, useReview } from "./review";
-import type { Entity, Region, Usage } from "./types";
+import type { ReviewItem, Region, Usage } from "./types";
 import { ChangeTag, Chips, LLMSummary, ReviewedBox, Signature } from "./ui";
 
 type Go = (f: Focus) => void;
@@ -38,8 +38,8 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
   const [showHidden, setShowHidden] = useState(false);
   if (!c) return <div className="page-inner muted">No component {id} in this change.</div>;
   const children = index.children.get(id) ?? [];
-  const edges = componentEdges(index.model, id);
-  const ifaceCount = m.groups.reduce((s, g) => s + g.entities.length, 0);
+  const edges = componentEdges(index.report, id);
+  const ifaceCount = m.groups.reduce((s, g) => s + g.reviewItems.length, 0);
   return (
     <div className="page-inner">
       <header className="page-head">
@@ -80,7 +80,7 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
                     {ch.name}
                   </button>{" "}
                   <span className="muted small">
-                    {ch.changedEntities ? `${ch.changedEntities} changed, ${ch.interfaceChanges} interface` : "unchanged"}
+                    {ch.changedReviewItems ? `${ch.changedReviewItems} changed, ${ch.interfaceChanges} interface` : "unchanged"}
                   </span>
                 </li>
               );
@@ -97,10 +97,10 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
         {m.groups.map((g) => (
           <div key={g.title} className="kind-group">
             <h3>
-              {g.title} <span className="count">{g.entities.length}</span>
+              {g.title} <span className="count">{g.reviewItems.length}</span>
             </h3>
-            {g.entities.map((e) => (
-              <EntityCard key={e.id} index={index} e={e} go={go} />
+            {g.reviewItems.map((e) => (
+              <ReviewItemCard key={e.id} index={index} e={e} go={go} />
             ))}
           </div>
         ))}
@@ -142,11 +142,11 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
   );
 }
 
-function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
+function ReviewItemCard({ index, e, go }: { index: Index; e: ReviewItem; go: Go }) {
   return (
     <article className="card">
       <ReviewedBox id={e.id} compact />
-      <button className="card-title" onClick={() => go({ type: "entity", id: e.id })}>
+      <button className="card-title" onClick={() => go({ type: "reviewItem", id: e.id })}>
         <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         <span className="chev">›</span>
       </button>
@@ -159,10 +159,10 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
   );
 }
 
-const OneLiner = ({ e, id, go }: { e: Entity; id?: string; go: Go }) => (
+const OneLiner = ({ e, id, go }: { e: ReviewItem; id?: string; go: Go }) => (
   <li className="with-check">
     <ReviewedBox id={id ?? e.id} compact />
-    <button className="one-liner" onClick={() => go({ type: "entity", id: id ?? e.id })}>
+    <button className="one-liner" onClick={() => go({ type: "reviewItem", id: id ?? e.id })}>
       <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
       {e.contractFlags.length > 0 && <span className="muted small"> · {e.contractFlags.length} flag{e.contractFlags.length === 1 ? "" : "s"}</span>}
     </button>
@@ -265,10 +265,10 @@ function OpenButton({ file, line, compact }: { file: string; line: number; compa
   );
 }
 
-export function EntityPage({ index, id, region, go }: { index: Index; id: string; region?: string; go: Go }) {
-  const e = index.entities.get(id);
-  if (!e) return <div className="page-inner muted">No entity {id} in this change.</div>;
-  return <EntityPageInner key={id} index={index} e={e} region={region} go={go} />;
+export function ReviewItemPage({ index, id, region, go }: { index: Index; id: string; region?: string; go: Go }) {
+  const e = index.reviewItems.get(id);
+  if (!e) return <div className="page-inner muted">No review item {id} in this change.</div>;
+  return <ReviewItemPageInner key={id} index={index} e={e} region={region} go={go} />;
 }
 
 const RELATION_LABEL: Record<string, string> = {
@@ -279,9 +279,9 @@ const RELATION_LABEL: Record<string, string> = {
   state: "state",
 };
 
-function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; e: Entity; region?: string; go: Go }) {
+function ReviewItemPageInner({ index, e, region: focusRegion, go }: { index: Index; e: ReviewItem; region?: string; go: Go }) {
   const nb = neighbors(index, e);
-  const parent = e.parent ? index.entities.get(e.parent) : undefined;
+  const parent = e.parent ? index.reviewItems.get(e.parent) : undefined;
   const parentName = e.parent?.split("::").slice(1).join("::");
   const members = membersOf(index, e);
   const symbols = useMemo(() => symbolTargets(index, e), [index, e]);
@@ -294,11 +294,11 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
   const [editing, setEditing] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
-  const own = useMemo(() => index.regionsByEntity.get(e.id) ?? [], [index, e.id]);
+  const own = useMemo(() => index.regionsByReviewItem.get(e.id) ?? [], [index, e.id]);
   const { shown: contexts, pruned } = useMemo(() => contextOf(index, e.id), [index, e.id]);
 
-  // Removed lines inside the entity, as collapsed markers. Lines changed in place are marked only
-  // when the analyzer gave no regions for the entity.
+  // Removed lines inside the review item, as collapsed markers. Lines changed in place are marked only
+  // when the analyzer gave no regions for the review item.
   const changes = useMemo(() => {
     if (!base || baseSrc.text === null || headSrc.text === null) return undefined;
     const b = baseSrc.text.split("\n").slice(base.startLine - 1, base.endLine);
@@ -351,7 +351,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
   const fallbackChanged = own.length === 0 ? changes?.changed : undefined;
   const firstChanged = fallbackChanged ? fallbackChanged.findIndex(Boolean) : firstRegion ? firstRegion.startLine - loc.startLine : -1;
   const removedCount = changes ? [...changes.removed.values()].reduce((s, l) => s + l.length, 0) : 0;
-  const pos = regionPosition(index, focusRegion ? { type: "entity", id: e.id, region: focusRegion } : null);
+  const pos = regionPosition(index, focusRegion ? { type: "reviewItem", id: e.id, region: focusRegion } : null);
   const total = index.riskOrder.length;
   const label = e.qualifiedName;
 
@@ -422,7 +422,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
             <>
               {" · "}
               {parent ? (
-                <button className="link" onClick={() => go({ type: "entity", id: parent.id })}>
+                <button className="link" onClick={() => go({ type: "reviewItem", id: parent.id })}>
                   {parent.qualifiedName}
                 </button>
               ) : (
@@ -451,25 +451,25 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
         <div className="page-actions">
           {total > 0 && (
             <span className="stepper" title="Regions across the change, highest risk first (keys j and k)">
-              <button className="btn" disabled={pos === 1} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, -1))}>
+              <button className="btn" disabled={pos === 1} onClick={() => go(stepRegion(index, { type: "reviewItem", id: e.id, region: focusRegion }, -1))}>
                 ‹
               </button>
               <span className="muted small">
                 {pos ? `Region ${pos} of ${total}` : `${total} regions`} by {index.llm ? "LLM " : ""}risk
               </span>
-              <button className="btn" disabled={pos === total} onClick={() => go(stepRegion(index, { type: "entity", id: e.id, region: focusRegion }, 1))}>
+              <button className="btn" disabled={pos === total} onClick={() => go(stepRegion(index, { type: "reviewItem", id: e.id, region: focusRegion }, 1))}>
                 ›
               </button>
             </span>
           )}
-          <span className="stepper" title={`Entities in ${compName(index, e.component)}, in interface view order`}>
-            <button className="btn" disabled={!nb.prev} onClick={() => nb.prev && go({ type: "entity", id: nb.prev.id })}>
+          <span className="stepper" title={`Review items in ${compName(index, e.component)}, in interface view order`}>
+            <button className="btn" disabled={!nb.prev} onClick={() => nb.prev && go({ type: "reviewItem", id: nb.prev.id })}>
               ‹
             </button>
             <span className="muted small">
-              Entity {nb.position} of {nb.total}
+              Review item {nb.position} of {nb.total}
             </span>
-            <button className="btn" disabled={!nb.next} onClick={() => nb.next && go({ type: "entity", id: nb.next.id })}>
+            <button className="btn" disabled={!nb.next} onClick={() => nb.next && go({ type: "reviewItem", id: nb.next.id })}>
               ›
             </button>
           </span>
@@ -477,7 +477,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
         </div>
       </header>
 
-      <FindingsSection index={index} title="Findings" findings={findingsForEntity(index, e.id)} go={go} hideAnchor={(a) => a.entity === e.id} />
+      <FindingsSection index={index} title="Findings" findings={findingsForReviewItem(index, e.id)} go={go} hideAnchor={(a) => a.reviewItem === e.id} />
 
       {(e.similar?.length ?? 0) > 0 && (
         <section>
@@ -569,10 +569,10 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
 }
 
 /** Unchanged code that explains a region, as a one-line label that expands to the lines that matter. */
-function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Region; go: Go }) {
+function ContextSnippet({ index, e, c, go }: { index: Index; e: ReviewItem; c: Region; go: Go }) {
   const [open, setOpen] = useState(false);
   const where = c.component && c.component !== e.component ? ` in ${compName(index, c.component)}` : "";
-  const target = c.component ? findEntity(index, c.component, c.reasons[0]) : undefined;
+  const target = c.component ? findReviewItem(index, c.component, c.reasons[0]) : undefined;
   const keep = c.lines?.map((l) => l - c.startLine);
   return (
     <div className={`ctx ${open ? "open" : ""}`}>
@@ -592,7 +592,7 @@ function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Regio
           <CodeView side={c.side} file={c.file} startLine={c.startLine} endLine={c.endLine} keep={keep} foldLabel="lines" go={go} symbols={symbolTargets(index)} />
           <button
             className="link small"
-            onClick={() => go(target ? { type: "entity", id: target.id } : { type: "location", side: c.side, file: c.file, line: c.lines?.[1] ?? c.startLine })}
+            onClick={() => go(target ? { type: "reviewItem", id: target.id } : { type: "location", side: c.side, file: c.file, line: c.lines?.[1] ?? c.startLine })}
           >
             {target ? "Open its changes ›" : "Open in file ›"}
           </button>
@@ -603,7 +603,7 @@ function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Regio
 }
 
 /** Context the LLM left out, folded into a count that opens it. */
-function PrunedContext({ index, e, items, go }: { index: Index; e: Entity; items: Region[]; go: Go }) {
+function PrunedContext({ index, e, items, go }: { index: Index; e: ReviewItem; items: Region[]; go: Go }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -651,7 +651,7 @@ function NoteBox({ r, label, editing, setEditing }: { r: Region; label: string; 
 
 export function LocationPage({ index, side, file, line, go }: { index: Index; side: "base" | "head"; file: string; line: number; go: Go }) {
   const symbols = useMemo(() => symbolTargets(index), [index]);
-  const owner = index.model.components.find((c) => c.paths.some((p) => file.startsWith(p.replace(/\/?$/, "/"))));
+  const owner = index.report.components.find((c) => c.paths.some((p) => file.startsWith(p.replace(/\/?$/, "/"))));
   return (
     <div className="page-inner">
       <header className="page-head">

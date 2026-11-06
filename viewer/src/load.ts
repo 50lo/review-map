@@ -1,22 +1,25 @@
-import type { ChangeModel } from "./types";
+import type { ChangeReport } from "./types";
 
 declare global {
   interface Window {
-    __REVIEWMAP_MODEL__?: ChangeModel;
+    __REVIEWMAP_REPORT__?: ChangeReport;
   }
 }
 
-export const SUPPORTED_VERSION = 3;
+export const SUPPORTED_VERSION = 4;
 
-export type ModelOrigin = "embedded" | "server" | "url" | "file";
-let origin: ModelOrigin = "file";
-/** Where the model came from. Only the local server can read sources from the repo and open files in the editor. */
-export const modelOrigin = () => origin;
+export type ReportOrigin = "embedded" | "server" | "url" | "file";
+let origin: ReportOrigin = "file";
+/** Where the report came from. Only the local server can read sources from the repo and open files in the editor. */
+export const reportOrigin = () => origin;
 
-export function validate(raw: unknown): ChangeModel {
-  const m = raw as Partial<ChangeModel>;
+export function validate(raw: unknown): ChangeReport {
+  const m = raw as Partial<ChangeReport>;
   if (!m || typeof m !== "object" || !Array.isArray(m.components) || !Array.isArray(m.edges)) {
-    throw new Error("This doesn't look like a change-model.json (no components or edges).");
+    throw new Error("This doesn't look like a change-report.json (no components or edges).");
+  }
+  if ("entities" in m) {
+    throw new Error(`This change report was written by an older reviewmap (version ${m.version ?? 1}). Run reviewmap again to update it.`);
   }
   return {
     version: m.version ?? 1,
@@ -25,7 +28,7 @@ export function validate(raw: unknown): ChangeModel {
     components: m.components,
     edges: m.edges,
     externalDeps: m.externalDeps ?? [],
-    entities: m.entities ?? [],
+    reviewItems: m.reviewItems ?? [],
     regions: m.regions ?? [],
     warnings: m.warnings ?? [],
     findings: m.findings ?? [],
@@ -34,33 +37,33 @@ export function validate(raw: unknown): ChangeModel {
 }
 
 /**
- * Where the model comes from, in order: embedded in the page (single-file build),
- * a `?model=<url>` parameter, or the local server's /api/model. Null means none was found,
+ * Where the report comes from, in order: embedded in the page (single-file build),
+ * a `?report=<url>` parameter, or the local server's /api/report. Null means none was found,
  * and the page asks for a file.
  */
-export async function loadInitialModel(): Promise<ChangeModel | null> {
-  if (window.__REVIEWMAP_MODEL__) {
+export async function loadInitialReport(): Promise<ChangeReport | null> {
+  if (window.__REVIEWMAP_REPORT__) {
     origin = "embedded";
-    return validate(window.__REVIEWMAP_MODEL__);
+    return validate(window.__REVIEWMAP_REPORT__);
   }
-  const param = new URLSearchParams(location.search).get("model");
-  const url = param ?? "/api/model";
+  const param = new URLSearchParams(location.search).get("report");
+  const url = param ?? "/api/report";
   try {
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
       if (param) throw new Error(`Couldn't load ${param}: HTTP ${res.status}`);
       return null;
     }
-    const model = validate(await res.json());
+    const report = validate(await res.json());
     origin = param ? "url" : "server";
-    return model;
+    return report;
   } catch (err) {
     if (param) throw err;
     return null;
   }
 }
 
-export async function loadFile(file: File): Promise<ChangeModel> {
+export async function loadFile(file: File): Promise<ChangeReport> {
   origin = "file";
   return validate(JSON.parse(await file.text()));
 }

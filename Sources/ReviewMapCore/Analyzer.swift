@@ -39,14 +39,14 @@ public enum Analyzer {
         (try? Shell.string(["git", "-C", repo, "rev-parse", "--abbrev-ref", "HEAD"])).flatMap { $0.isEmpty ? nil : $0 } ?? "HEAD"
     }
 
-    public static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in }) throws -> ChangeModel {
+    public static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in }) throws -> ChangeReport {
         try run(options, log: log, index: nil)
     }
 
     /// `index`, for tests, stands in for the languages' indexers: given a language and the two sides'
     /// exported trees, it returns that language's references, or nil for none.
     static func run(_ options: AnalyzeOptions, log: (String) -> Void = { _ in },
-                    index injected: ((Language, _ baseDir: String, _ headDir: String) -> [Side: SideIndex]?)?) throws -> ChangeModel {
+                    index injected: ((Language, _ baseDir: String, _ headDir: String) -> [Side: SideIndex]?)?) throws -> ChangeReport {
         let root = try Shell.string(["git", "-C", options.repo, "rev-parse", "--show-toplevel"])
         let git = GitRepo(root: root)
         let headSha = try git.revParse(options.head)
@@ -78,7 +78,7 @@ public enum Analyzer {
         let baseSide = try SideData.load(side: .base, dir: baseDir, blobs: baseBlobs, languages: languages, config: &config, parser: parser, options: options)
         let headSide = try SideData.load(side: .head, dir: headDir, blobs: headBlobs, languages: languages, config: &config, parser: parser, options: options)
 
-        var builder = ModelBuilder(base: baseSide, head: headSide, languages: languages, options: options)
+        var builder = ChangeReportBuilder(base: baseSide, head: headSide, languages: languages, options: options)
         let indexOptions = options.index.merged(with: config.index)
         if let injected {
             for lang in languages { if let idx = injected(lang, baseDir, headDir) { builder.addIndex(idx, language: lang) } }
@@ -102,7 +102,7 @@ public enum Analyzer {
 
         log("Comparing…")
         builder.diffExternalDeps(baseBlobs: baseBlobs, headBlobs: headBlobs, baseDir: baseDir, headDir: headDir)
-        builder.matchEntities()
+        builder.matchReviewItems()
         builder.resolveReferences()
         builder.addContractFiles(baseBlobs: baseBlobs, headBlobs: headBlobs, baseDir: baseDir, headDir: headDir)
         builder.addTargetSettings()
@@ -194,11 +194,11 @@ struct SideData {
     }
 }
 
-// MARK: - Model building
+// MARK: - Change report building
 
 /// A declaration located at one side.
 struct Located {
-    var decl: Decl
+    var decl: Declaration
     var file: String
     var index: Int
     var component: String
@@ -219,7 +219,7 @@ struct Pair {
     var any: Located { head ?? base! }
 }
 
-struct ModelBuilder {
+struct ChangeReportBuilder {
     let base: SideData
     let head: SideData
     let languages: [Language]
@@ -235,7 +235,7 @@ struct ModelBuilder {
 
     var pairs: [Pair] = []
     var pairOf: [DeclKey: Int] = [:]
-    var fileEntities: [Entity] = []
+    var fileReviewItems: [ReviewItem] = []
     var warnings = Set<Warning>()
     /// (side, from, to) -> refs
     var edgeRefs: [Side: [String: [String: [Ref]]]] = [.base: [:], .head: [:]]
@@ -284,7 +284,7 @@ struct ModelBuilder {
 
     // MARK: Matching
 
-    static func kindGroup(_ k: EntityKind) -> String {
+    static func kindGroup(_ k: ReviewItemKind) -> String {
         switch k {
         case .struct, .class, .enum, .actor: return "type"
         case .func, .`init`: return "callable"
@@ -305,7 +305,7 @@ struct ModelBuilder {
         return groups
     }
 
-    mutating func matchEntities() {
+    mutating func matchReviewItems() {
         let bg = locatedDecls(base)
         let hg = locatedDecls(head)
         let keys = Set(bg.keys).union(hg.keys).sorted()
@@ -313,7 +313,7 @@ struct ModelBuilder {
             var bs = bg[key] ?? []
             var hs = hg[key] ?? []
             var matched: [(Located?, Located?)] = []
-            let passes: [(Decl, Decl) -> Bool] = [
+            let passes: [(Declaration, Declaration) -> Bool] = [
                 { $0.signatureCanon == $1.signatureCanon && $0.modifiersCanon == $1.modifiersCanon && $0.bodyCanon == $1.bodyCanon },
                 { $0.signatureCanon == $1.signatureCanon && $0.modifiersCanon == $1.modifiersCanon },
                 { $0.signatureCanon == $1.signatureCanon },
@@ -354,7 +354,7 @@ struct ModelBuilder {
         computeFlags()
     }
 
-    private static func changes(_ b: Decl?, _ h: Decl?) -> [ChangeKind] {
+    private static func changes(_ b: Declaration?, _ h: Declaration?) -> [ChangeKind] {
         guard let b else { return [.added] }
         guard let h else { return [.removed] }
         var c: [ChangeKind] = []
@@ -390,7 +390,7 @@ struct ModelBuilder {
         return pairOf[DeclKey(side: s, file: l.file, index: pi)]
     }
 
-    private func parentDecl(_ l: Located, side s: Side) -> Decl? {
+    private func parentDecl(_ l: Located, side s: Side) -> Declaration? {
         guard let pi = l.decl.parentIndex else { return nil }
         return side(s).files[l.file]?.decls[pi]
     }
@@ -447,11 +447,11 @@ struct ModelBuilder {
 
     /// The declaration whose name sits at `line` of `file`: the innermost one around it, preferring one whose
     /// name matches the index's symbol name.
-    func declAt(_ s: Side, file: String, line: Int, name: String) -> (index: Int, decl: Decl)? {
+    func declAt(_ s: Side, file: String, line: Int, name: String) -> (index: Int, decl: Declaration)? {
         guard let parsed = side(s).files[file] else { return nil }
         let base = String(name.prefix { $0 != "(" })
-        var best: (Int, Decl)?
-        var bestNamed: (Int, Decl)?
+        var best: (Int, Declaration)?
+        var bestNamed: (Int, Declaration)?
         for (i, d) in parsed.decls.enumerated() where d.startLine <= line && line <= d.endLine {
             if best == nil || d.endLine - d.startLine <= best!.1.endLine - best!.1.startLine { best = (i, d) }
             if d.name == base, bestNamed == nil || d.endLine - d.startLine <= bestNamed!.1.endLine - bestNamed!.1.startLine { bestNamed = (i, d) }
@@ -460,7 +460,7 @@ struct ModelBuilder {
     }
 
     /// The top-level declaration that contains a declaration (itself when it is top level).
-    func topLevelDecl(_ s: Side, file: String, index i: Int) -> Decl? {
+    func topLevelDecl(_ s: Side, file: String, index i: Int) -> Declaration? {
         guard let parsed = side(s).files[file] else { return nil }
         var cur = i
         while let p = parsed.decls[cur].parentIndex { cur = p }
@@ -499,7 +499,7 @@ struct ModelBuilder {
         for s in [Side.base, .head] {
             let data = side(s)
             let layout = data.layout
-            // Changed member entities by name, for member-level usage.
+            // Changed member review items by name, for member-level usage.
             var membersByName: [String: [(component: String, rootType: String, pair: Int)]] = [:]
             for (i, p) in pairs.enumerated() {
                 guard let loc = s == .head ? p.head : p.base, let scope = loc.decl.scope, !loc.decl.isContainer,
@@ -604,7 +604,7 @@ struct ModelBuilder {
 
     // MARK: Non-code contracts
 
-    /// Changed non-code files that a language counts as part of a contract, as `file` entities.
+    /// Changed non-code files that a language counts as part of a contract, as `file` review items.
     mutating func addContractFiles(baseBlobs: [String: String], headBlobs: [String: String], baseDir: String, headDir: String) {
         func flag(for path: String) -> (key: String, flag: String, language: Language)? {
             for lang in languages { if let (key, f) = lang.contractFile(path) { return (key, f, lang) } }
@@ -629,7 +629,7 @@ struct ModelBuilder {
             let lines = (try? String(contentsOfFile: (s == .head ? headDir : baseDir) + "/" + key, encoding: .utf8))?
                 .split(separator: "\n", omittingEmptySubsequences: false).count ?? 1
             let loc = Location(file: key, startLine: 1, endLine: max(1, lines), side: s)
-            fileEntities.append(Entity(
+            fileReviewItems.append(ReviewItem(
                 id: "\(comp)::\(key)", component: comp, kind: .file, qualifiedName: key, parent: nil,
                 isInterface: true, change: change, changes: [change], signature: Signature(base: nil, head: nil),
                 contractFlags: flags, tags: [], location: loc, baseLocation: nil, usedBy: [], dependsOn: []))
@@ -649,7 +649,7 @@ struct ModelBuilder {
             }
             let file = h[id]!.file
             let name = head.layout.components[id]?.name ?? id
-            fileEntities.append(Entity(
+            fileReviewItems.append(ReviewItem(
                 id: "\(id)::build settings", component: id, kind: .target, qualifiedName: "\(name) build settings", parent: nil,
                 isInterface: true, change: .modifiers, changes: [.modifiers],
                 signature: Signature(base: show(bs), head: show(hs)), contractFlags: flags.sorted(), tags: [],
@@ -695,9 +695,9 @@ struct ModelBuilder {
 
     // MARK: Output
 
-    func finish(repo: RepoInfo, config: Config = Config()) -> ChangeModel {
-        // Entities: everything that changed (containers only when their own header changed or they carry flags).
-        var entities: [Entity] = []
+    func finish(repo: RepoInfo, config: Config = Config()) -> ChangeReport {
+        // Review items: everything that changed (containers only when their own header changed or they carry flags).
+        var reviewItems: [ReviewItem] = []
         for (i, p) in pairs.enumerated() {
             let d = p.any.decl
             var changes = p.changes
@@ -727,7 +727,7 @@ struct ModelBuilder {
             let used = uses.values.sorted { ($0.file, $0.line, $0.symbol, $0.component) < ($1.file, $1.line, $1.symbol, $1.component) }
             let deps = (dependsOn[i] ?? []).filter { u in u.line >= loc.decl.startLine && u.line <= loc.decl.endLine }
                 .sorted { ($0.component, $0.symbol, $0.line) < ($1.component, $1.symbol, $1.line) }
-            entities.append(Entity(
+            reviewItems.append(ReviewItem(
                 id: p.id, component: loc.component, kind: d.kind, qualifiedName: d.qualifiedName, parent: parentId,
                 isInterface: false, change: changes[0], changes: changes,
                 signature: Signature(base: p.base?.decl.signatureDisplay, head: p.head?.decl.signatureDisplay),
@@ -754,11 +754,11 @@ struct ModelBuilder {
             guard d.parentKind == .protocol || d.kind == .case, let pp = parentPair(p.any, side: p.head != nil ? .head : .base) else { continue }
             if interfaceIds.contains(pairs[pp].id) { interfaceIds.insert(pairs[i].id) }
         }
-        for i in entities.indices { entities[i].isInterface = interfaceIds.contains(entities[i].id) }
-        let similar = similarDeclarations(entities)
-        for i in entities.indices { entities[i].similar = similar[entities[i].id] }
-        entities += fileEntities
-        entities.sort { ($0.component, $0.location.file, $0.location.startLine, $0.id) < ($1.component, $1.location.file, $1.location.startLine, $1.id) }
+        for i in reviewItems.indices { reviewItems[i].isInterface = interfaceIds.contains(reviewItems[i].id) }
+        let similar = similarDeclarations(reviewItems)
+        for i in reviewItems.indices { reviewItems[i].similar = similar[reviewItems[i].id] }
+        reviewItems += fileReviewItems
+        reviewItems.sort { ($0.component, $0.location.file, $0.location.startLine, $0.id) < ($1.component, $1.location.file, $1.location.startLine, $1.id) }
 
         // Edges.
         var edges: [Edge] = []
@@ -792,7 +792,7 @@ struct ModelBuilder {
                 var c = components[id] ?? Component(
                     id: id, name: info.name, kind: info.kind, layer: info.layer, module: info.module, parent: info.parent,
                     isTest: info.isTest, paths: [], status: s == .base ? "removed" : "added",
-                    changedEntities: 0, interfaceChanges: 0, changeScore: 0)
+                    changedReviewItems: 0, interfaceChanges: 0, changeScore: 0)
                 if s == .head {
                     c.status = components[id] == nil ? "added" : nil
                     c.name = info.name; c.layer = info.layer; c.module = info.module; c.parent = info.parent; c.isTest = info.isTest
@@ -803,16 +803,16 @@ struct ModelBuilder {
         }
         for (id, name) in externalComponents where components[id] == nil {
             components[id] = Component(id: id, name: name, kind: .external, layer: nil, module: nil, parent: nil, isTest: false,
-                                       paths: [], status: nil, changedEntities: 0, interfaceChanges: 0, changeScore: 0)
+                                       paths: [], status: nil, changedReviewItems: 0, interfaceChanges: 0, changeScore: 0)
         }
-        for e in entities where components[e.component] == nil {
+        for e in reviewItems where components[e.component] == nil {
             components[e.component] = Component(id: e.component, name: String(e.component.split(separator: ":").last ?? ""),
                                                 kind: .folder, layer: nil, module: nil, parent: nil, isTest: false,
-                                                paths: [], status: nil, changedEntities: 0, interfaceChanges: 0, changeScore: 0)
+                                                paths: [], status: nil, changedReviewItems: 0, interfaceChanges: 0, changeScore: 0)
         }
         var raw: [String: Double] = [:]
-        for e in entities where e.change != .cosmetic {
-            components[e.component]!.changedEntities += 1
+        for e in reviewItems where e.change != .cosmetic {
+            components[e.component]!.changedReviewItems += 1
             let structural = e.change == .signature || e.change == .modifiers || e.change == .added || e.change == .removed || !e.contractFlags.isEmpty
             if e.isInterface && structural { components[e.component]!.interfaceChanges += 1 }
             var w = e.change == .body ? 1.0 : 1.5
@@ -830,23 +830,23 @@ struct ModelBuilder {
             components[id]!.changeScore = maxScore > 0 ? (v / maxScore * 1000).rounded() / 1000 : 0
         }
         externalDepsComponents(&components)
-        // Components without source files (e.g. only Info.plist changed) take their paths from their entities.
-        let entityFiles = Dictionary(grouping: entities.filter { $0.kind != .target }, by: \.component).mapValues { $0.map(\.location.file) }
+        // Components without source files (e.g. only Info.plist changed) take their paths from their review items.
+        let reviewItemFiles = Dictionary(grouping: reviewItems.filter { $0.kind != .target }, by: \.component).mapValues { $0.map(\.location.file) }
         for (id, c) in components where c.paths.isEmpty && c.kind != .external {
-            components[id]!.paths = Self.minimalDirs(entityFiles[id] ?? [])
+            components[id]!.paths = Self.minimalDirs(reviewItemFiles[id] ?? [])
         }
 
-        let findings = StructuralChecks(self, entities: entities, edges: edges, config: config).run()
+        let findings = StructuralChecks(self, reviewItems: reviewItems, edges: edges, config: config).run()
         let sortedWarnings = warnings.sorted { ($0.kind, $0.file ?? "", $0.line ?? 0, $0.message) < ($1.kind, $1.file ?? "", $1.line ?? 0, $1.message) }
-        return ChangeModel(
+        return ChangeReport(
             analyzer: AnalyzerInfo(version: Analyzer.version, resolution: index.isEmpty ? "name-based" : "index",
                                    languages: languages.map(\.id)),
             repo: repo,
             components: components.values.sorted { $0.id < $1.id },
             edges: edges,
             externalDeps: externalDeps,
-            entities: entities,
-            regions: buildRegions(entities),
+            reviewItems: reviewItems,
+            regions: buildRegions(reviewItems),
             warnings: sortedWarnings,
             findings: findings)
     }
@@ -856,7 +856,7 @@ struct ModelBuilder {
             let id = "ext:\(dep.name)"
             if components[id] == nil {
                 components[id] = Component(id: id, name: dep.name, kind: .external, layer: nil, module: nil, parent: nil,
-                                           isTest: false, paths: [], status: nil, changedEntities: 0, interfaceChanges: 0, changeScore: 0)
+                                           isTest: false, paths: [], status: nil, changedReviewItems: 0, interfaceChanges: 0, changeScore: 0)
             }
             if dep.change == "added" { components[id]!.status = "added" }
             if dep.change == "removed" { components[id]!.status = "removed" }

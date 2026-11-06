@@ -13,5 +13,5 @@ parent: rm-aks4
 Add the Kotlin entry to the viewer's language table: `.kt` and `.kts` files, `settings.gradle(.kts)`, `build.gradle(.kts)`, `libs.versions.toml`, and `AndroidManifest.xml`, the `gradleModule` kind, an icon, Shiki's `kotlin` language, and kind names (protocol -> interface, func -> fun, var -> property, case -> entry, typealias -> typealias, and object).
 
 ## Acceptance criteria
-- [ ] Kotlin components show the Kotlin badge; code pages highlight Kotlin; entities show Kotlin's kind names.
-- [ ] Checked in Chromium at desktop and phone widths, in light and dark mode, on a Kotlin fixture model.
+- [ ] Kotlin components show the Kotlin badge; code pages highlight Kotlin; review items show Kotlin's kind names.
+- [ ] Checked in Chromium at desktop and phone widths, in light and dark mode, on a Kotlin fixture report.

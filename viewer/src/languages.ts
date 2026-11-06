@@ -6,7 +6,7 @@ import goGrammar from "shiki/langs/go.mjs";
 import swiftIcon from "./icons/swift.svg";
 import typescriptIcon from "./icons/typescript.svg";
 import goIcon from "./icons/go.svg";
-import type { ChangeModel, Entity } from "./types";
+import type { ChangeReport, ReviewItem } from "./types";
 
 interface LanguageDefinition {
   id: string;
@@ -15,7 +15,7 @@ interface LanguageDefinition {
   manifests: readonly RegExp[];
   componentKinds: readonly string[];
   icon: string;
-  kinds: Record<string, string | ((entity: Entity) => string)>;
+  kinds: Record<string, string | ((reviewItem: ReviewItem) => string)>;
 }
 
 /** Viewer language facts, in badge order. Adding a language adds one entry here. */
@@ -43,7 +43,7 @@ export const LANGUAGES = [
     icon: typescriptIcon,
     kinds: {
       protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function",
-      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "property" : "variable",
+      var: (reviewItem: ReviewItem) => reviewItem.qualifiedName.includes(".") ? "property" : "variable",
     },
   },
   {
@@ -55,8 +55,8 @@ export const LANGUAGES = [
     icon: goIcon,
     kinds: {
       protocol: "interface", typealias: "type",
-      func: (entity: Entity) => entity.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
-      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "field" : "variable",
+      func: (reviewItem: ReviewItem) => reviewItem.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
+      var: (reviewItem: ReviewItem) => reviewItem.qualifiedName.includes(".") ? "field" : "variable",
     },
   },
 ] as const satisfies readonly LanguageDefinition[];
@@ -87,33 +87,33 @@ export function highlightLanguageOf(file: string): string | undefined {
 /** Only load grammars the table's extensions use, once per grammar. */
 export const highlightGrammars = () => [...new Set(definitions.flatMap((language) => Object.values(language.extensions).map(({ grammar }) => grammar)))];
 
-/** Entity kinds as the entity's language names them. Unknown paths keep the model's kind. */
-export function entityKindLabel(entity: Entity): string {
-  const kinds = sourceLanguage(entity.location.file)?.kinds;
-  const kind = kinds && Object.hasOwn(kinds, entity.kind) ? kinds[entity.kind] : undefined;
-  return typeof kind === "function" ? kind(entity) : kind ?? entity.kind;
+/** Review item kinds as the review item's language names them. Unknown paths keep the report's kind. */
+export function reviewItemKindLabel(reviewItem: ReviewItem): string {
+  const kinds = sourceLanguage(reviewItem.location.file)?.kinds;
+  const kind = kinds && Object.hasOwn(kinds, reviewItem.kind) ? kinds[reviewItem.kind] : undefined;
+  return typeof kind === "function" ? kind(reviewItem) : kind ?? reviewItem.kind;
 }
 
-/** Works with existing models, including unchanged nodes with no changed entities. */
-export function componentLanguages(model: ChangeModel): Map<string, Language[]> {
-  const components = new Map(model.components.map((c) => [c.id, c]));
-  const known = new Map(model.components.map((c) => [c.id, new Set<Language>()]));
+/** Works with existing change reports, including unchanged nodes with no changed review items. */
+export function componentLanguages(report: ChangeReport): Map<string, Language[]> {
+  const components = new Map(report.components.map((c) => [c.id, c]));
+  const known = new Map(report.components.map((c) => [c.id, new Set<Language>()]));
   const addPath = (id: string, path: string) => {
     const lang = languageOfPath(path);
     if (lang) known.get(id)?.add(lang);
   };
-  for (const c of model.components) {
+  for (const c of report.components) {
     for (const language of LANGUAGES) {
       if ((language.componentKinds as readonly string[]).includes(c.kind)) known.get(c.id)!.add(language.id);
     }
     for (const path of c.paths) addPath(c.id, path);
   }
-  for (const e of model.entities) {
+  for (const e of report.reviewItems) {
     addPath(e.component, e.location.file);
     if (e.baseLocation) addPath(e.component, e.baseLocation.file);
     for (const u of [...(e.usedBy ?? []), ...(e.dependsOn ?? [])]) addPath(u.component, u.file);
   }
-  for (const edge of model.edges) {
+  for (const edge of report.edges) {
     for (const ref of edge.refs) {
       // A reference's file belongs to the caller. Only external nodes take the
       // caller's ecosystem: it doesn't tell us the callee's implementation language.
@@ -124,7 +124,7 @@ export function componentLanguages(model: ChangeModel): Map<string, Language[]> 
 
   // Split folders inherit their target's ecosystem. Groups also show the languages
   // of their contents when expanded or collapsed. Guard malformed parent cycles.
-  for (const c of model.components) {
+  for (const c of report.components) {
     const langs = known.get(c.id)!;
     if (langs.size) continue;
     const seen = new Set([c.id]);
@@ -136,7 +136,7 @@ export function componentLanguages(model: ChangeModel): Map<string, Language[]> 
       parent = components.get(parent)?.parent;
     }
   }
-  for (const c of model.components) {
+  for (const c of report.components) {
     const seen = new Set([c.id]);
     let parent = c.parent;
     while (parent && !seen.has(parent)) {

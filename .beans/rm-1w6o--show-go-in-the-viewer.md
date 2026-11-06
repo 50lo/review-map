@@ -14,5 +14,5 @@ Add the Go entry to the viewer's language table from rm-tnty: `.go` files, `go.m
 
 ## Acceptance criteria
 - [x] Go components show the Go badge; code pages highlight Go.
-- [x] Entities show Go's kind names.
+- [x] Review items show Go's kind names.
 - [x] Checked in Chromium at desktop and phone widths, in light and dark mode, on a Go fixture model.

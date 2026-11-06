@@ -3,11 +3,11 @@ import Foundation
 /// Go's contract flags: changes to exported API, to interface method sets, and to struct fields that
 /// other packages or serialized data depend on.
 struct GoFlags {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
     /// The Go pairs, as indices into `b.pairs`.
     let indices: [Int]
 
-    init(_ builder: ModelBuilder, pairs: [Int]) {
+    init(_ builder: ChangeReportBuilder, pairs: [Int]) {
         b = builder
         indices = pairs
     }
@@ -82,14 +82,14 @@ struct GoFlags {
     }
 
     /// A capitalized name, with a capitalized type for a method or field.
-    private func isExported(_ d: Decl) -> Bool {
+    private func isExported(_ d: Declaration) -> Bool {
         isExportedName(d.name) && (d.scope.map(isExportedName) ?? true)
     }
 
     private func isExportedName(_ s: String) -> Bool { s.first?.isUppercase == true }
 
     /// The value of `key` in a field's struct tag (`json:"id,omitempty"` -> `id,omitempty`), or nil.
-    static func tag(_ key: String, of d: Decl) -> String? {
+    static func tag(_ key: String, of d: Declaration) -> String? {
         guard let raw = d.traits.first(where: { $0.hasPrefix("tag:") })?.dropFirst(4),
               let r = raw.range(of: #"(^|\s)"# + key + #":"([^"]*)""#, options: .regularExpression) else { return nil }
         let match = raw[r]

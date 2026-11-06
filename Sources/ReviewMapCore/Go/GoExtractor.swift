@@ -184,7 +184,7 @@ enum GoExtractor {
 // MARK: - Declarations
 
 private struct DeclWalker {
-    var decls: [Decl] = []
+    var decls: [Declaration] = []
     /// Index of each type declared in the file, for its methods.
     private var types: [String: Int] = [:]
 
@@ -234,7 +234,7 @@ private struct DeclWalker {
         }
     }
 
-    private mutating func container(outer: SyntaxNode, kind: EntityKind, name: String, headerStart: Int,
+    private mutating func container(outer: SyntaxNode, kind: ReviewItemKind, name: String, headerStart: Int,
                                     body: SyntaxNode?, inherited: [String], elements: [SyntaxNode] = []) -> Int {
         let end = body?.startByte ?? outer.endByte
         let header = outer.tokens.filter { $0.startByte >= headerStart && $0.startByte < end } + elements
@@ -347,12 +347,12 @@ private struct DeclWalker {
     }
 
     @discardableResult
-    private mutating func add(_ n: SyntaxNode, kind: EntityKind, name: String, labelsKey: String, qualified: String,
+    private mutating func add(_ n: SyntaxNode, kind: ReviewItemKind, name: String, labelsKey: String, qualified: String,
                               header: [SyntaxNode], body: SyntaxNode?, scope: String? = nil, parent: Int? = nil,
-                              parentKind: EntityKind? = nil, modifiers: [String] = [], inherited: [String] = [],
+                              parentKind: ReviewItemKind? = nil, modifiers: [String] = [], inherited: [String] = [],
                               rawEnd: Int? = nil, headerEnd: SyntaxNode? = nil, stored: Bool = false,
                               type: SyntaxNode? = nil, traits: Set<String> = [], tag: String? = nil) -> Int {
-        var d = Decl(
+        var d = Declaration(
             kind: kind, name: name, qualifiedName: qualified, scope: scope, parentIndex: parent, labelsKey: labelsKey,
             signatureDisplay: header.display, signatureCanon: header.canon,
             modifiersCanon: (modifiers + (tag.map { [$0] } ?? [])).joined(separator: " "), bodyCanon: body.map { $0.tokens.canon } ?? "",

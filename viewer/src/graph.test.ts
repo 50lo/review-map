@@ -6,7 +6,7 @@ import {
   bundleKey,
   bundleMembers,
   collapse,
-  componentEntities,
+  componentReviewItems,
   contextOf,
   defaultCollapsed,
   edgeKey,
@@ -21,7 +21,7 @@ import {
   stepRegion,
   visible,
 } from "./graph";
-import { findingCounts, findingFocus, findingsForComponent, findingsForEdge, findingsForEntity, findingsOf, topSeverity } from "./findings";
+import { findingCounts, findingFocus, findingsForComponent, findingsForEdge, findingsForReviewItem, findingsOf, topSeverity } from "./findings";
 import { editorFrom, openInEditor } from "../server/repo";
 import { focusToHash, hashToFocus } from "./nav";
 import { layout } from "./layout";
@@ -29,8 +29,8 @@ import { validate } from "./load";
 
 // The analyzer's own snapshot, so the viewer is tested against what the analyzer really writes.
 const fixture = path.resolve(__dirname, "../../Tests/ReviewMapCoreTests/Fixtures/basic/expected.json");
-const model = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
-const index = buildIndex(model);
+const report = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
+const index = buildIndex(report);
 
 describe("visible", () => {
   it("shows changed components and the ends of changed edges, without tests", () => {
@@ -60,16 +60,16 @@ describe("visible", () => {
 
   it("adds tests and the whole system on request", () => {
     const v = visible(index, { scope: "all", showTests: true });
-    expect(v.nodes.size).toBe(model.components.length);
-    expect(v.edges.length).toBe(model.edges.length);
+    expect(v.nodes.size).toBe(report.components.length);
+    expect(v.edges.length).toBe(report.edges.length);
     expect(v.hiddenTests + v.hiddenUnrelated).toBe(0);
   });
 
   it("hides fixture targets and their split children until Tests is enabled", () => {
     const fixtureIds = new Set(["spm:Features", "spm:Features/Catalog", "spm:Features/Checkout"]);
     const nested = buildIndex({
-      ...model,
-      components: model.components.map((c) => fixtureIds.has(c.id) ? {
+      ...report,
+      components: report.components.map((c) => fixtureIds.has(c.id) ? {
         ...c,
         isTest: true,
         paths: c.paths.map((p) => `Tests/HostTests/Fixtures/basic/${p}`),
@@ -82,7 +82,7 @@ describe("visible", () => {
       expect(shown.nodes.has(id)).toBe(true);
     }
     expect(hidden.nodes.has("cfg:Core")).toBe(true);
-    const incident = model.edges.filter((e) => fixtureIds.has(e.from) || fixtureIds.has(e.to));
+    const incident = report.edges.filter((e) => fixtureIds.has(e.from) || fixtureIds.has(e.to));
     expect(incident.length).toBeGreaterThan(0);
     for (const edge of incident) {
       expect(hidden.edges).not.toContain(edge);
@@ -92,8 +92,8 @@ describe("visible", () => {
 
   it("keeps a split folder's target as its group", () => {
     const tiny = buildIndex({
-      ...model,
-      components: model.components.map((c) => (c.id === "spm:Features" ? { ...c, changedEntities: 0 } : c)),
+      ...report,
+      components: report.components.map((c) => (c.id === "spm:Features" ? { ...c, changedReviewItems: 0 } : c)),
     });
     expect(visible(tiny, { scope: "changed", showTests: false }).nodes.has("spm:Features")).toBe(true);
   });
@@ -130,7 +130,7 @@ describe("collapsed groups", () => {
     expect(bundleMembers(index, "spm:Features", "spm:Networking").map(edgeKey)).toEqual(b.members.map(edgeKey));
   });
 
-  it("keeps model edges as they are when nothing is collapsed", () => {
+  it("keeps report edges as they are when nothing is collapsed", () => {
     const g = collapse(index, v, new Set());
     expect(g.nodes).toEqual(v.nodes);
     expect(g.edges.map((e) => e.key).sort()).toEqual(v.edges.map(edgeKey).sort());
@@ -147,8 +147,8 @@ describe("collapsed groups", () => {
 
   it("rolls up change counts over the group", () => {
     const r = rollup(index, "spm:Features");
-    const inside = model.components.filter((c) => c.id === "spm:Features" || c.parent === "spm:Features");
-    expect(r.changedEntities).toBe(inside.reduce((n, c) => n + c.changedEntities, 0));
+    const inside = report.components.filter((c) => c.id === "spm:Features" || c.parent === "spm:Features");
+    expect(r.changedReviewItems).toBe(inside.reduce((n, c) => n + c.changedReviewItems, 0));
     expect(r.changed).toBe(true);
   });
 
@@ -163,8 +163,8 @@ describe("collapsed groups", () => {
     // The group's own edge would be drawn inside a bundle, so it opens too; selecting the group doesn't.
     expect(revealFocus(index, c, { type: "edge", key: "spm:Features->spm:Networking" }).size).toBe(0);
     expect(revealFocus(index, c, { type: "component", id: "spm:Features" })).toBe(c);
-    const entity = model.entities.find((e) => e.component === "spm:Features/Checkout")!;
-    expect(revealFocus(index, c, { type: "entity", id: entity.id }).size).toBe(0);
+    const reviewItem = report.reviewItems.find((e) => e.component === "spm:Features/Checkout")!;
+    expect(revealFocus(index, c, { type: "reviewItem", id: reviewItem.id }).size).toBe(0);
   });
 
   it("lights a selected bundle and its ends", () => {
@@ -216,7 +216,7 @@ describe("related", () => {
 
 describe("startHere", () => {
   const items = startHere(index);
-  const flagsOnly = buildIndex({ ...model, regions: [] });
+  const flagsOnly = buildIndex({ ...report, regions: [] });
 
   it("ranks by regions when the analyzer scores them", () => {
     expect(index.hasRegions).toBe(true);
@@ -226,26 +226,26 @@ describe("startHere", () => {
   });
 
   it("leads each item to its riskiest region", () => {
-    const add = items.find((i) => i.entity.qualifiedName === "Cart.add(_:)")!;
-    expect(add.focus).toEqual({ type: "entity", id: add.entity.id, region: `${add.entity.id}/r1` });
+    const add = items.find((i) => i.reviewItem.qualifiedName === "Cart.add(_:)")!;
+    expect(add.focus).toEqual({ type: "reviewItem", id: add.reviewItem.id, region: `${add.reviewItem.id}/r1` });
     expect(add.reasons.some((r) => r.includes("guard removed"))).toBe(true);
   });
 
   it("ranks a removed guard above a new force unwrap", () => {
     const all = startHere(index, 100);
-    const rank = (n: string) => all.findIndex((i) => i.entity.qualifiedName === n);
+    const rank = (n: string) => all.findIndex((i) => i.reviewItem.qualifiedName === n);
     expect(rank("Cart.add(_:)")).toBeGreaterThanOrEqual(0);
     expect(rank("Cart.add(_:)")).toBeLessThan(rank("Cart.first()"));
   });
 
   it("leaves out cosmetic and test changes and folds members into their parent", () => {
     const all = startHere(index, 100);
-    const names = all.map((i) => i.entity.qualifiedName);
+    const names = all.map((i) => i.reviewItem.qualifiedName);
     expect(names).not.toContain("CatalogView.title()");
     expect(names).not.toContain("CheckoutTests.testTotal()");
     expect(names).toContain("Item");
     expect(names).not.toContain("Item.price");
-    const item = all.find((i) => i.entity.qualifiedName === "Item")!;
+    const item = all.find((i) => i.reviewItem.qualifiedName === "Item")!;
     expect(item.members.map((m) => m.qualifiedName)).toContain("Item.currency");
     expect(item.reasons).toContain("swift:codable-shape");
   });
@@ -253,19 +253,19 @@ describe("startHere", () => {
   it("falls back to contract flags without regions", () => {
     const flagItems = startHere(flagsOnly);
     expect(flagItems.every((i) => i.source === "flags")).toBe(true);
-    const rank = (n: string) => flagItems.findIndex((i) => i.entity.qualifiedName === n);
+    const rank = (n: string) => flagItems.findIndex((i) => i.reviewItem.qualifiedName === n);
     expect(rank("CartRepository")).toBeGreaterThanOrEqual(0);
     expect(rank("CartRepository")).toBeLessThan(5);
   });
 
-  it("groups an entity's regions into one item scored by the riskiest", () => {
-    const e = model.entities[0];
+  it("groups a review item's regions into one item scored by the riskiest", () => {
+    const e = report.reviewItems[0];
     const withRegions = buildIndex({
-      ...model,
+      ...report,
       regions: [
-        { id: "r1", entity: e.id, kind: "review", file: "a", startLine: 1, endLine: 2, side: "head", risk: 0.2, reasons: ["low"] },
-        { id: "r2", entity: e.id, kind: "review", file: "a", startLine: 3, endLine: 4, side: "head", risk: 0.9, reasons: ["high"] },
-        { id: "r3", entity: e.id, kind: "context", file: "a", startLine: 5, endLine: 6, side: "head", risk: 1, reasons: [] },
+        { id: "r1", reviewItem: e.id, kind: "review", file: "a", startLine: 1, endLine: 2, side: "head", risk: 0.2, reasons: ["low"] },
+        { id: "r2", reviewItem: e.id, kind: "review", file: "a", startLine: 3, endLine: 4, side: "head", risk: 0.9, reasons: ["high"] },
+        { id: "r3", reviewItem: e.id, kind: "context", file: "a", startLine: 5, endLine: 6, side: "head", risk: 1, reasons: [] },
       ],
     });
     const got = startHere(withRegions);
@@ -280,13 +280,13 @@ describe("region stepping", () => {
   it("orders review and removed regions by risk, without context or test code", () => {
     expect(order.length).toBeGreaterThan(5);
     expect(order.every((r) => r.kind !== "context")).toBe(true);
-    expect(order.some((r) => r.entity.includes("CheckoutTests"))).toBe(false);
+    expect(order.some((r) => r.reviewItem.includes("CheckoutTests"))).toBe(false);
     for (let i = 1; i < order.length; i++) expect(order[i - 1].risk).toBeGreaterThanOrEqual(order[i].risk);
   });
 
   it("steps forward and back from anywhere", () => {
     const first = stepRegion(index, null, 1);
-    expect(first).toEqual({ type: "entity", id: order[0].entity, region: order[0].id });
+    expect(first).toEqual({ type: "reviewItem", id: order[0].reviewItem, region: order[0].id });
     expect(regionPosition(index, first)).toBe(1);
     const second = stepRegion(index, first, 1);
     expect(regionPosition(index, second)).toBe(2);
@@ -295,15 +295,15 @@ describe("region stepping", () => {
     expect(regionPosition(index, stepRegion(index, null, -1))).toBe(order.length);
   });
 
-  it("enters an entity's riskiest region first", () => {
+  it("enters a review item's riskiest region first", () => {
     const r = order[3];
-    expect(stepRegion(index, { type: "entity", id: r.entity }, 1)).toEqual({ type: "entity", id: r.entity, region: order.find((x) => x.entity === r.entity)!.id });
+    expect(stepRegion(index, { type: "reviewItem", id: r.reviewItem }, 1)).toEqual({ type: "reviewItem", id: r.reviewItem, region: order.find((x) => x.reviewItem === r.reviewItem)!.id });
   });
 });
 
-describe("componentEntities", () => {
+describe("componentReviewItems", () => {
   it("counts cosmetic changes instead of listing them", () => {
-    const r = componentEntities(index, "spm:Features/Catalog");
+    const r = componentReviewItems(index, "spm:Features/Catalog");
     expect(r.cosmetic).toBe(1);
     expect(r.shown.map((e) => e.change)).not.toContain("cosmetic");
   });
@@ -334,7 +334,7 @@ describe("misc", () => {
   });
   it("tolerates unknown and missing fields", () => {
     const m = validate({ components: [], edges: [], somethingNew: 1 });
-    expect(m.entities).toEqual([]);
+    expect(m.reviewItems).toEqual([]);
   });
 });
 
@@ -344,11 +344,11 @@ describe("LLM ranking", () => {
   const on = buildIndex(annotated);
   const off = buildIndex(annotated, { llm: false });
 
-  it("is on by default when the model has annotations, and never without them", () => {
+  it("is on by default when the report has annotations, and never without them", () => {
     expect(on.hasLLM && on.llm).toBe(true);
     expect(off.hasLLM && !off.llm).toBe(true);
     expect(index.hasLLM || index.llm).toBe(false);
-    expect(buildIndex(model, { llm: true }).llm).toBe(false);
+    expect(buildIndex(report, { llm: true }).llm).toBe(false);
   });
 
   it("orders regions by LLM risk when on, and by deterministic risk when off", () => {
@@ -367,12 +367,12 @@ describe("LLM ranking", () => {
   });
 
   it("prunes and ranks context only when on", () => {
-    const entity = [...on.contextByEntity.keys()].find((id) => contextOf(on, id).pruned.length > 0)!;
-    expect(entity).toBeDefined();
-    const { shown, pruned } = contextOf(on, entity);
+    const reviewItem = [...on.contextByReviewItem.keys()].find((id) => contextOf(on, id).pruned.length > 0)!;
+    expect(reviewItem).toBeDefined();
+    const { shown, pruned } = contextOf(on, reviewItem);
     expect(pruned.every((c) => c.llm?.keep === false)).toBe(true);
     expect(shown.map((c) => c.llm?.rank)).toEqual(shown.map((_, i) => i + 1));
-    expect(contextOf(off, entity)).toEqual({ shown: off.contextByEntity.get(entity), pruned: [] });
+    expect(contextOf(off, reviewItem)).toEqual({ shown: off.contextByReviewItem.get(reviewItem), pruned: [] });
   });
 
   it("shows the LLM's findings only when on", () => {
@@ -382,7 +382,7 @@ describe("LLM ranking", () => {
   });
 
   it("hides summaries when off", () => {
-    const e = annotated.entities.find((x) => x.llm)!;
+    const e = annotated.reviewItems.find((x) => x.llm)!;
     expect(llmOf(on, e)?.summary).toBeTruthy();
     expect(llmOf(off, e)).toBeUndefined();
   });
@@ -398,12 +398,12 @@ describe("findings", () => {
     expect(topSeverity(all)).toBe(all[0].severity);
   });
 
-  it("finds a component's findings through its entities", () => {
+  it("finds a component's findings through its review items", () => {
     const unused = all.find((f) => f.kind === "unused-api")!;
-    const entity = index.entities.get(unused.anchors[0].entity!)!;
-    expect(findingsForEntity(index, entity.id)).toContain(unused);
-    expect(findingsForComponent(index, entity.component)).toContain(unused);
-    expect(findingFocus(index, unused)).toEqual({ type: "entity", id: entity.id });
+    const reviewItem = index.reviewItems.get(unused.anchors[0].reviewItem!)!;
+    expect(findingsForReviewItem(index, reviewItem.id)).toContain(unused);
+    expect(findingsForComponent(index, reviewItem.component)).toContain(unused);
+    expect(findingFocus(index, unused)).toEqual({ type: "reviewItem", id: reviewItem.id });
   });
 
   it("counts findings on drawn nodes and edges, and on collapsed groups", () => {
@@ -418,14 +418,14 @@ describe("findings", () => {
 
   it("anchors edge findings to the drawn edge", () => {
     const f = { id: "x:1", source: "check", kind: "layering", severity: "high", message: "m", evidence: [], anchors: [{ from: "spm:Features/Checkout", to: "spm:Networking" }] };
-    const withEdge = buildIndex({ ...model, findings: [f] });
+    const withEdge = buildIndex({ ...report, findings: [f] });
     const g = collapse(withEdge, visible(withEdge, { scope: "all", showTests: true }), new Set());
     expect(findingCounts(withEdge, g).edges.get(edgeKey({ from: "spm:Features/Checkout", to: "spm:Networking" }))).toEqual([f]);
     expect(findingsForEdge(withEdge, "spm:Features/Checkout", "spm:Networking")).toEqual([f]);
     expect(findingFocus(withEdge, f)).toEqual({ type: "edge", key: "spm:Features/Checkout->spm:Networking" });
   });
 
-  it("reads models without findings", () => {
+  it("reads reports without findings", () => {
     const { findings: _, ...old } = JSON.parse(fs.readFileSync(fixture, "utf8"));
     expect(validate(old).findings).toEqual([]);
   });

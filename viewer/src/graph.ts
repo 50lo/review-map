@@ -1,9 +1,9 @@
 // Pure logic for the component map: what is visible, what relates to the focus, and the
-// Start here ranking. Kept free of React so it can be unit tested against the fixture model.
+// Start here ranking. Kept free of React so it can be unit tested against the fixture report.
 
 import type { Focus } from "./nav";
-import type { ChangeModel, Component, Edge, Entity, ExternalDepChange, Region } from "./types";
-import { entityKindLabel } from "./languages";
+import type { ChangeReport, Component, Edge, ReviewItem, ExternalDepChange, Region } from "./types";
+import { reviewItemKindLabel } from "./languages";
 
 export type { Focus } from "./nav";
 
@@ -18,93 +18,93 @@ export interface MapOptions {
 }
 
 export interface Index {
-  model: ChangeModel;
+  report: ChangeReport;
   components: Map<string, Component>;
   children: Map<string, string[]>;
   externalChange: Map<string, ExternalDepChange>;
-  entitiesByComponent: Map<string, Entity[]>;
-  entities: Map<string, Entity>;
+  reviewItemsByComponent: Map<string, ReviewItem[]>;
+  reviewItems: Map<string, ReviewItem>;
   /** True once the analyzer scores regions; before that, ranking falls back to contract flags. */
   hasRegions: boolean;
-  /** Review and removed regions per entity, in line order. */
-  regionsByEntity: Map<string, Region[]>;
-  /** Context regions per entity. */
-  contextByEntity: Map<string, Region[]>;
+  /** Review and removed regions per review item, in line order. */
+  regionsByReviewItem: Map<string, Region[]>;
+  /** Context regions per review item. */
+  contextByReviewItem: Map<string, Region[]>;
   regions: Map<string, Region>;
-  /** Review and removed regions of entities in the default views, highest risk first. */
+  /** Review and removed regions of review items in the default views, highest risk first. */
   riskOrder: Region[];
-  /** The model carries LLM annotations. */
+  /** The report carries LLM annotations. */
   hasLLM: boolean;
   /** The LLM layer is on: ranking uses LLM risk, and LLM summaries, pruning, and review findings are available. */
   llm: boolean;
 }
 
 export interface IndexOptions {
-  /** Use the LLM layer when the model has it. Default true. */
+  /** Use the LLM layer when the report has it. Default true. */
   llm?: boolean;
 }
 
 export const edgeKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`;
 
-export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
-  const components = new Map(model.components.map((c) => [c.id, c]));
+export function buildIndex(report: ChangeReport, opts: IndexOptions = {}): Index {
+  const components = new Map(report.components.map((c) => [c.id, c]));
   const children = new Map<string, string[]>();
-  for (const c of model.components) {
+  for (const c of report.components) {
     if (c.parent && components.has(c.parent)) {
       children.set(c.parent, [...(children.get(c.parent) ?? []), c.id]);
     }
   }
-  const externalChange = new Map(model.externalDeps.map((d) => [d.name, d]));
-  const entitiesByComponent = new Map<string, Entity[]>();
-  for (const e of model.entities) {
-    entitiesByComponent.set(e.component, [...(entitiesByComponent.get(e.component) ?? []), e]);
+  const externalChange = new Map(report.externalDeps.map((d) => [d.name, d]));
+  const reviewItemsByComponent = new Map<string, ReviewItem[]>();
+  for (const e of report.reviewItems) {
+    reviewItemsByComponent.set(e.component, [...(reviewItemsByComponent.get(e.component) ?? []), e]);
   }
-  const entities = new Map(model.entities.map((e) => [e.id, e]));
-  const regionsByEntity = new Map<string, Region[]>();
-  const contextByEntity = new Map<string, Region[]>();
-  for (const r of model.regions) {
-    const m = r.kind === "context" ? contextByEntity : regionsByEntity;
-    m.set(r.entity, [...(m.get(r.entity) ?? []), r]);
+  const reviewItems = new Map(report.reviewItems.map((e) => [e.id, e]));
+  const regionsByReviewItem = new Map<string, Region[]>();
+  const contextByReviewItem = new Map<string, Region[]>();
+  for (const r of report.regions) {
+    const m = r.kind === "context" ? contextByReviewItem : regionsByReviewItem;
+    m.set(r.reviewItem, [...(m.get(r.reviewItem) ?? []), r]);
   }
   const index: Index = {
-    model,
+    report,
     components,
     children,
     externalChange,
-    entitiesByComponent,
-    entities,
-    hasRegions: regionsByEntity.size > 0,
-    regionsByEntity,
-    contextByEntity,
-    regions: new Map(model.regions.map((r) => [r.id, r])),
+    reviewItemsByComponent,
+    reviewItems,
+    hasRegions: regionsByReviewItem.size > 0,
+    regionsByReviewItem,
+    contextByReviewItem,
+    regions: new Map(report.regions.map((r) => [r.id, r])),
     riskOrder: [],
-    hasLLM: hasLLM(model),
+    hasLLM: hasLLM(report),
     llm: false,
   };
   index.llm = index.hasLLM && opts.llm !== false;
-  const pos = new Map(model.entities.map((e, i) => [e.id, i]));
-  index.riskOrder = model.regions
-    .filter((r) => r.kind !== "context" && entities.has(r.entity) && !isLowRisk(index, entities.get(r.entity)!))
-    .sort((a, b) => regionRisk(index, b) - regionRisk(index, a) || pos.get(a.entity)! - pos.get(b.entity)! || a.startLine - b.startLine);
+  const pos = new Map(report.reviewItems.map((e, i) => [e.id, i]));
+  index.riskOrder = report.regions
+    .filter((r) => r.kind !== "context" && reviewItems.has(r.reviewItem) && !isLowRisk(index, reviewItems.get(r.reviewItem)!))
+    .sort((a, b) => regionRisk(index, b) - regionRisk(index, a) || pos.get(a.reviewItem)! - pos.get(b.reviewItem)! || a.startLine - b.startLine);
   return index;
 }
 
 /** True when any region, summary, or finding came from the LLM annotator. */
-export const hasLLM = (m: ChangeModel) =>
-  !!m.llm && (m.regions.some((r) => r.llm) || m.entities.some((e) => e.llm) || (m.findings ?? []).some((f) => f.source === "llm"));
+export const hasLLM = (m: ChangeReport) =>
+  !!m.llm && (m.regions.some((r) => r.llm) || m.reviewItems.some((e) => e.llm) || (m.findings ?? []).some((f) => f.source === "llm"));
 
 /** The risk a region ranks by: the LLM's when the LLM layer is on and it scored the region, else the deterministic one. */
 export const regionRisk = (index: Index, r: Region) => (index.llm ? r.llm?.risk ?? r.risk : r.risk);
 
-/** LLM content of a region, entity, or component, or nothing when the LLM layer is off. */
+/** LLM content of a region, review item, or component, or nothing when the LLM layer is off. */
 export const llmOf = <T extends { llm?: unknown }>(index: Index, x: T | undefined): T["llm"] | undefined => (index.llm ? x?.llm : undefined);
 
 /**
- * Context regions of an entity in display order. With the LLM layer on, kept regions come first in
+ * Context regions of a review item in display order. With the LLM layer on, kept regions come first in
  * the LLM's rank and the ones it pruned are split off; otherwise every region shows, in analyzer order.
  */
-export function contextOf(index: Index, entity: string): { shown: Region[]; pruned: Region[] } {
-  const all = index.contextByEntity.get(entity) ?? [];
+export function contextOf(index: Index, reviewItem: string): { shown: Region[]; pruned: Region[] } {
+  const all = index.contextByReviewItem.get(reviewItem) ?? [];
   if (!index.llm || !all.some((c) => c.llm?.keep !== undefined)) return { shown: all, pruned: [] };
   const shown = all.filter((c) => c.llm?.keep !== false).sort((a, b) => (a.llm?.rank ?? 1e9) - (b.llm?.rank ?? 1e9));
   return { shown, pruned: all.filter((c) => c.llm?.keep === false) };
@@ -120,7 +120,7 @@ export function externalChangeOf(index: Index, c: Component): ExternalDepChange 
 
 /** True when the component itself changed, as opposed to only being next to a change. */
 export function isChanged(index: Index, c: Component): boolean {
-  return c.changedEntities > 0 || !!c.status || !!externalChangeOf(index, c);
+  return c.changedReviewItems > 0 || !!c.status || !!externalChangeOf(index, c);
 }
 
 export const isTestComponent = (c: Component) => !!c.isTest;
@@ -141,18 +141,18 @@ export interface Visible {
  * whatever the scope.
  */
 export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<string> = new Set()): Visible {
-  const { model } = index;
+  const { report } = index;
   const allowed = (id: string) => {
     const c = index.components.get(id);
     return !!c && (opts.showTests || !isTestComponent(c));
   };
   const nodes = new Set<string>();
   if (opts.scope === "all") {
-    for (const c of model.components) if (allowed(c.id)) nodes.add(c.id);
+    for (const c of report.components) if (allowed(c.id)) nodes.add(c.id);
   } else {
     const changed = new Set<string>();
-    for (const c of model.components) if (allowed(c.id) && isChanged(index, c)) changed.add(c.id);
-    for (const e of model.edges) {
+    for (const c of report.components) if (allowed(c.id) && isChanged(index, c)) changed.add(c.id);
+    for (const e of report.edges) {
       if (e.status !== "unchanged" && allowed(e.from) && allowed(e.to)) {
         changed.add(e.from);
         changed.add(e.to);
@@ -160,14 +160,14 @@ export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<st
     }
     for (const id of changed) nodes.add(id);
     if (opts.scope === "neighbors") {
-      for (const e of model.edges) {
+      for (const e of report.edges) {
         if (!allowed(e.from) || !allowed(e.to)) continue;
         if (changed.has(e.from)) nodes.add(e.to);
         if (changed.has(e.to)) nodes.add(e.from);
       }
     }
   }
-  for (const e of model.edges) {
+  for (const e of report.edges) {
     if (!allowed(e.from) || !allowed(e.to)) continue;
     if (expanded.has(e.from)) nodes.add(e.to);
     if (expanded.has(e.to)) nodes.add(e.from);
@@ -180,9 +180,9 @@ export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<st
       p = index.components.get(p)?.parent;
     }
   }
-  const edges = model.edges.filter((e) => nodes.has(e.from) && nodes.has(e.to) && e.from !== e.to);
-  const hiddenTests = opts.showTests ? 0 : model.components.filter(isTestComponent).length;
-  const hiddenUnrelated = model.components.length - nodes.size - hiddenTests;
+  const edges = report.edges.filter((e) => nodes.has(e.from) && nodes.has(e.to) && e.from !== e.to);
+  const hiddenTests = opts.showTests ? 0 : report.components.filter(isTestComponent).length;
+  const hiddenUnrelated = report.components.length - nodes.size - hiddenTests;
   return { nodes, edges, hiddenTests, hiddenUnrelated: Math.max(0, hiddenUnrelated) };
 }
 
@@ -190,7 +190,7 @@ export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<st
 export function hiddenNeighbors(index: Index, vis: Visible, id: string, showTests: boolean): string[] {
   const out = new Set<string>();
   const allowed = (x: string) => showTests || !index.components.get(x)?.isTest;
-  for (const e of index.model.edges) {
+  for (const e of index.report.edges) {
     if (e.from === e.to) continue;
     if (e.from === id && allowed(e.to) && !vis.nodes.has(e.to)) out.add(e.to);
     if (e.to === id && allowed(e.from) && !vis.nodes.has(e.from)) out.add(e.from);
@@ -220,11 +220,11 @@ function focusComponents(index: Index, focus: Focus): string[] {
     case "interface":
       return [focus.id];
     case "edge": {
-      const e = index.model.edges.find((x) => edgeKey(x) === focus.key);
+      const e = index.report.edges.find((x) => edgeKey(x) === focus.key);
       return e ? [e.from, e.to] : [];
     }
-    case "entity": {
-      const e = index.entities.get(focus.id);
+    case "reviewItem": {
+      const e = index.reviewItems.get(focus.id);
       return e ? [e.component] : [];
     }
     default:
@@ -249,9 +249,9 @@ export function revealFocus(index: Index, collapsed: Set<string>, focus: Focus):
   return new Set([...collapsed].filter((id) => !open.has(id)));
 }
 
-/** An edge as drawn: a model edge, or a bundle of them when an end is a collapsed group. */
+/** An edge as drawn: a report edge, or a bundle of them when an end is a collapsed group. */
 export interface MapEdge {
-  /** The model edge's key, or a bundle key. */
+  /** The report edge's key, or a bundle key. */
   key: string;
   from: string;
   to: string;
@@ -276,9 +276,9 @@ export function within(index: Index, id: string, root: string): boolean {
   return false;
 }
 
-/** The model edges a bundle between two drawn nodes stands for. */
+/** The report edges a bundle between two drawn nodes stands for. */
 export const bundleMembers = (index: Index, from: string, to: string) =>
-  index.model.edges.filter((e) => within(index, e.from, from) && within(index, e.to, to));
+  index.report.edges.filter((e) => within(index, e.from, from) && within(index, e.to, to));
 
 /** One status for several edges: theirs when they agree, else changed. */
 export function mergeStatus(edges: Edge[]): Edge["status"] {
@@ -329,11 +329,11 @@ export function collapse(index: Index, vis: Visible, collapsed: ReadonlySet<stri
 }
 
 /** Change counts of a component together with everything inside it, for a collapsed group. */
-export function rollup(index: Index, id: string): { changedEntities: number; interfaceChanges: number; changeScore: number; changed: boolean } {
-  const out = { changedEntities: 0, interfaceChanges: 0, changeScore: 0, changed: false };
-  for (const c of index.model.components) {
+export function rollup(index: Index, id: string): { changedReviewItems: number; interfaceChanges: number; changeScore: number; changed: boolean } {
+  const out = { changedReviewItems: 0, interfaceChanges: 0, changeScore: 0, changed: false };
+  for (const c of index.report.components) {
     if (!within(index, c.id, id)) continue;
-    out.changedEntities += c.changedEntities;
+    out.changedReviewItems += c.changedReviewItems;
     out.interfaceChanges += c.interfaceChanges;
     out.changeScore = Math.max(out.changeScore, c.changeScore || 0);
     out.changed ||= isChanged(index, c);
@@ -388,13 +388,13 @@ export function related(index: Index, edges: Array<{ key: string; from: string; 
 }
 
 /**
- * The map's focus for any focus: the component of an interface or entity view, so the map
+ * The map's focus for any focus: the component of an interface or review item view, so the map
  * still shows where you are when you go back to it.
  */
 export function mapFocus(index: Index, focus: Focus): Focus {
   if (focus?.type === "interface") return { type: "component", id: focus.id };
-  if (focus?.type === "entity") {
-    const e = index.entities.get(focus.id);
+  if (focus?.type === "reviewItem") {
+    const e = index.reviewItems.get(focus.id);
     return e ? { type: "component", id: e.component } : null;
   }
   if (focus?.type === "location") return null;
@@ -408,9 +408,9 @@ export interface ComponentEdges {
 
 const emptyByStatus = (): Record<Edge["status"], Edge[]> => ({ added: [], removed: [], changed: [], unchanged: [] });
 
-export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
+export function componentEdges(report: ChangeReport, id: string): ComponentEdges {
   const out = { outgoing: emptyByStatus(), incoming: emptyByStatus() };
-  for (const e of model.edges) {
+  for (const e of report.edges) {
     if (e.from === id) out.outgoing[e.status].push(e);
     if (e.to === id) out.incoming[e.status].push(e);
   }
@@ -420,13 +420,13 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
 // ---------------------------------------------------------------------------
 // Start here
 
-/** Entity kinds as the entity's language names them. */
-export const kindLabel = entityKindLabel;
+/** Review item kinds as the review item's language names them. */
+export const kindLabel = reviewItemKindLabel;
 
 /** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
 export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, "");
 
-/** Flag weights for ranking a model without regions: concurrency and persisted models rank highest. */
+/** Flag weights for ranking a report without regions: concurrency and persisted models rank highest. */
 const flagWeight = (prefixed: string): number => {
   const flag = flagName(prefixed);
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
@@ -439,7 +439,7 @@ const flagWeight = (prefixed: string): number => {
 
 const changeWeight: Record<string, number> = { removed: 1.5, signature: 1.2, added: 1, modifiers: 1, body: 0.6, cosmetic: 0 };
 
-export function entityScore(e: Entity): number {
+export function reviewItemScore(e: ReviewItem): number {
   if (e.change === "cosmetic") return 0;
   const flags = e.contractFlags.reduce((s, f) => s + flagWeight(f), 0);
   const base = flags + (changeWeight[e.change] ?? 0.5);
@@ -448,16 +448,16 @@ export function entityScore(e: Entity): number {
 }
 
 export interface StartItem {
-  /** Top region id, or entity id in the interim ranking. */
+  /** Top region id, or review item id in the interim ranking. */
   id: string;
-  /** The entity the row names: the top region's entity, or the type it is a member of. */
-  entity: Entity;
+  /** The review item the row names: the top region's review item, or the type it is a member of. */
+  reviewItem: ReviewItem;
   /** Where the row leads: the highest-risk region. */
   focus: Focus;
   score: number;
   reasons: string[];
-  /** Member entities folded into this item. */
-  members: Entity[];
+  /** Member review items folded into this item. */
+  members: ReviewItem[];
   /** Review and removed regions behind the item. */
   regionCount: number;
   source: "regions" | "flags";
@@ -466,33 +466,33 @@ export interface StartItem {
 /** Reasons the analyzer gives a region that has no specific risk signal. */
 const FALLBACK_REASONS = new Set(["changed lines", "new declaration", "removed declaration", "removed lines", "signature changed", "modifiers changed", "changed", "new file", "removed file"]);
 
-export function isLowRisk(index: Index, e: Entity): boolean {
+export function isLowRisk(index: Index, e: ReviewItem): boolean {
   const c = index.components.get(e.component);
   return e.change === "cosmetic" || !!e.tags?.some((t) => t === "test" || t === "generated") || !!c?.isTest;
 }
 
-/** Highest region risk of an entity, or the contract-flag score before regions exist. */
-export function entityRank(index: Index, e: Entity): number {
-  if (!index.hasRegions) return entityScore(e);
-  return Math.max(0, ...(index.regionsByEntity.get(e.id) ?? []).map((r) => regionRisk(index, r)));
+/** Highest region risk of a review item, or the contract-flag score before regions exist. */
+export function reviewItemRank(index: Index, e: ReviewItem): number {
+  if (!index.hasRegions) return reviewItemScore(e);
+  return Math.max(0, ...(index.regionsByReviewItem.get(e.id) ?? []).map((r) => regionRisk(index, r)));
 }
 
 /**
- * The highest-risk places in the change. With regions, each item is an entity (with its changed
- * members folded in) scored by its riskiest region; before regions exist, entities are ranked by
+ * The highest-risk places in the change. With regions, each item is a review item (with its changed
+ * members folded in) scored by its riskiest region; before regions exist, review items are ranked by
  * their contract flags.
  */
 export function startHere(index: Index, limit = 10): StartItem[] {
-  const { model } = index;
+  const { report } = index;
   const fromRegions = index.hasRegions;
-  const candidates = model.entities.filter((e) =>
-    fromRegions ? !isLowRisk(index, e) && index.regionsByEntity.has(e.id) : !isLowRisk(index, e) && entityScore(e) > 0,
+  const candidates = report.reviewItems.filter((e) =>
+    fromRegions ? !isLowRisk(index, e) && index.regionsByReviewItem.has(e.id) : !isLowRisk(index, e) && reviewItemScore(e) > 0,
   );
   // Fold members into their listed parent, so one Codable type doesn't fill the whole list.
   const listed = new Set(candidates.map((e) => e.id));
-  const rootOf = (e: Entity): string => {
+  const rootOf = (e: ReviewItem): string => {
     let cur = e;
-    while (cur.parent && listed.has(cur.parent)) cur = index.entities.get(cur.parent)!;
+    while (cur.parent && listed.has(cur.parent)) cur = index.reviewItems.get(cur.parent)!;
     return cur.id;
   };
   const groups = new Map<string, StartItem & { ranked: Array<{ risk: number; reasons: string[] }> }>();
@@ -500,25 +500,25 @@ export function startHere(index: Index, limit = 10): StartItem[] {
     const root = rootOf(e);
     let item = groups.get(root);
     if (!item) {
-      const r = index.entities.get(root)!;
-      item = { id: root, entity: r, focus: { type: "entity", id: root }, score: -1, reasons: [], members: [], regionCount: 0, source: fromRegions ? "regions" : "flags", ranked: [] };
+      const r = index.reviewItems.get(root)!;
+      item = { id: root, reviewItem: r, focus: { type: "reviewItem", id: root }, score: -1, reasons: [], members: [], regionCount: 0, source: fromRegions ? "regions" : "flags", ranked: [] };
       groups.set(root, item);
     }
     if (e.id !== root) item.members.push(e);
     if (fromRegions) {
-      for (const r of index.regionsByEntity.get(e.id)!) {
+      for (const r of index.regionsByReviewItem.get(e.id)!) {
         item.regionCount++;
         const risk = regionRisk(index, r);
         item.ranked.push({ risk, reasons: r.reasons });
         if (risk > item.score) {
           item.score = risk;
           item.id = r.id;
-          item.focus = { type: "entity", id: r.entity, region: r.id };
+          item.focus = { type: "reviewItem", id: r.reviewItem, region: r.id };
         }
       }
     } else {
-      item.score = Math.max(item.score, entityScore(e));
-      item.ranked.push({ risk: entityScore(e), reasons: e.contractFlags });
+      item.score = Math.max(item.score, reviewItemScore(e));
+      item.ranked.push({ risk: reviewItemScore(e), reasons: e.contractFlags });
     }
   }
   return [...groups.values()]
@@ -533,9 +533,9 @@ export function startHere(index: Index, limit = 10): StartItem[] {
         }
       }
       if (usage) reasons.push(`used from ${usage} component${usage === 1 ? "" : "s"}`);
-      return { ...g, reasons: reasons.length ? reasons : [ranked[0]?.reasons[0] ?? g.entity.change] };
+      return { ...g, reasons: reasons.length ? reasons : [ranked[0]?.reasons[0] ?? g.reviewItem.change] };
     })
-    .sort((a, b) => b.score - a.score || a.entity.qualifiedName.localeCompare(b.entity.qualifiedName))
+    .sort((a, b) => b.score - a.score || a.reviewItem.qualifiedName.localeCompare(b.reviewItem.qualifiedName))
     .slice(0, limit);
 }
 
@@ -544,32 +544,32 @@ export function stepRegion(index: Index, focus: Focus, dir: 1 | -1): Focus {
   const order = index.riskOrder;
   if (order.length === 0) return focus;
   let target: number;
-  const at = focus?.type === "entity" && focus.region ? order.findIndex((r) => r.id === focus.region) : -1;
-  const entityFirst = focus?.type === "entity" ? order.findIndex((r) => r.entity === focus.id) : -1;
+  const at = focus?.type === "reviewItem" && focus.region ? order.findIndex((r) => r.id === focus.region) : -1;
+  const reviewItemFirst = focus?.type === "reviewItem" ? order.findIndex((r) => r.reviewItem === focus.id) : -1;
   if (at >= 0) target = at + dir;
-  // On an entity with no region in focus, next enters its riskiest region.
-  else if (entityFirst >= 0) target = dir === 1 ? entityFirst : entityFirst - 1;
+  // On a review item with no region in focus, next enters its riskiest region.
+  else if (reviewItemFirst >= 0) target = dir === 1 ? reviewItemFirst : reviewItemFirst - 1;
   else target = dir === 1 ? 0 : order.length - 1;
   if (target < 0 || target >= order.length) return focus;
   return toFocus(order[target]);
 }
 
-const toFocus = (r: Region): Focus => ({ type: "entity", id: r.entity, region: r.id });
+const toFocus = (r: Region): Focus => ({ type: "reviewItem", id: r.reviewItem, region: r.id });
 
 /** 1-based position of the focused region in risk order, or 0. */
 export function regionPosition(index: Index, focus: Focus): number {
-  if (focus?.type !== "entity" || !focus.region) return 0;
+  if (focus?.type !== "reviewItem" || !focus.region) return 0;
   return index.riskOrder.findIndex((r) => r.id === focus.region) + 1;
 }
 
-/** Entities of a component for the side panel: interface changes first, cosmetic counted separately. */
-export function componentEntities(index: Index, id: string): { shown: Entity[]; cosmetic: number; lowRisk: number } {
-  const all = index.entitiesByComponent.get(id) ?? [];
+/** Review items of a component for the side panel: interface changes first, cosmetic counted separately. */
+export function componentReviewItems(index: Index, id: string): { shown: ReviewItem[]; cosmetic: number; lowRisk: number } {
+  const all = index.reviewItemsByComponent.get(id) ?? [];
   const cosmetic = all.filter((e) => e.change === "cosmetic").length;
   const lowRisk = all.filter((e) => e.change !== "cosmetic" && isLowRisk(index, e)).length;
   const shown = all
     .filter((e) => e.change !== "cosmetic" && !isLowRisk(index, e))
-    .sort((a, b) => Number(b.isInterface) - Number(a.isInterface) || entityRank(index, b) - entityRank(index, a));
+    .sort((a, b) => Number(b.isInterface) - Number(a.isInterface) || reviewItemRank(index, b) - reviewItemRank(index, a));
   return { shown, cosmetic, lowRisk };
 }
 

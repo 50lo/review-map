@@ -5,14 +5,14 @@ import XCTest
 /// Runs the LLM annotator on the basic fixture with scripts/fake-llm.sh standing in for the CLI.
 final class AnnotatorTests: XCTestCase {
     static var repo: String?
-    static var plain: ChangeModel?
+    static var plain: ChangeReport?
     var tmp = ""
 
     static let fake = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appendingPathComponent("../../scripts/fake-llm.sh").standardizedFileURL.path
 
     /// The fixture as a two-commit repo that lives for the whole class, because the annotator reads sources with git show.
-    func plainModel() throws -> ChangeModel {
+    func plainReport() throws -> ChangeReport {
         if let m = Self.plain { return m }
         let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/basic", withExtension: nil)).path
         let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-annotate-\(UUID().uuidString)")
@@ -59,12 +59,12 @@ final class AnnotatorTests: XCTestCase {
         unsetenv("FAKE_LLM_MODE")
     }
 
-    func annotate(_ m: ChangeModel, tool: String = "claude", command: String? = AnnotatorTests.fake) throws -> ChangeModel {
+    func annotate(_ m: ChangeReport, tool: String = "claude", command: String? = AnnotatorTests.fake) throws -> ChangeReport {
         try Annotator.run(m, options: AnnotateOptions(tool: tool, command: command, cacheDir: tmp, jobs: 2))
     }
 
-    func testAnnotatesEveryRegionEntityAndComponent() throws {
-        let plain = try plainModel()
+    func testAnnotatesEveryRegionReviewItemAndComponent() throws {
+        let plain = try plainReport()
         let m = try annotate(plain)
         let run = try XCTUnwrap(m.llm)
         XCTAssertEqual(run.failed, 0)
@@ -73,11 +73,11 @@ final class AnnotatorTests: XCTestCase {
         XCTAssertGreaterThan(run.batches, 1)
 
         let lowComponents = Set(m.components.filter(\.isTest).map(\.id))
-        let annotatable = Set(m.entities.filter { $0.change != .cosmetic && !lowComponents.contains($0.component) && $0.tags.isEmpty }.map(\.id))
-        for e in m.entities {
+        let annotatable = Set(m.reviewItems.filter { $0.change != .cosmetic && !lowComponents.contains($0.component) && $0.tags.isEmpty }.map(\.id))
+        for e in m.reviewItems {
             XCTAssertEqual(e.llm != nil, annotatable.contains(e.id), e.id)
         }
-        for r in m.regions where annotatable.contains(r.entity) {
+        for r in m.regions where annotatable.contains(r.reviewItem) {
             let llm = try XCTUnwrap(r.llm, r.id)
             if r.kind == "context" {
                 XCTAssertNotNil(llm.keep, r.id)
@@ -87,17 +87,17 @@ final class AnnotatorTests: XCTestCase {
                 XCTAssertTrue((0...1).contains(llm.risk ?? -1), r.id)
             }
         }
-        for c in m.components where c.kind != .external && !c.isTest && c.changedEntities > 0 {
+        for c in m.components where c.kind != .external && !c.isTest && c.changedReviewItems > 0 {
             XCTAssertNotNil(c.llm, c.id)
         }
         // Deterministic facts are untouched.
         XCTAssertEqual(m.regions.map(\.risk), plain.regions.map(\.risk))
-        XCTAssertEqual(m.entities.map(\.id), plain.entities.map(\.id))
+        XCTAssertEqual(m.reviewItems.map(\.id), plain.reviewItems.map(\.id))
         XCTAssertEqual(m.findings.filter { $0.source == "check" }, plain.findings)
     }
 
     func testStructuralReview() throws {
-        let plain = try plainModel()
+        let plain = try plainReport()
         let m = try annotate(plain)
         XCTAssertEqual(m.llm?.review, "ok")
         XCTAssertEqual(m.llm?.description, "commits", "no PR, so the commit messages describe the change")
@@ -116,59 +116,59 @@ final class AnnotatorTests: XCTestCase {
     }
 
     func testStructuralReviewPrompt() throws {
-        let m = try plainModel()
+        let m = try plainReport()
         let sources = SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha)
-        let review = StructuralReview(model: m, sources: sources, reviewNotes: nil,
+        let review = StructuralReview(report: m, sources: sources, reviewNotes: nil,
                                       description: ChangeDescription(text: "Pay with Apple Pay at checkout.", source: "pr"))
         let prompt = try XCTUnwrap(review.prompt())
         XCTAssertTrue(prompt.contains("Pay with Apple Pay at checkout."))
         XCTAssertTrue(prompt.contains("## Dependency edges that changed"))
         XCTAssertTrue(prompt.contains("spm:Features/Checkout → spm:Networking"))
         XCTAssertTrue(prompt.contains("## Interface diff"))
-        XCTAssertTrue(prompt.contains("## Usage of the changed entities"))
+        XCTAssertTrue(prompt.contains("## Usage of the changed review items"))
         XCTAssertTrue(prompt.contains("## Changed code, riskiest first"))
         XCTAssertFalse(prompt.contains("<reply-template>"))
     }
 
     func testStructuralReviewValidation() throws {
-        let m = try plainModel()
+        let m = try plainReport()
         let sources = SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha)
-        let review = StructuralReview(model: m, sources: sources, reviewNotes: nil, description: nil)
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Cart.add(_:)" })
+        let review = StructuralReview(report: m, sources: sources, reviewNotes: nil, description: nil)
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Cart.add(_:)" })
         let edge = try XCTUnwrap(m.edges.first { $0.status == .added })
         let good = StructuralReview.Reply(findings: [
             .init(kind: "complexity", severity: "low", message: "The guard can't fail.", evidence: ["Every caller passes a positive quantity."],
-                  suggestion: "Remove it.", anchors: [.entity(e.id), .edge(edge.from, edge.to)]),
+                  suggestion: "Remove it.", anchors: [.reviewItem(e.id), .edge(edge.from, edge.to)]),
         ])
         XCTAssertEqual(review.validate(good), [])
         var bad = good
         bad.findings[0].kind = "style"
         bad.findings[0].evidence = []
-        bad.findings[0].anchors = [.entity("nope"), .edge(edge.to, "nowhere"), Anchor()]
+        bad.findings[0].anchors = [.reviewItem("nope"), .edge(edge.to, "nowhere"), Anchor()]
         let errors = review.validate(bad)
         XCTAssertTrue(errors.contains { $0.contains("kind of finding 1") })
         XCTAssertTrue(errors.contains { $0.contains("cites no evidence") })
-        XCTAssertTrue(errors.contains { $0.contains("unknown entity nope") })
+        XCTAssertTrue(errors.contains { $0.contains("unknown review item nope") })
         XCTAssertTrue(errors.contains { $0.contains("no edge") })
-        XCTAssertTrue(errors.contains { $0.contains("names no entity") })
+        XCTAssertTrue(errors.contains { $0.contains("names no review item") })
     }
 
     func testDescriptionFile() throws {
         let file = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-desc-\(UUID().uuidString).md")
         try "Add Apple Pay.\n".write(toFile: file, atomically: true, encoding: .utf8)
         defer { try? FileManager.default.removeItem(atPath: file) }
-        let d = try XCTUnwrap(try ChangeDescription.load(model: try plainModel(), file: file))
+        let d = try XCTUnwrap(try ChangeDescription.load(report: try plainReport(), file: file))
         XCTAssertEqual(d.source, "file")
         XCTAssertEqual(d.text, "Add Apple Pay.\n")
     }
 
     /// Fixtures/basic/annotated.json: the fixture annotated by the fake CLI, which the viewer tests read.
     func testAnnotatedSnapshot() throws {
-        var m = try annotate(try plainModel())
+        var m = try annotate(try plainReport())
         m.repo.root = "<repo>"
         m.repo.baseSha = "<base>"
         m.repo.headSha = "<head>"
-        let actual = try ChangeModelIO.encode(m)
+        let actual = try ChangeReportIO.encode(m)
         let snapshot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/basic/annotated.json")
         if ProcessInfo.processInfo.environment["UPDATE_SNAPSHOTS"] == "1" {
             try actual.write(to: snapshot)
@@ -184,29 +184,29 @@ final class AnnotatorTests: XCTestCase {
     }
 
     func testKeptContextIsRankedFromOne() throws {
-        let m = try annotate(try plainModel())
-        for (_, ctx) in Dictionary(grouping: m.regions.filter { $0.kind == "context" && $0.llm?.keep == true }, by: \.entity) {
+        let m = try annotate(try plainReport())
+        for (_, ctx) in Dictionary(grouping: m.regions.filter { $0.kind == "context" && $0.llm?.keep == true }, by: \.reviewItem) {
             XCTAssertEqual(ctx.compactMap(\.llm?.rank).sorted(), Array(1...ctx.count))
         }
     }
 
     func testSecondRunComesFromCache() throws {
-        let plain = try plainModel()
+        let plain = try plainReport()
         let first = try annotate(plain)
         // A command that doesn't exist proves the second run never calls the CLI.
         let second = try annotate(plain, command: "/nonexistent/fake-llm")
         XCTAssertEqual(second.llm?.cached, second.llm?.batches)
         XCTAssertEqual(second.regions, first.regions)
-        XCTAssertEqual(second.entities, first.entities)
+        XCTAssertEqual(second.reviewItems, first.reviewItems)
         XCTAssertEqual(second.components, first.components)
     }
 
     func testInvalidReplyKeepsDeterministicScores() throws {
         setenv("FAKE_LLM_MODE", "invalid", 1)
-        let m = try annotate(try plainModel())
+        let m = try annotate(try plainReport())
         XCTAssertEqual(m.llm?.failed, m.llm?.batches)
         XCTAssertTrue(m.regions.allSatisfy { $0.llm == nil })
-        XCTAssertTrue(m.entities.allSatisfy { $0.llm == nil })
+        XCTAssertTrue(m.reviewItems.allSatisfy { $0.llm == nil })
         XCTAssertTrue(m.warnings.contains { $0.kind == "llm-rejected" && $0.message.contains("outside 0...1") })
         XCTAssertEqual(m.llm?.review, "rejected")
         XCTAssertTrue(m.warnings.contains { $0.kind == "llm-rejected" && $0.message.contains("structural review") })
@@ -215,43 +215,43 @@ final class AnnotatorTests: XCTestCase {
 
     func testFailingCLIKeepsDeterministicScores() throws {
         setenv("FAKE_LLM_MODE", "fail", 1)
-        let m = try annotate(try plainModel())
+        let m = try annotate(try plainReport())
         XCTAssertEqual(m.llm?.failed, m.llm?.batches)
         XCTAssertTrue(m.regions.allSatisfy { $0.llm == nil })
     }
 
     func testProseAroundJSONIsAccepted() throws {
         setenv("FAKE_LLM_MODE", "prose", 1)
-        XCTAssertEqual(try annotate(try plainModel()).llm?.failed, 0)
+        XCTAssertEqual(try annotate(try plainReport()).llm?.failed, 0)
     }
 
     func testCodex() throws {
-        let m = try annotate(try plainModel(), tool: "codex")
+        let m = try annotate(try plainReport(), tool: "codex")
         XCTAssertEqual(m.llm?.tool, "codex")
         XCTAssertEqual(m.llm?.failed, 0)
         XCTAssertTrue(m.regions.contains { $0.llm?.risk != nil })
     }
 
     func testMissingCLISkipsTheAnnotator() throws {
-        let m = try annotate(try plainModel(), command: "/nonexistent/claude")
+        let m = try annotate(try plainReport(), command: "/nonexistent/claude")
         XCTAssertNil(m.llm)
         XCTAssertTrue(m.warnings.contains { $0.kind == "llm-unavailable" })
     }
 
     func testCacheInsideTheRepoIsRefused() throws {
-        let m = try plainModel()
+        let m = try plainReport()
         let opts = AnnotateOptions(command: Self.fake, cacheDir: Self.repo! + "/.reviewmap/cache")
         XCTAssertThrowsError(try Annotator.run(m, options: opts))
     }
 
     func testValidation() throws {
-        let m = try plainModel()
-        let builder = PromptBuilder(model: m, sources: SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha), reviewNotes: nil)
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Cart.add(_:)" })
+        let m = try plainReport()
+        let builder = PromptBuilder(report: m, sources: SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha), reviewNotes: nil)
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Cart.add(_:)" })
         let regions = builder.reviewRegions(e.id)
         let context = builder.contextRegions(e.id)
         XCTAssertFalse(regions.isEmpty)
-        let good = EntityReply(id: e.id, summary: "Adds an item without checking the quantity.",
+        let good = ReviewItemReply(id: e.id, summary: "Adds an item without checking the quantity.",
                                regions: regions.map { .init(id: $0.id, risk: 0.5) },
                                context: context.map { .init(id: $0.id, keep: false, rank: nil) })
         XCTAssertEqual(Annotator.validate(good, against: e, builder: builder), [])
@@ -280,24 +280,24 @@ final class AnnotatorTests: XCTestCase {
     }
 
     func testParseReply() throws {
-        let fenced = "Sure.\n```json\n{\"entities\": []}\n```\n"
+        let fenced = "Sure.\n```json\n{\"reviewItems\": []}\n```\n"
         guard case .success(let r) = Annotator.parseReply(fenced) else { return XCTFail("fenced reply not parsed") }
-        XCTAssertEqual(r.entities.count, 0)
+        XCTAssertEqual(r.reviewItems.count, 0)
         guard case .failure = Annotator.parseReply("no json here") else { return XCTFail("prose accepted") }
-        guard case .failure(let e) = Annotator.parseReply("{\"entities\": [{\"id\": \"a\"}]}") else { return XCTFail("incomplete accepted") }
+        guard case .failure(let e) = Annotator.parseReply("{\"reviewItems\": [{\"id\": \"a\"}]}") else { return XCTFail("incomplete accepted") }
         XCTAssertTrue(e.message.contains("missing"))
     }
 
     func testPromptCarriesTheFacts() throws {
-        let m = try plainModel()
-        let builder = PromptBuilder(model: m, sources: SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha), reviewNotes: "Keep carts decodable.")
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Cart.add(_:)" })
+        let m = try plainReport()
+        let builder = PromptBuilder(report: m, sources: SourceReader(git: GitRepo(root: Self.repo!), baseSha: m.repo.baseSha, headSha: m.repo.headSha), reviewNotes: "Keep carts decodable.")
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Cart.add(_:)" })
         let comp = try XCTUnwrap(m.components.first { $0.id == e.component })
-        let block = builder.entityBlock(e)
+        let block = builder.reviewItemBlock(e)
         XCTAssertTrue(block.contains("Head code"))
         XCTAssertTrue(block.contains("Base code"))
         XCTAssertTrue(block.contains("guard"), "the removed guard is in the base code")
-        let batch = Batch(component: comp, entities: [e], blocks: [block], wantsSummary: true, part: 1, parts: 1, entityKeys: [:], componentKey: "")
+        let batch = Batch(component: comp, reviewItems: [e], blocks: [block], wantsSummary: true, part: 1, parts: 1, reviewItemKeys: [:], componentKey: "")
         let prompt = builder.prompt(batch)
         XCTAssertTrue(prompt.contains("Keep carts decodable."))
         XCTAssertTrue(prompt.contains("<reply-template>"))
@@ -305,6 +305,6 @@ final class AnnotatorTests: XCTestCase {
         let template = builder.template(batch).replacingOccurrences(of: "\"risk\": null", with: "\"risk\": 0.5")
             .replacingOccurrences(of: "\"keep\": null", with: "\"keep\": false")
         guard case .success(let r) = Annotator.parseReply(template) else { return XCTFail("template is not valid JSON") }
-        XCTAssertEqual(r.entities.map(\.id), [e.id])
+        XCTAssertEqual(r.reviewItems.map(\.id), [e.id])
     }
 }

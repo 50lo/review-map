@@ -6,7 +6,7 @@ import Foundation
 // existing declarations with names like the new ones, and the deterministic findings. It asks whether
 // the shape of the change matches its intent, and flags misplaced responsibilities, gaps, duplicates,
 // and complexity the usage data shows isn't needed. Every finding cites its evidence and is anchored
-// to a component, an edge, or an entity, so the viewer can show it on the map.
+// to a component, an edge, or a review item, so the viewer can show it on the map.
 
 /// What the change says it does: a PR's title and body, or its commit messages.
 struct ChangeDescription {
@@ -16,29 +16,29 @@ struct ChangeDescription {
 
     static let maxChars = 8_000
 
-    static func load(model: ChangeModel, file: String?) throws -> ChangeDescription? {
+    static func load(report: ChangeReport, file: String?) throws -> ChangeDescription? {
         if let file {
             let text = file == "-" ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
                 : try String(contentsOfFile: file, encoding: .utf8)
             return ChangeDescription(text: String(text.prefix(maxChars)), source: "file")
         }
-        let root = model.repo.root
+        let root = report.repo.root
         // gh knows the PR of a branch; a detached head or a sha has none.
-        if !model.repo.head.isEmpty, model.repo.head != "HEAD", model.repo.head != model.repo.headSha,
-           let r = try? CLIRunner.exec(["gh", "pr", "view", model.repo.head, "--json", "title,body"], stdin: Data(), cwd: root, timeout: 20),
+        if !report.repo.head.isEmpty, report.repo.head != "HEAD", report.repo.head != report.repo.headSha,
+           let r = try? CLIRunner.exec(["gh", "pr", "view", report.repo.head, "--json", "title,body"], stdin: Data(), cwd: root, timeout: 20),
            r.status == 0, !r.timedOut,
            let obj = try? JSONSerialization.jsonObject(with: r.out) as? [String: Any], let title = obj["title"] as? String {
             let body = (obj["body"] as? String) ?? ""
             return ChangeDescription(text: String((title + "\n\n" + body).prefix(maxChars)), source: "pr")
         }
-        let log = (try? Shell.string(["git", "-C", root, "log", "--format=%s%n%n%b", "\(model.repo.baseSha)..\(model.repo.headSha)"])) ?? ""
+        let log = (try? Shell.string(["git", "-C", root, "log", "--format=%s%n%n%b", "\(report.repo.baseSha)..\(report.repo.headSha)"])) ?? ""
         let text = log.trimmingCharacters(in: .whitespacesAndNewlines)
         return text.isEmpty ? nil : ChangeDescription(text: String(text.prefix(maxChars)), source: "commits")
     }
 }
 
 struct StructuralReview: @unchecked Sendable {
-    let model: ChangeModel
+    let report: ChangeReport
     let sources: SourceReader
     let reviewNotes: String?
     let description: ChangeDescription?
@@ -67,26 +67,26 @@ struct StructuralReview: @unchecked Sendable {
     }
 
     private var componentById: [String: Component] {
-        Dictionary(model.components.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        Dictionary(report.components.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
     private func name(_ id: String) -> String { componentById[id]?.name ?? id }
 
-    /// Entities the review looks at: not cosmetic, test, or generated.
-    private var reviewed: [Entity] {
-        let tests = Set(model.components.filter(\.isTest).map(\.id))
-        return model.entities.filter { e in
+    /// Review items the review looks at: not cosmetic, test, or generated.
+    private var reviewed: [ReviewItem] {
+        let tests = Set(report.components.filter(\.isTest).map(\.id))
+        return report.reviewItems.filter { e in
             e.change != .cosmetic && !tests.contains(e.component) && !e.tags.contains("test") && !e.tags.contains("generated")
         }
     }
 
-    var isEmpty: Bool { reviewed.isEmpty && !model.edges.contains { $0.status != .unchanged } }
+    var isEmpty: Bool { reviewed.isEmpty && !report.edges.contains { $0.status != .unchanged } }
 
     // MARK: Prompt
 
     func prompt() -> String? {
         if isEmpty { return nil }
-        let languages = (model.analyzer.languages ?? ["swift"]).map(Languages.displayName).joined(separator: " and ")
+        let languages = (report.analyzer.languages ?? ["swift"]).map(Languages.displayName).joined(separator: " and ")
         var out = """
         You are reviewing the structure of a \(languages.isEmpty ? "code" : languages) change, not its lines. CI review agents \
         already read the diff. You have what they don't: both sides of the whole repo reduced to a dependency graph, \
@@ -113,7 +113,7 @@ struct StructuralReview: @unchecked Sendable {
         - Report only what the facts below support. Every finding cites its evidence from them, such as "the only \
         caller is @MainActor, so this lock guards nothing" or "3 callers, all pass a non-nil value".
         - Say what to remove, simplify, move, or add in "suggestion".
-        - Anchor each finding to 1 to 3 things it is about, using ids exactly as listed: {"entity": "<entity id>"}, \
+        - Anchor each finding to 1 to 3 things it is about, using ids exactly as listed: {"reviewItem": "<review item id>"}, \
         {"component": "<component id>"}, or {"from": "<component id>", "to": "<component id>"} for a dependency edge.
         - Don't repeat the deterministic findings listed below; build on them only when you add something.
         - At most \(Self.maxFindings) findings, most important first. Fewer is better than weak ones; an empty list is fine.
@@ -122,7 +122,7 @@ struct StructuralReview: @unchecked Sendable {
         - message: one sentence, at most 200 characters. Each evidence item and the suggestion: one line, at most 300.
 
         Reply with only a JSON object, no prose and no code fences:
-        {"findings": [{"kind": "complexity", "severity": "medium", "message": "...", "evidence": ["..."], "suggestion": "...", "anchors": [{"entity": "..."}]}]}
+        {"findings": [{"kind": "complexity", "severity": "medium", "message": "...", "evidence": ["..."], "suggestion": "...", "anchors": [{"reviewItem": "..."}]}]}
 
         """
         if let d = description {
@@ -138,8 +138,8 @@ struct StructuralReview: @unchecked Sendable {
     }
 
     private func components() -> String {
-        let changed = model.components.filter { c in
-            c.kind != .external && (c.changedEntities > 0 || c.status != nil || model.edges.contains { $0.status != .unchanged && ($0.from == c.id || $0.to == c.id) })
+        let changed = report.components.filter { c in
+            c.kind != .external && (c.changedReviewItems > 0 || c.status != nil || report.edges.contains { $0.status != .unchanged && ($0.from == c.id || $0.to == c.id) })
         }
         guard !changed.isEmpty else { return "" }
         var out = "\n## Components\n"
@@ -149,14 +149,14 @@ struct StructuralReview: @unchecked Sendable {
             if c.isTest { facts.append("tests") }
             if let p = c.parent { facts.append("part of \(name(p))") }
             if let s = c.status { facts.append(s) }
-            facts.append("\(c.changedEntities) changed entities")
+            facts.append("\(c.changedReviewItems) changed review items")
             out += "- \(c.id) \"\(c.name)\": \(facts.joined(separator: ", "))\n"
         }
         return out
     }
 
     private func edgeDiff() -> String {
-        let changed = model.edges.filter { $0.status != .unchanged }
+        let changed = report.edges.filter { $0.status != .unchanged }
         guard !changed.isEmpty else { return "" }
         var out = "\n## Dependency edges that changed (from uses to)\n"
         for e in changed.prefix(80) {
@@ -191,10 +191,10 @@ struct StructuralReview: @unchecked Sendable {
 
     private func usage() -> String {
         // Callers at head only; uses that exist only at base are callers the change removed.
-        let headUses = { (e: Entity) in e.usedBy.filter { $0.side != .base } }
+        let headUses = { (e: ReviewItem) in e.usedBy.filter { $0.side != .base } }
         let used = reviewed.filter { !headUses($0).isEmpty || !$0.dependsOn.isEmpty }
         let internalOnly = reviewed.filter { headUses($0).isEmpty && !$0.isInterface }
-        var out = "\n## Usage of the changed entities\n"
+        var out = "\n## Usage of the changed review items\n"
         out += "Used by lists callers in other components at head, with the isolation the call runs in when known.\n"
         for e in used.prefix(100) {
             out += "- \(e.id)"
@@ -227,7 +227,7 @@ struct StructuralReview: @unchecked Sendable {
     private func similar() -> String {
         let items = reviewed.filter { !($0.similar ?? []).isEmpty }
         guard !items.isEmpty else { return "" }
-        var out = "\n## Similar existing declarations (for added entities)\n"
+        var out = "\n## Similar existing declarations (for added review items)\n"
         for e in items.prefix(60) {
             out += "- \(e.id) resembles " + e.similar!.map { "\($0.symbol) in \(name($0.component)) (\($0.file):\($0.line))" }.joined(separator: "; ") + "\n"
         }
@@ -235,7 +235,7 @@ struct StructuralReview: @unchecked Sendable {
     }
 
     private func checks() -> String {
-        let found = model.findings.filter { $0.source == "check" }
+        let found = report.findings.filter { $0.source == "check" }
         guard !found.isEmpty else { return "\n## Deterministic findings\nNone.\n" }
         var out = "\n## Deterministic findings (already reported)\n"
         for f in found.prefix(60) { out += "- \(f.kind): \(f.message)\n" }
@@ -245,7 +245,7 @@ struct StructuralReview: @unchecked Sendable {
     /// The changed code itself, riskiest regions first, with a little context, until the budget runs out.
     private func code() -> String {
         let ids = Set(reviewed.map(\.id))
-        let regions = model.regions.filter { $0.kind != "context" && ids.contains($0.entity) }
+        let regions = report.regions.filter { $0.kind != "context" && ids.contains($0.reviewItem) }
             .sorted { ($0.risk, $1.id) > ($1.risk, $0.id) }
         guard !regions.isEmpty else { return "" }
         var out = "\n## Changed code, riskiest first\n"
@@ -255,7 +255,7 @@ struct StructuralReview: @unchecked Sendable {
             let lines = sources.lines(r.side, r.file)
             let lo = max(1, r.startLine - 2), hi = min(lines.count, r.endLine + 2, r.startLine + 80)
             guard lo <= hi else { continue }
-            var block = "\n### \(r.entity) (\(r.kind == "removed" ? "removed from base" : "head"), \(r.file):\(r.startLine)-\(r.endLine))\n"
+            var block = "\n### \(r.reviewItem) (\(r.kind == "removed" ? "removed from base" : "head"), \(r.file):\(r.startLine)-\(r.endLine))\n"
             for n in lo...hi { block += "    \(n)| \(lines[n - 1])\n" }
             if used + block.count > Self.maxCodeChars { left += 1; continue }
             out += block
@@ -293,9 +293,9 @@ struct StructuralReview: @unchecked Sendable {
     func validate(_ reply: Reply) -> [String] {
         var errors: [String] = []
         if reply.findings.count > Self.maxFindings + 3 { errors.append("more than \(Self.maxFindings) findings") }
-        let components = Set(model.components.map(\.id))
-        let entities = Set(model.entities.map(\.id))
-        let edges = Set(model.edges.map { "\($0.from)\u{1}\($0.to)" })
+        let components = Set(report.components.map(\.id))
+        let reviewItems = Set(report.reviewItems.map(\.id))
+        let edges = Set(report.edges.map { "\($0.from)\u{1}\($0.to)" })
         for (i, f) in reply.findings.enumerated() {
             let at = "finding \(i + 1)"
             if !Self.kinds.contains(f.kind) { errors.append("kind of \(at) must be one of \(Self.kinds.joined(separator: ", "))") }
@@ -306,14 +306,14 @@ struct StructuralReview: @unchecked Sendable {
             if let s = f.suggestion, !s.trimmingCharacters(in: .whitespaces).isEmpty { errors += Annotator.checkText(s, "suggestion of \(at)", max: 400) }
             if f.anchors.isEmpty { errors.append("\(at) has no anchor") }
             for a in f.anchors {
-                if let id = a.entity {
-                    if !entities.contains(id) { errors.append("unknown entity \(id) in \(at)") }
+                if let id = a.reviewItem {
+                    if !reviewItems.contains(id) { errors.append("unknown review item \(id) in \(at)") }
                 } else if let id = a.component {
                     if !components.contains(id) { errors.append("unknown component \(id) in \(at)") }
                 } else if let from = a.from, let to = a.to {
                     if !edges.contains("\(from)\u{1}\(to)") { errors.append("no edge \(from) → \(to) in \(at)") }
                 } else {
-                    errors.append("an anchor of \(at) names no entity, component, or edge")
+                    errors.append("an anchor of \(at) names no review item, component, or edge")
                 }
             }
         }

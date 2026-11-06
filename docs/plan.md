@@ -42,7 +42,7 @@ If the map still glitches after these, replace React Flow with Cytoscape.js, whi
 
 ### 2. Language-neutral core
 
-The core stays in Swift: git export, diffing, components, regions, risk, the LLM layer, and the model. Each language plugs in:
+The core stays in Swift: git export, diffing, components, regions, risk, the LLM layer, and the change report. Each language plugs in:
 
 - **Parsing**: tree-sitter for TypeScript, Rust, and Go, through its C library. Swift keeps SwiftSyntax, which its contract flags depend on.
 - **Components**: Cargo workspace members, Go packages, npm workspaces or `tsconfig` projects, alongside SPM, Xcode, and Bazel targets.
@@ -72,9 +72,9 @@ Review Map has both sides of the whole repo, the dependency graph, and usage; CI
 - New public API with no callers outside tests.
 - Code left unused after its callers were removed.
 - A changed protocol or interface whose conformers weren't all updated.
-- Changed entities that no test references.
+- Changed review items that no test references.
 
-**One LLM pass per PR**, replacing the per-fragment notes and removal candidates; entity and component summaries stay. Its input is the PR description, the edge diff with sample references, the interface diff, usage (callers, their count and isolation, the types at call sites), and existing declarations with similar names. It asks whether the shape of the change matches its intent, whether responsibilities sit in the right place, what's missing, and what's duplicated, and it flags unnecessary complexity:
+**One LLM pass per PR**, replacing the per-fragment notes and removal candidates; review item and component summaries stay. Its input is the PR description, the edge diff with sample references, the interface diff, usage (callers, their count and isolation, the types at call sites), and existing declarations with similar names. It asks whether the shape of the change matches its intent, whether responsibilities sit in the right place, what's missing, and what's duplicated, and it flags unnecessary complexity:
 
 - Checks that can't fail: nil checks, guards, and validation for states the types or every caller already rule out, and catch blocks for errors nothing throws.
 - Concurrency protection for impossible scenarios: locks, actors, queues, or atomics around state only one isolation domain touches.
@@ -83,7 +83,7 @@ Review Map has both sides of the whole repo, the dependency graph, and usage; CI
 - Retries, fallbacks, and timeouts for failures that can't happen on that path.
 - Re-implementations of helpers the repo already has.
 
-Each finding cites its evidence from the usage data (for example, "the only caller is `@MainActor`, so this lock guards nothing"), says what to remove or simplify, and is anchored to a component, an edge, or an entity, so it shows on the map.
+Each finding cites its evidence from the usage data (for example, "the only caller is `@MainActor`, so this lock guards nothing"), says what to remove or simplify, and is anchored to a component, an edge, or a review item, so it shows on the map.
 
 ### Adding a language
 
@@ -94,7 +94,7 @@ Go, Rust, and Kotlin each go through the same stages, in this order:
 3. **Contracts and risk**: contract flags, settings flags, and a risk table written as tree-sitter queries.
 4. **Structural review**: how the language declares conformance, and isolation where it has one.
 5. **Index mode**: the language's SCIP indexer, cached per commit.
-6. **Viewer**: icon, highlighting, entity kind names, and flag weights.
+6. **Viewer**: icon, highlighting, review item kind names, and flag weights.
 7. **Real use**: a fixture pair, and a run on the last 40 commits of a real repo.
 
 Two pieces of shared work come before Go:

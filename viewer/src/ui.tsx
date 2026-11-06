@@ -2,7 +2,7 @@ import { useState } from "react";
 import { flagLabel } from "./graph";
 import { signatureSegments } from "./diff";
 import { setReviewed, useReview } from "./review";
-import type { Entity } from "./types";
+import type { ReviewItem } from "./types";
 
 export const Chips = ({ flags }: { flags: string[] }) =>
   flags.length ? (
@@ -23,7 +23,7 @@ export const ChangeTag = ({ change }: { change: string }) => <span className={`c
  * The head signature with changed tokens highlighted. The base signature is shown on hover, or
  * on tap where there is no hover, never side by side.
  */
-export function Signature({ e }: { e: Entity }) {
+export function Signature({ e }: { e: ReviewItem }) {
   const [showBase, setShowBase] = useState(false);
   const { base, head } = e.signature;
   if (!head) return base ? <div className="sig mono removed-sig">{base}</div> : null;
@@ -58,7 +58,7 @@ export function Signature({ e }: { e: Entity }) {
   );
 }
 
-/** The reviewed checkbox of an entity. */
+/** The reviewed checkbox of a review item. */
 export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) {
   const review = useReview();
   const on = !!review.reviewed[id];
@@ -70,7 +70,7 @@ export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) 
   );
 }
 
-/** The LLM's one-line behavior summary of an entity or component. */
+/** The LLM's one-line behavior summary of a review item or component. */
 export const LLMSummary = ({ text }: { text: string }) => (
   <div className="llm-text llm-summary" title="Summary written by the LLM">
     {text}

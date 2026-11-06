@@ -4,15 +4,15 @@ import XCTest
 
 /// Go: the parser on its own, and the analyzer on Fixtures/go, a module with a base and a head tree.
 final class GoTests: XCTestCase {
-    func model() throws -> ChangeModel { try Fixture.model("go") }
+    func report() throws -> ChangeReport { try Fixture.report("go") }
 
-    func entity(_ m: ChangeModel, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
-        try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName }, "no entity \(qualifiedName)", file: file, line: line)
+    func reviewItem(_ m: ChangeReport, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
+        try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == qualifiedName }, "no review item \(qualifiedName)", file: file, line: line)
     }
 
-    func regions(_ m: ChangeModel, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
-        let e = try entity(m, qualifiedName)
-        return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
+    func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
+        let e = try reviewItem(m, qualifiedName)
+        return m.regions.filter { $0.reviewItem == e.id && (kind == nil || $0.kind == kind) }
     }
 
     // MARK: Parsing
@@ -57,7 +57,7 @@ final class GoTests: XCTestCase {
             """
         let file = GoExtractor.parse(path: "shop/cart.go", source: source)
         let byName = Dictionary(grouping: file.decls, by: \.qualifiedName)
-        func decl(_ q: String, line: UInt = #line) -> Decl? {
+        func decl(_ q: String, line: UInt = #line) -> Declaration? {
             let d = byName[q]?.first
             XCTAssertNotNil(d, "no \(q)", line: line)
             return d
@@ -313,7 +313,7 @@ final class GoTests: XCTestCase {
     }
 
     func testComponents() throws {
-        let m = try model()
+        let m = try report()
         XCTAssertEqual(m.analyzer.languages, ["go"])
         let ids = Set(m.components.map(\.id))
         XCTAssertEqual(ids, ["go:example.com/shop", "go:example.com/shop/api", "go:example.com/shop/cart", "go:example.com/shop/cart:tests",
@@ -322,11 +322,11 @@ final class GoTests: XCTestCase {
         XCTAssertEqual(m.components.first { $0.id == "go:example.com/shop/cart:tests" }?.isTest, true)
         XCTAssertEqual(m.components.first { $0.id == "go:example.com/shop/report" }?.status, "added")
         XCTAssertTrue(m.warnings.isEmpty, "standard library imports aren't warnings: \(m.warnings)")
-        XCTAssertEqual(try entity(m, "Kind").tags, ["generated"], "a `Code generated` header")
+        XCTAssertEqual(try reviewItem(m, "Kind").tags, ["generated"], "a `Code generated` header")
     }
 
     func testEdges() throws {
-        let m = try model()
+        let m = try report()
         func edge(_ from: String, _ to: String) -> Edge? { m.edges.first { $0.from == "go:example.com/shop/\(from)" && $0.to == to } }
         XCTAssertEqual(edge("api", "go:example.com/shop/cart")?.symbolsRemoved, ["Describe"])
         XCTAssertEqual(edge("api", "go:example.com/shop/money")?.refs.map(\.symbol).sorted(), ["Format", "import example.com/shop/money"],
@@ -342,33 +342,33 @@ final class GoTests: XCTestCase {
     }
 
     func testChanges() throws {
-        let m = try model()
-        XCTAssertEqual(try entity(m, "Cart.Total()").changes, [.signature, .body])
-        XCTAssertEqual(try entity(m, "Item.SKU").changes, [.modifiers])
-        XCTAssertEqual(try entity(m, "Cart.Note").change, .added)
-        XCTAssertEqual(try entity(m, "Describe()").change, .removed)
-        XCTAssertEqual(try entity(m, "Describe()").usedBy.map(\.symbol), ["Handler.ServeHTTP()"])
-        XCTAssertFalse(try entity(m, "notify()").isInterface)
+        let m = try report()
+        XCTAssertEqual(try reviewItem(m, "Cart.Total()").changes, [.signature, .body])
+        XCTAssertEqual(try reviewItem(m, "Item.SKU").changes, [.modifiers])
+        XCTAssertEqual(try reviewItem(m, "Cart.Note").change, .added)
+        XCTAssertEqual(try reviewItem(m, "Describe()").change, .removed)
+        XCTAssertEqual(try reviewItem(m, "Describe()").usedBy.map(\.symbol), ["Handler.ServeHTTP()"])
+        XCTAssertFalse(try reviewItem(m, "notify()").isInterface)
     }
 
     func testFlags() throws {
-        let m = try model()
-        XCTAssertEqual(try entity(m, "Store.Clear()").contractFlags, ["go:interface-method-added"])
-        XCTAssertEqual(try entity(m, "Store").contractFlags, ["go:interface-method-added"])
-        XCTAssertEqual(try entity(m, "Item.SKU").contractFlags, ["go:field-tag-changed:json"])
-        XCTAssertEqual(try entity(m, "Cart.Note").contractFlags, ["go:field-added"])
-        XCTAssertEqual(try entity(m, "Cart").contractFlags, ["go:field-added"])
-        XCTAssertEqual(try entity(m, "Cart.Total()").contractFlags, ["go:api-signature-changed"])
-        XCTAssertEqual(try entity(m, "Describe()").contractFlags, ["go:unexported"])
-        XCTAssertEqual(try entity(m, "describe()").contractFlags, [])
-        XCTAssertEqual(try entity(m, "Summary()").contractFlags, ["go:api-added"])
-        let settings = try entity(m, "example.com/shop build settings")
+        let m = try report()
+        XCTAssertEqual(try reviewItem(m, "Store.Clear()").contractFlags, ["go:interface-method-added"])
+        XCTAssertEqual(try reviewItem(m, "Store").contractFlags, ["go:interface-method-added"])
+        XCTAssertEqual(try reviewItem(m, "Item.SKU").contractFlags, ["go:field-tag-changed:json"])
+        XCTAssertEqual(try reviewItem(m, "Cart.Note").contractFlags, ["go:field-added"])
+        XCTAssertEqual(try reviewItem(m, "Cart").contractFlags, ["go:field-added"])
+        XCTAssertEqual(try reviewItem(m, "Cart.Total()").contractFlags, ["go:api-signature-changed"])
+        XCTAssertEqual(try reviewItem(m, "Describe()").contractFlags, ["go:unexported"])
+        XCTAssertEqual(try reviewItem(m, "describe()").contractFlags, [])
+        XCTAssertEqual(try reviewItem(m, "Summary()").contractFlags, ["go:api-added"])
+        let settings = try reviewItem(m, "example.com/shop build settings")
         XCTAssertEqual(settings.contractFlags, ["go:go-version-changed", "go:toolchain-changed"])
         XCTAssertEqual(settings.location.file, "go.mod")
     }
 
     func testRegions() throws {
-        let m = try model()
+        let m = try report()
         let add = try XCTUnwrap(try regions(m, "Cart.Add()", kind: "review").first)
         XCTAssertEqual(add.reasons, ["concurrency: go", "new ignored error"])
         let total = try regions(m, "Cart.Total()", kind: "review")
@@ -381,11 +381,11 @@ final class GoTests: XCTestCase {
     }
 
     func testConformers() throws {
-        let m = try model()
+        let m = try report()
         let findings = m.findings.filter { $0.kind == "conformers" }
         XCTAssertEqual(findings.map(\.message), ["New requirement Store.Clear(): 1 conformer wasn't updated."])
         XCTAssertEqual(findings.first?.evidence.first?.hasPrefix("No Clear in File,"), true, "Memory implements it; File, in another package, doesn't")
-        XCTAssertEqual(findings.first?.anchors.map { $0.component ?? $0.entity ?? "" },
+        XCTAssertEqual(findings.first?.anchors.map { $0.component ?? $0.reviewItem ?? "" },
                        ["go:example.com/shop/cart::Store.Clear()", "go:example.com/shop/store"])
     }
 }
