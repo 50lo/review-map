@@ -72,7 +72,7 @@ not:
 
 ## Region
 
-A section of code shown to help review an item. It can show changed code, deleted code, or surrounding code that helps explain the change, such as a caller or a definition.
+A fragment of code that the viewer shows for a review item. It can show changed code, deleted code, or surrounding code that helps explain the change, such as a caller or a definition.
 
 ```yaml
 agreed: proposed
