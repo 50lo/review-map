@@ -17,6 +17,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # Go index mode runs scip-go, which it installs with the go tool.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: false
       # IndexStoreDB's C++ needs the toolchain's dispatch and Block headers, which aren't on the default include path on Linux.
       - name: Build
         run: swift build -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block

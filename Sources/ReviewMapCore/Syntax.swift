@@ -77,6 +77,8 @@ struct ParsedFile {
     var memberRefs: [NameRef]
     /// Risk-relevant constructs per line (crash points, checks, branches, concurrency).
     var marks: [Int: [LineMark]] = [:]
+    /// The file says it is generated (Go's `// Code generated ... DO NOT EDIT.`), on top of the generated patterns.
+    var isGenerated = false
 
     /// Innermost declaration containing `line`.
     func enclosingDecl(line: Int) -> Decl? {

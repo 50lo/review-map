@@ -2,8 +2,10 @@ import type { LanguageInput } from "shiki/core";
 import swiftGrammar from "shiki/langs/swift.mjs";
 import typescriptGrammar from "shiki/langs/typescript.mjs";
 import tsxGrammar from "shiki/langs/tsx.mjs";
+import goGrammar from "shiki/langs/go.mjs";
 import swiftIcon from "./icons/swift.svg";
 import typescriptIcon from "./icons/typescript.svg";
+import goIcon from "./icons/go.svg";
 import type { ChangeModel, Entity } from "./types";
 
 interface LanguageDefinition {
@@ -42,6 +44,19 @@ export const LANGUAGES = [
     kinds: {
       protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function",
       var: (entity: Entity) => entity.qualifiedName.includes(".") ? "property" : "variable",
+    },
+  },
+  {
+    id: "go",
+    name: "Go",
+    extensions: { go: { language: "go", grammar: goGrammar } },
+    manifests: [/(?:^|\/)go\.(?:mod|sum|work)$/],
+    componentKinds: ["goPackage"],
+    icon: goIcon,
+    kinds: {
+      protocol: "interface", typealias: "type",
+      func: (entity: Entity) => entity.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
+      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "field" : "variable",
     },
   },
 ] as const satisfies readonly LanguageDefinition[];

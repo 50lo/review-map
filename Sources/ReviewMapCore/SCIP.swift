@@ -188,6 +188,14 @@ enum SCIP {
                 var packed = try r.message()
                 while !packed.atEnd { range.append(Int32(truncatingIfNeeded: try packed.varint())) }
             case (1, 0): range.append(Int32(truncatingIfNeeded: try r.varint()))
+            case (8, 2):
+                // A typed range (scip-go 0.2): start line, start character, end... The start line is 0 when left out.
+                var typed = try r.message()
+                var line: Int32 = 0
+                while let (f, w) = try typed.next() {
+                    if (f, w) == (1, 0) { line = Int32(truncatingIfNeeded: try typed.varint()) } else { try typed.skip(w) }
+                }
+                range = [line]
             case (2, 2): symbol = try r.string()
             case (3, 0): roles = Int32(truncatingIfNeeded: try r.varint())
             default: try r.skip(wire)

@@ -18,6 +18,7 @@ let package = Package(
         // Tree-sitter's C library and the grammars of the languages parsed with it.
         .package(url: "https://github.com/tree-sitter/tree-sitter.git", exact: "0.25.10"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-typescript.git", exact: "0.23.2"),
+        .package(url: "https://github.com/tree-sitter/tree-sitter-go.git", exact: "0.25.0"),
     ],
     targets: [
         .executableTarget(
@@ -38,6 +39,7 @@ let package = Package(
                 .product(name: "IndexStoreDB", package: "indexstore-db"),
                 .product(name: "TreeSitter", package: "tree-sitter"),
                 .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
+                .product(name: "TreeSitterGo", package: "tree-sitter-go"),
             ]
         ),
         .testTarget(

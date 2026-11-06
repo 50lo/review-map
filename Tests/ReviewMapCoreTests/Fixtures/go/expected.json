@@ -1,0 +1,1763 @@
+{
+  "analyzer" : {
+    "languages" : [
+      "go"
+    ],
+    "resolution" : "name-based",
+    "version" : "0.1.0"
+  },
+  "components" : [
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "ext:github.com/google/uuid",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "external",
+      "name" : "github.com/google/uuid",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.013,
+      "changedEntities" : 0,
+      "id" : "ext:golang.org/x/text",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "external",
+      "name" : "golang.org/x/text",
+      "paths" : [
+
+      ],
+      "status" : "added"
+    },
+    {
+      "changeScore" : 0.142,
+      "changedEntities" : 1,
+      "id" : "go:example.com/shop",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop",
+      "name" : "example.com/shop",
+      "paths" : [
+
+      ]
+    },
+    {
+      "changeScore" : 0.052,
+      "changedEntities" : 1,
+      "id" : "go:example.com/shop/api",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/api",
+      "name" : "example.com/shop/api",
+      "paths" : [
+        "api"
+      ]
+    },
+    {
+      "changeScore" : 1,
+      "changedEntities" : 13,
+      "id" : "go:example.com/shop/cart",
+      "interfaceChanges" : 9,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/cart",
+      "name" : "example.com/shop/cart",
+      "paths" : [
+        "cart"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "go:example.com/shop/cart:tests",
+      "interfaceChanges" : 0,
+      "isTest" : true,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/cart",
+      "name" : "example.com/shop/cart tests",
+      "paths" : [
+        "cart"
+      ]
+    },
+    {
+      "changeScore" : 0,
+      "changedEntities" : 0,
+      "id" : "go:example.com/shop/money",
+      "interfaceChanges" : 0,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/money",
+      "name" : "example.com/shop/money",
+      "paths" : [
+        "money"
+      ]
+    },
+    {
+      "changeScore" : 0.168,
+      "changedEntities" : 1,
+      "id" : "go:example.com/shop/report",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/report",
+      "name" : "example.com/shop/report",
+      "paths" : [
+        "report"
+      ],
+      "status" : "added"
+    },
+    {
+      "changeScore" : 0.116,
+      "changedEntities" : 1,
+      "id" : "go:example.com/shop/store",
+      "interfaceChanges" : 1,
+      "isTest" : false,
+      "kind" : "goPackage",
+      "module" : "example.com/shop/store",
+      "name" : "example.com/shop/store",
+      "paths" : [
+        "store"
+      ]
+    }
+  ],
+  "edges" : [
+    {
+      "from" : "go:example.com/shop/api",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "api/handler.go",
+          "line" : 21,
+          "side" : "base",
+          "symbol" : "Describe"
+        },
+        {
+          "file" : "api/handler.go",
+          "line" : 7,
+          "side" : "head",
+          "symbol" : "import example.com/shop/cart"
+        },
+        {
+          "file" : "api/handler.go",
+          "line" : 12,
+          "side" : "head",
+          "symbol" : "Store"
+        }
+      ],
+      "status" : "changed",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+        "Describe"
+      ],
+      "to" : "go:example.com/shop/cart"
+    },
+    {
+      "from" : "go:example.com/shop/api",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "api/handler.go",
+          "line" : 8,
+          "side" : "head",
+          "symbol" : "import example.com/shop/money"
+        },
+        {
+          "file" : "api/handler.go",
+          "line" : 21,
+          "side" : "head",
+          "symbol" : "Format"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "go:example.com/shop/money"
+    },
+    {
+      "from" : "go:example.com/shop/cart",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "cart/cart.go",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "import github.com/google/uuid"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "ext:github.com/google/uuid"
+    },
+    {
+      "from" : "go:example.com/shop/cart:tests",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "cart/cart_test.go",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "New"
+        },
+        {
+          "file" : "cart/cart_test.go",
+          "line" : 7,
+          "side" : "head",
+          "symbol" : "Item"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "go:example.com/shop/cart"
+    },
+    {
+      "from" : "go:example.com/shop/report",
+      "refCount" : 1,
+      "refs" : [
+        {
+          "file" : "report/report.go",
+          "line" : 7,
+          "side" : "head",
+          "symbol" : "import golang.org/x/text/language"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "import golang.org/x/text/language"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "ext:golang.org/x/text"
+    },
+    {
+      "from" : "go:example.com/shop/report",
+      "refCount" : 2,
+      "refs" : [
+        {
+          "file" : "report/report.go",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "import example.com/shop/cart"
+        },
+        {
+          "file" : "report/report.go",
+          "line" : 12,
+          "side" : "head",
+          "symbol" : "Cart"
+        }
+      ],
+      "status" : "added",
+      "symbolsAdded" : [
+        "Cart",
+        "import example.com/shop/cart"
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "go:example.com/shop/cart"
+    },
+    {
+      "from" : "go:example.com/shop/store",
+      "refCount" : 8,
+      "refs" : [
+        {
+          "file" : "store/file.go",
+          "line" : 7,
+          "side" : "head",
+          "symbol" : "import example.com/shop/cart"
+        },
+        {
+          "file" : "store/file.go",
+          "line" : 15,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "store/file.go",
+          "line" : 20,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "store/file.go",
+          "line" : 25,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "store/memory.go",
+          "line" : 6,
+          "side" : "head",
+          "symbol" : "import example.com/shop/cart"
+        },
+        {
+          "file" : "store/memory.go",
+          "line" : 12,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "store/memory.go",
+          "line" : 15,
+          "side" : "head",
+          "symbol" : "Cart"
+        },
+        {
+          "file" : "store/memory.go",
+          "line" : 21,
+          "side" : "head",
+          "symbol" : "Cart"
+        }
+      ],
+      "status" : "unchanged",
+      "symbolsAdded" : [
+
+      ],
+      "symbolsRemoved" : [
+
+      ],
+      "to" : "go:example.com/shop/cart"
+    }
+  ],
+  "entities" : [
+    {
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "go:example.com/shop",
+      "contractFlags" : [
+        "go:go-version-changed",
+        "go:toolchain-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop::build settings",
+      "isInterface" : true,
+      "kind" : "target",
+      "location" : {
+        "endLine" : 1,
+        "file" : "go.mod",
+        "side" : "head",
+        "startLine" : 1
+      },
+      "qualifiedName" : "example.com/shop build settings",
+      "signature" : {
+        "base" : "go.mod go = 1.22",
+        "head" : "go.mod go = 1.23\ngo.mod toolchain = go1.23.2"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 22,
+        "file" : "api/handler.go",
+        "side" : "base",
+        "startLine" : 15
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "go:example.com/shop/api",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+        {
+          "component" : "go:example.com/shop/cart",
+          "file" : "api/handler.go",
+          "line" : 21,
+          "symbol" : "Describe"
+        },
+        {
+          "component" : "go:example.com/shop/money",
+          "file" : "api/handler.go",
+          "line" : 21,
+          "symbol" : "Format"
+        }
+      ],
+      "id" : "go:example.com/shop/api::Handler.ServeHTTP()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 22,
+        "file" : "api/handler.go",
+        "side" : "head",
+        "startLine" : 15
+      },
+      "parent" : "go:example.com/shop/api::Handler",
+      "qualifiedName" : "Handler.ServeHTTP()",
+      "signature" : {
+        "base" : "func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request)",
+        "head" : "func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 13,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 10
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:interface-method-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Store",
+      "isInterface" : true,
+      "kind" : "protocol",
+      "location" : {
+        "endLine" : 14,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 10
+      },
+      "qualifiedName" : "Store",
+      "signature" : {
+        "base" : "type Store interface",
+        "head" : "type Store interface"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "go:example.com/shop/api",
+          "file" : "api/handler.go",
+          "line" : 12,
+          "symbol" : "Handler.Store"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:interface-method-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Store.Clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 13,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 13
+      },
+      "parent" : "go:example.com/shop/cart::Store",
+      "qualifiedName" : "Store.Clear()",
+      "signature" : {
+        "head" : "Clear(id string) error"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 16,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 16
+      },
+      "change" : "modifiers",
+      "changes" : [
+        "modifiers"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:field-tag-changed:json"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Item.SKU",
+      "isInterface" : true,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 17,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 17
+      },
+      "parent" : "go:example.com/shop/cart::Item",
+      "qualifiedName" : "Item.SKU",
+      "signature" : {
+        "base" : "SKU string",
+        "head" : "SKU string"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 23,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 20
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:field-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Cart",
+      "isInterface" : true,
+      "kind" : "struct",
+      "location" : {
+        "endLine" : 25,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 21
+      },
+      "qualifiedName" : "Cart",
+      "signature" : {
+        "base" : "type Cart struct",
+        "head" : "type Cart struct"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "go:example.com/shop/report",
+          "file" : "report/report.go",
+          "line" : 12,
+          "symbol" : "Summary()"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/file.go",
+          "line" : 15,
+          "symbol" : "File.Load()"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/file.go",
+          "line" : 20,
+          "symbol" : "File.Load()"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/file.go",
+          "line" : 25,
+          "symbol" : "File.Save()"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/memory.go",
+          "line" : 12,
+          "symbol" : "Memory.carts"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/memory.go",
+          "line" : 15,
+          "symbol" : "Memory.Load()"
+        },
+        {
+          "component" : "go:example.com/shop/store",
+          "file" : "store/memory.go",
+          "line" : 21,
+          "symbol" : "Memory.Save()"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:field-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Cart.Note",
+      "isInterface" : true,
+      "kind" : "var",
+      "location" : {
+        "endLine" : 24,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 24
+      },
+      "parent" : "go:example.com/shop/cart::Cart",
+      "qualifiedName" : "Cart.Note",
+      "signature" : {
+        "head" : "Note string"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 40,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 34
+      },
+      "change" : "body",
+      "changes" : [
+        "body"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Cart.Add()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 44,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 36
+      },
+      "parent" : "go:example.com/shop/cart::Cart",
+      "qualifiedName" : "Cart.Add()",
+      "signature" : {
+        "base" : "func (c *Cart) Add(item Item) error",
+        "head" : "func (c *Cart) Add(item Item) error"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "baseLocation" : {
+        "endLine" : 48,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 42
+      },
+      "change" : "signature",
+      "changes" : [
+        "signature",
+        "body"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:api-signature-changed"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Cart.Total()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 52,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 46
+      },
+      "parent" : "go:example.com/shop/cart::Cart",
+      "qualifiedName" : "Cart.Total()",
+      "signature" : {
+        "base" : "func (c *Cart) Total(prices map[string]int) int",
+        "head" : "func (c *Cart) Total(prices map[string]int, discount int) int"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "removed",
+      "changes" : [
+        "removed"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:unexported"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Describe()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 52,
+        "file" : "cart/cart.go",
+        "side" : "base",
+        "startLine" : 50
+      },
+      "qualifiedName" : "Describe()",
+      "signature" : {
+        "base" : "func Describe(c *Cart) string"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+        {
+          "component" : "go:example.com/shop/api",
+          "file" : "api/handler.go",
+          "line" : 21,
+          "side" : "base",
+          "symbol" : "Handler.ServeHTTP()"
+        }
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Cart.check()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 59,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 54
+      },
+      "parent" : "go:example.com/shop/cart::Cart",
+      "qualifiedName" : "Cart.check()",
+      "signature" : {
+        "head" : "func (c *Cart) check() error"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::notify()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 61,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 61
+      },
+      "qualifiedName" : "notify()",
+      "signature" : {
+        "head" : "func notify(c *Cart)"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::describe()",
+      "isInterface" : false,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 65,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 63
+      },
+      "qualifiedName" : "describe()",
+      "signature" : {
+        "head" : "func describe(c *Cart) string"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:api-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Kind",
+      "isInterface" : true,
+      "kind" : "typealias",
+      "location" : {
+        "endLine" : 5,
+        "file" : "cart/kind_string.go",
+        "side" : "head",
+        "startLine" : 5
+      },
+      "qualifiedName" : "Kind",
+      "signature" : {
+        "head" : "type Kind int"
+      },
+      "tags" : [
+        "generated"
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/cart",
+      "contractFlags" : [
+        "go:api-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/cart::Kind.String()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 7,
+        "file" : "cart/kind_string.go",
+        "side" : "head",
+        "startLine" : 7
+      },
+      "parent" : "go:example.com/shop/cart::Kind",
+      "qualifiedName" : "Kind.String()",
+      "signature" : {
+        "head" : "func (k Kind) String() string"
+      },
+      "tags" : [
+        "generated"
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/report",
+      "contractFlags" : [
+        "go:api-added"
+      ],
+      "dependsOn" : [
+        {
+          "component" : "go:example.com/shop/cart",
+          "file" : "report/report.go",
+          "line" : 12,
+          "symbol" : "Cart"
+        }
+      ],
+      "id" : "go:example.com/shop/report::Summary()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 14,
+        "file" : "report/report.go",
+        "side" : "head",
+        "startLine" : 11
+      },
+      "qualifiedName" : "Summary()",
+      "signature" : {
+        "head" : "func Summary(v any) string"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    },
+    {
+      "change" : "added",
+      "changes" : [
+        "added"
+      ],
+      "component" : "go:example.com/shop/store",
+      "contractFlags" : [
+        "go:api-added"
+      ],
+      "dependsOn" : [
+
+      ],
+      "id" : "go:example.com/shop/store::Memory.Clear()",
+      "isInterface" : true,
+      "kind" : "func",
+      "location" : {
+        "endLine" : 33,
+        "file" : "store/memory.go",
+        "side" : "head",
+        "startLine" : 28
+      },
+      "parent" : "go:example.com/shop/store::Memory",
+      "qualifiedName" : "Memory.Clear()",
+      "signature" : {
+        "head" : "func (m *Memory) Clear(id string) error"
+      },
+      "tags" : [
+
+      ],
+      "usedBy" : [
+
+      ]
+    }
+  ],
+  "externalDeps" : [
+    {
+      "change" : "bumped",
+      "from" : "v1.5.0",
+      "name" : "github.com/google/uuid",
+      "to" : "v1.6.0"
+    },
+    {
+      "change" : "added",
+      "name" : "golang.org/x/text",
+      "to" : "v0.16.0"
+    }
+  ],
+  "findings" : [
+    {
+      "anchors" : [
+        {
+          "entity" : "go:example.com/shop/cart::Store.Clear()"
+        },
+        {
+          "component" : "go:example.com/shop/store"
+        }
+      ],
+      "evidence" : [
+        "No Clear in File, and no default implementation in an extension of Store."
+      ],
+      "id" : "conformers:1",
+      "kind" : "conformers",
+      "location" : {
+        "endLine" : 13,
+        "file" : "store/file.go",
+        "side" : "head",
+        "startLine" : 11
+      },
+      "message" : "New requirement Store.Clear(): 1 conformer wasn't updated.",
+      "severity" : "high",
+      "source" : "check",
+      "suggestion" : "Implement it in each conformer, or add a default implementation."
+    },
+    {
+      "anchors" : [
+        {
+          "from" : "go:example.com/shop/report",
+          "to" : "ext:golang.org/x/text"
+        },
+        {
+          "component" : "ext:golang.org/x/text"
+        }
+      ],
+      "evidence" : [
+        "golang.org/x/text is new in the lockfile at v0.16.0.",
+        "example.com/shop/report → golang.org/x/text (import golang.org/x/text/language at report/report.go:7)"
+      ],
+      "id" : "new-external:1",
+      "kind" : "new-external",
+      "message" : "example.com/shop/report now depends on golang.org/x/text, a new package.",
+      "severity" : "medium",
+      "source" : "check"
+    },
+    {
+      "anchors" : [
+        {
+          "entity" : "go:example.com/shop/cart::Cart.Note"
+        }
+      ],
+      "evidence" : [
+        "The name Note appears nowhere else in the repo.",
+        "Declared public."
+      ],
+      "id" : "unused-api:1",
+      "kind" : "unused-api",
+      "location" : {
+        "endLine" : 24,
+        "file" : "cart/cart.go",
+        "side" : "head",
+        "startLine" : 24
+      },
+      "message" : "New public var Cart.Note has no callers outside tests.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Keep it internal until something outside needs it, or drop it."
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "go:example.com/shop/cart"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::Store.Clear()"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::Cart.Note"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::Cart.Total()"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::Cart.check()"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::notify()"
+        },
+        {
+          "entity" : "go:example.com/shop/cart::describe()"
+        }
+      ],
+      "evidence" : [
+        "func Store.Clear() (added)",
+        "var Cart.Note (added)",
+        "func Cart.Total() (signature)",
+        "func Cart.check() (added)",
+        "func notify() (added)",
+        "func describe() (added)"
+      ],
+      "id" : "untested:1",
+      "kind" : "untested",
+      "message" : "No test references 6 changed entities in example.com/shop/cart.",
+      "severity" : "low",
+      "source" : "check"
+    }
+  ],
+  "regions" : [
+    {
+      "endLine" : 1,
+      "entity" : "go:example.com/shop::build settings",
+      "file" : "go.mod",
+      "id" : "go:example.com/shop::build settings/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:go-version-changed",
+        "go:toolchain-changed"
+      ],
+      "risk" : 0.559,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "endLine" : 21,
+      "entity" : "go:example.com/shop/api::Handler.ServeHTTP()",
+      "file" : "api/handler.go",
+      "id" : "go:example.com/shop/api::Handler.ServeHTTP()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 21
+    },
+    {
+      "component" : "go:example.com/shop/money",
+      "endLine" : 8,
+      "entity" : "go:example.com/shop/api::Handler.ServeHTTP()",
+      "file" : "money/money.go",
+      "id" : "go:example.com/shop/api::Handler.ServeHTTP()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Format()"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "go:example.com/shop/api::Handler.ServeHTTP()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/api",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/api::Handler.ServeHTTP()",
+      "file" : "api/handler.go",
+      "id" : "go:example.com/shop/api::Handler.ServeHTTP()/c2",
+      "kind" : "context",
+      "lines" : [
+        12
+      ],
+      "reasons" : [
+        "stored properties of Handler"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "go:example.com/shop/api::Handler.ServeHTTP()/r1"
+      ]
+    },
+    {
+      "endLine" : 10,
+      "entity" : "go:example.com/shop/cart::Store",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Store/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:interface-method-added",
+        "used from 1 component"
+      ],
+      "risk" : 0.658,
+      "side" : "head",
+      "startLine" : 10
+    },
+    {
+      "component" : "go:example.com/shop/api",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/cart::Store",
+      "file" : "api/handler.go",
+      "id" : "go:example.com/shop/cart::Store/c1",
+      "kind" : "context",
+      "lines" : [
+        12
+      ],
+      "reasons" : [
+        "Handler.Store"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "go:example.com/shop/cart::Store/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 13,
+      "entity" : "go:example.com/shop/cart::Store",
+      "file" : "store/file.go",
+      "id" : "go:example.com/shop/cart::Store/c2",
+      "kind" : "context",
+      "lines" : [
+        11
+      ],
+      "reasons" : [
+        "File"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "go:example.com/shop/cart::Store/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 13,
+      "entity" : "go:example.com/shop/cart::Store",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/cart::Store/c3",
+      "kind" : "context",
+      "lines" : [
+        10
+      ],
+      "reasons" : [
+        "Memory"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 10,
+      "supports" : [
+        "go:example.com/shop/cart::Store/r1"
+      ]
+    },
+    {
+      "endLine" : 13,
+      "entity" : "go:example.com/shop/cart::Store.Clear()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Store.Clear()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:interface-method-added"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 13
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 33,
+      "entity" : "go:example.com/shop/cart::Store.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/cart::Store.Clear()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Memory.Clear()"
+      ],
+      "relation" : "conformer",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 28,
+      "supports" : [
+        "go:example.com/shop/cart::Store.Clear()/r1"
+      ]
+    },
+    {
+      "endLine" : 17,
+      "entity" : "go:example.com/shop/cart::Item.SKU",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Item.SKU/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:field-tag-changed:json"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 17
+    },
+    {
+      "endLine" : 21,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:field-added",
+        "used from 2 components"
+      ],
+      "risk" : 0.676,
+      "side" : "head",
+      "startLine" : 21
+    },
+    {
+      "component" : "go:example.com/shop/report",
+      "endLine" : 14,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "report/report.go",
+      "id" : "go:example.com/shop/cart::Cart/c1",
+      "kind" : "context",
+      "lines" : [
+        11,
+        12
+      ],
+      "reasons" : [
+        "Summary()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "go:example.com/shop/cart::Cart/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 23,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "store/file.go",
+      "id" : "go:example.com/shop/cart::Cart/c2",
+      "kind" : "context",
+      "lines" : [
+        15,
+        20
+      ],
+      "reasons" : [
+        "File.Load()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 15,
+      "supports" : [
+        "go:example.com/shop/cart::Cart/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 28,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "store/file.go",
+      "id" : "go:example.com/shop/cart::Cart/c3",
+      "kind" : "context",
+      "lines" : [
+        25
+      ],
+      "reasons" : [
+        "File.Save()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 25,
+      "supports" : [
+        "go:example.com/shop/cart::Cart/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/cart::Cart/c4",
+      "kind" : "context",
+      "lines" : [
+        12
+      ],
+      "reasons" : [
+        "Memory.carts"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "go:example.com/shop/cart::Cart/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 19,
+      "entity" : "go:example.com/shop/cart::Cart",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/cart::Cart/c5",
+      "kind" : "context",
+      "lines" : [
+        15
+      ],
+      "reasons" : [
+        "Memory.Load()"
+      ],
+      "relation" : "caller",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 15,
+      "supports" : [
+        "go:example.com/shop/cart::Cart/r1"
+      ]
+    },
+    {
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.Note",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Note/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:field-added"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 24
+    },
+    {
+      "endLine" : 42,
+      "entity" : "go:example.com/shop/cart::Cart.Add()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Add()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "concurrency: go",
+        "new ignored error"
+      ],
+      "risk" : 0.559,
+      "side" : "head",
+      "startLine" : 41
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.Add()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Add()/c1",
+      "kind" : "context",
+      "lines" : [
+        22,
+        23,
+        24
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 22,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.Add()/r1"
+      ]
+    },
+    {
+      "endLine" : 46,
+      "entity" : "go:example.com/shop/cart::Cart.Total()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Total()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:api-signature-changed"
+      ],
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 46
+    },
+    {
+      "endLine" : 51,
+      "entity" : "go:example.com/shop/cart::Cart.Total()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Total()/r2",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 51
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.Total()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Total()/c1",
+      "kind" : "context",
+      "lines" : [
+        22,
+        23,
+        24
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 22,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.Total()/r1",
+        "go:example.com/shop/cart::Cart.Total()/r2"
+      ]
+    },
+    {
+      "endLine" : 52,
+      "entity" : "go:example.com/shop/cart::Describe()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Describe()/r1",
+      "kind" : "removed",
+      "reasons" : [
+        "go:unexported",
+        "interface removed",
+        "used from 1 component"
+      ],
+      "risk" : 0.761,
+      "side" : "base",
+      "startLine" : 50
+    },
+    {
+      "endLine" : 59,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "control flow: early return, if"
+      ],
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 54
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/c1",
+      "kind" : "context",
+      "lines" : [
+        22,
+        23,
+        24
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 22,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.check()/r1"
+      ]
+    },
+    {
+      "endLine" : 61,
+      "entity" : "go:example.com/shop/cart::notify()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::notify()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 61
+    },
+    {
+      "endLine" : 65,
+      "entity" : "go:example.com/shop/cart::describe()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::describe()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 63
+    },
+    {
+      "endLine" : 5,
+      "entity" : "go:example.com/shop/cart::Kind",
+      "file" : "cart/kind_string.go",
+      "id" : "go:example.com/shop/cart::Kind/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:api-added",
+        "generated code"
+      ],
+      "risk" : 0.128,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "endLine" : 7,
+      "entity" : "go:example.com/shop/cart::Kind.String()",
+      "file" : "cart/kind_string.go",
+      "id" : "go:example.com/shop/cart::Kind.String()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:api-added",
+        "generated code"
+      ],
+      "risk" : 0.128,
+      "side" : "head",
+      "startLine" : 7
+    },
+    {
+      "endLine" : 14,
+      "entity" : "go:example.com/shop/report::Summary()",
+      "file" : "report/report.go",
+      "id" : "go:example.com/shop/report::Summary()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:api-added",
+        "new type assertion"
+      ],
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 11
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 25,
+      "entity" : "go:example.com/shop/report::Summary()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/report::Summary()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 21,
+      "supports" : [
+        "go:example.com/shop/report::Summary()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 22,
+      "entity" : "go:example.com/shop/report::Summary()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/report::Summary()/c2",
+      "kind" : "context",
+      "reasons" : [
+        "Cart.ID"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 22,
+      "supports" : [
+        "go:example.com/shop/report::Summary()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 23,
+      "entity" : "go:example.com/shop/report::Summary()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/report::Summary()/c3",
+      "kind" : "context",
+      "reasons" : [
+        "Cart.Items"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 23,
+      "supports" : [
+        "go:example.com/shop/report::Summary()/r1"
+      ]
+    },
+    {
+      "endLine" : 33,
+      "entity" : "go:example.com/shop/store::Memory.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/store::Memory.Clear()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "go:api-added",
+        "control flow: defer"
+      ],
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 28
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/store::Memory.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/store::Memory.Clear()/c1",
+      "kind" : "context",
+      "lines" : [
+        11,
+        12
+      ],
+      "reasons" : [
+        "stored properties of Memory"
+      ],
+      "relation" : "state",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "go:example.com/shop/store::Memory.Clear()/r1"
+      ]
+    }
+  ],
+  "repo" : {
+    "base" : "base",
+    "baseSha" : "<base>",
+    "head" : "main",
+    "headSha" : "<head>",
+    "root" : "<repo>",
+    "usesMergeBase" : true
+  },
+  "version" : 3,
+  "warnings" : [
+
+  ]
+}

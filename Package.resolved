@@ -1,5 +1,5 @@
 {
-  "originHash" : "a435bd23a70928dc40dc73adbf6c58f9a9e3c1b8d97e6624cbd03ddc2938ac94",
+  "originHash" : "4f94609974363d0a25f809100ec5b8909bb13c7cf8f292cc6762b829206255f1",
   "pins" : [
     {
       "identity" : "aexml",
@@ -70,6 +70,15 @@
       "state" : {
         "revision" : "da6fe9beb4f7f67beb75914ca8e0d48ae48d6406",
         "version" : "0.25.10"
+      }
+    },
+    {
+      "identity" : "tree-sitter-go",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tree-sitter/tree-sitter-go.git",
+      "state" : {
+        "revision" : "1547678a9da59885853f5f5cc8a99cc203fa2e2c",
+        "version" : "0.25.0"
       }
     },
     {

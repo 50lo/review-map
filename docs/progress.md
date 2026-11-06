@@ -8,7 +8,7 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 | 2 | Language-neutral core | Done |
 | 3 | TypeScript | Done; index mode still needs a run on a pnpm or yarn monorepo |
 | 4 | Structural review | Done; the LLM review still needs runs with the real `claude` CLI on real PRs |
-| 5 | Go | Not started |
+| 5 | Go | Done |
 | 6 | Rust | Not started |
 | 7 | Kotlin | Not started |
 | 8 | Faster Swift indexing | Deferred; only big projects are slow |
@@ -60,6 +60,18 @@ Steps from [plan.md](plan.md). Each one is usable on real PRs before the next st
 - The LLM review is one call per change, alongside the per-component batches. The per-component batches keep region risk, context pruning, and summaries; region notes and removal candidates are gone, and the prompt version is 2. The change's description comes from `--description`, else `gh pr view` on the head branch, else the commit messages.
 - In the viewer, the structural review leads the side panel's overview. Components carry a findings count on their top border, collapsed groups count what's inside, and edges with findings are labeled. Component, edge, and bundle panels and levels 2 and 3 list the findings anchored there; level 3 also lists similar existing declarations for an added entity. The LLM's findings follow the LLM toggle.
 - Checked in Chromium at desktop and phone widths, in light and dark mode, on the basic fixture with a `layers` config and the fake CLI. Not yet run on a real PR with the real `claude` CLI, so the prompt and the 12-finding limit are untested against a model.
+
+## Step 5 notes
+
+- Go parses with tree-sitter-go 0.25.0. Methods are scoped to their receiver's type and are its children when the type is in the same file; otherwise they stay top level with the type as their scope. Struct fields are `var`s whose tag is compared with the modifiers, so a tag change is a `modifiers` change with a `field-tag-changed:<key>` flag. Labels keys hold one label per parameter, which gives conformance its arity.
+- References: `pkg.Name` resolves through the file's imports (aliases, the import path's last element without a major version, dot imports). Unqualified names only reach another component from test files, which are a component of their own, and through dot imports. Two core changes came with it, both without changing the Swift and TypeScript snapshots: a reference that names a module now only resolves to that module (before, it fell back to any visible declaration, which linked `json.Marshal` to an in-repo `Marshal`), and an unqualified name prefers the file's own module (a Go test file uses its package's names, not those of a package it imports).
+- The standard library is any import path whose first element has no dot. The `Language` protocol gained `isPlatformModule`, which defaults to the `platformModules` set; `ParsedFile.isGenerated` lets a language mark a file generated from its contents (Go's `Code generated ... DO NOT EDIT.` header).
+- Components: one per package directory inside the nearest `go.mod`, named by import path; `_test.go` files go to `go:<import path>:tests`; `vendor` and `testdata` aren't parsed. A `go.work` needs nothing extra, since every module it lists has its own `go.mod`. A module's `go`, `toolchain`, and `replace` settings live on its root package, which is created without files when the root has none, so the settings entity reads "<module> build settings".
+- Conformers: the types whose method set covered the interface at base, in any package, matched by name and parameter count, with embedded interfaces expanded; an embedded interface outside the repo makes the set unknown, so there are no conformers rather than false ones. Embedded fields count as implicitly used.
+- Index mode: scip-go v0.2.9 (now at `github.com/scip-code/scip-go`) writes occurrence ranges as a message (field 8) instead of packed integers, so the SCIP reader learned that form. Each module is indexed on its own and cached per commit and module. scip-go comes from the PATH, or is installed with `go install` into the index cache.
+- Real repo: uber-go/zap, the last 40 commits (46 files, +639/-381, 6 modules, 142 Go files), release build on Linux. Name matching takes 1.0 s; index mode takes 39.5 s the first time (module downloads and scip-go for 6 modules at both sides) and 1.7 s cached. Both find 60 components and 112 edges. The first run showed 36 `ambiguous-name` warnings from test files using their own package's names (`DebugLevel` in zap and zapcore), an `orphaned` finding for an embedded `sync.Once`, `api-added` on new `TestX` functions, and `field-added` for an unexported field; after the fixes name matching has 2 ambiguous names left (`Field` in zap and zapcore). Index mode resolves those, finds 3 new exported functions that only tests call (`unused-api`), and differs from name matching only in test callers. The base's `tools` module (a `//go:build tools` file) has no index data and is reported as `index-partial`.
+- The viewer has a Go entry in its language table (Simple Icons mark, Shiki's `go` grammar, `go.mod`/`go.sum`/`go.work` manifests, and kind names: interface, type, method or function, field or variable) and weights for Go's flags. Checked in Chromium at desktop and phone widths, in light and dark mode, on the Go fixture model.
+- Not checked: the Bazel build. `MODULE.bazel` and `BUILD.bazel` list the new grammar, but Bazel wasn't available, so `MODULE.bazel.lock` may need a refresh.
 
 ## Shared groundwork for new languages
 

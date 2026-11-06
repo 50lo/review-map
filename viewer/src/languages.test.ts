@@ -13,6 +13,7 @@ describe("componentLanguages", () => {
   it.each([
     ["basic", "spm:Features", "ext:swift-collections", "swift"],
     ["typescript", "npm:@shop/web", "ext:react", "typescript"],
+    ["go", "go:example.com/shop/report", "ext:golang.org/x/text", "go"],
   ])("reads first- and third-party ecosystems from the analyzer's %s model", (fixture, first, external, language) => {
     const model = validate(JSON.parse(fs.readFileSync(path.resolve(__dirname, `../../Tests/ReviewMapCoreTests/Fixtures/${fixture}/expected.json`), "utf8")));
     const languages = componentLanguages(model);

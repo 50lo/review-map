@@ -1,11 +1,11 @@
 ---
 # rm-a4b7
 title: Go support
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T01:30:00Z
 ---
 
 Step 5 of docs/plan.md. Review Map analyzes Go changes with exact references, and is usable on real Go PRs.

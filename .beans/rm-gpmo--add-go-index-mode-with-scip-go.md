@@ -1,11 +1,11 @@
 ---
 # rm-gpmo
 title: Add Go index mode with scip-go
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T01:30:00Z
 parent: rm-a4b7
 ---
 
@@ -15,6 +15,6 @@ parent: rm-a4b7
 - Install Go and scip-go in .github/workflows/ci.yml for the index test.
 
 ## Acceptance criteria
-- [ ] A go-indexed fixture resolves a reference that name matching gets wrong (two packages declaring the same name).
-- [ ] Index mode on the fixture runs in CI.
-- [ ] Without Go installed, analysis completes with name matching and a warning.
+- [x] A go-indexed fixture resolves a reference that name matching gets wrong (two packages declaring the same name).
+- [x] Index mode on the fixture runs in CI.
+- [x] Without Go installed, analysis completes with name matching and a warning.

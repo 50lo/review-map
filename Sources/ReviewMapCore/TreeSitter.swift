@@ -61,6 +61,14 @@ struct SyntaxNode {
         return ts_node_is_null(n) ? nil : SyntaxNode(raw: n, tree: tree)
     }
 
+    /// Every child under `field`, for fields that repeat (Go's `a, b int` has two `name` children).
+    func children(_ field: String) -> [SyntaxNode] {
+        (0..<childCount).compactMap { i in
+            guard let name = ts_node_field_name_for_child(raw, UInt32(i)), String(cString: name) == field else { return nil }
+            return SyntaxNode(raw: ts_node_child(raw, UInt32(i)), tree: tree)
+        }
+    }
+
     var parent: SyntaxNode? {
         let n = ts_node_parent(raw)
         return ts_node_is_null(n) ? nil : SyntaxNode(raw: n, tree: tree)

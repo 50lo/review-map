@@ -1,11 +1,11 @@
 ---
 # rm-phsi
 title: Add Go components, pins, and standard library
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T01:30:00Z
 parent: rm-a4b7
 ---
 
@@ -20,9 +20,9 @@ Go code is grouped by package, and a package is a directory.
 - Settings: `go`, `toolchain`, and `replace` directives in `go.mod`.
 
 ## Acceptance criteria
-- [ ] The fixture's packages, their test components, and the edges between them are as expected; an import of a third-party module is an external dependency with its pinned version.
-- [ ] A `go.work` with two modules produces both modules' packages.
-- [ ] Standard library imports are neither edges nor warnings.
+- [x] The fixture's packages, their test components, and the edges between them are as expected; an import of a third-party module is an external dependency with its pinned version.
+- [x] A `go.work` with two modules produces both modules' packages.
+- [x] Standard library imports are neither edges nor warnings.
 
 ## Constraints
 Read `go.mod` as text; no Go toolchain needed outside index mode.
