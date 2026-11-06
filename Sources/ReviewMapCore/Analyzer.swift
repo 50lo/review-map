@@ -224,6 +224,14 @@ struct ModelBuilder {
     let head: SideData
     let languages: [Language]
     let options: AnalyzeOptions
+    /// Head containers by their explicit inherited names, in source order. Languages with implicit
+    /// conformance replace this lookup through their `conformers` hook. Region override context
+    /// also uses this syntax-based table; it does not infer implicit conformances.
+    let inheritors: [String: [Located]]
+    /// "Type|member" -> head declarations, in source order, across every file and component.
+    /// The default conformance check preserves its global name lookup. RegionBuilder separately
+    /// groups all members by component and scope for definition, override, and state context.
+    let headMembers: [String: [Located]]
 
     var pairs: [Pair] = []
     var pairOf: [DeclKey: Int] = [:]
@@ -250,6 +258,20 @@ struct ModelBuilder {
         self.head = head
         self.languages = languages
         self.options = options
+        var inheritors: [String: [Located]] = [:]
+        var headMembers: [String: [Located]] = [:]
+        for path in head.files.keys.sorted() {
+            guard let file = head.files[path], let component = head.layout.fileComponent[path] else { continue }
+            for (i, decl) in file.decls.enumerated() {
+                let located = Located(decl: decl, file: path, index: i, component: component)
+                if decl.isContainer {
+                    for name in decl.inherited.map(Self.conformanceName) { inheritors[name, default: []].append(located) }
+                }
+                if let scope = decl.scope { headMembers["\(scope)|\(decl.name)", default: []].append(located) }
+            }
+        }
+        self.inheritors = inheritors
+        self.headMembers = headMembers
         for w in base.layout.warnings + head.layout.warnings { warnings.insert(w) }
     }
 
@@ -257,7 +279,7 @@ struct ModelBuilder {
 
     /// The language of a parsed source file.
     func language(of file: String) -> Language {
-        Languages.of(file)!
+        languages.first { $0.isSource(file) }!
     }
 
     // MARK: Matching
@@ -448,6 +470,7 @@ struct ModelBuilder {
     /// Index mode for one file: each reference resolves to the exact declaration it points at.
     private mutating func resolveIndexed(_ s: Side, path: String, file: ParsedFile, comp: String, refs: [IndexedRef]) {
         let layout = side(s).layout
+        let lang = language(of: path)
         var seen = Set<String>()
         for ref in refs {
             guard let targetComp = layout.fileComponent[ref.targetFile],
@@ -458,7 +481,7 @@ struct ModelBuilder {
             let key = "\(ref.line)|\(ref.targetFile)|\(target.index)"
             guard seen.insert(key).inserted else { continue }
             let usage = Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                              isolation: file.isolation(line: ref.line), side: s)
+                              isolation: lang.isolation(in: file, line: ref.line), side: s)
             let targetPair = pairOf[DeclKey(side: s, file: ref.targetFile, index: target.index)]
             if s == .head, let tp = targetPair { indexCallers[tp, default: []].append(usage) }
             guard targetComp != comp else { continue }
@@ -546,7 +569,7 @@ struct ModelBuilder {
                     let encl = file.enclosingDecl(line: ref.line)
                     if let ti = topLevel["\(target)|\(ref.name)"] {
                         usedBy[ti, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                                                             isolation: file.isolation(line: ref.line), side: s))
+                                                             isolation: lang.isolation(in: file, line: ref.line), side: s))
                     }
                     if let encl, let idx = file.decls.firstIndex(where: { $0.startLine == encl.startLine && $0.qualifiedName == encl.qualifiedName }),
                        let pi = pairOf[DeclKey(side: s, file: path, index: idx)] {
@@ -557,7 +580,7 @@ struct ModelBuilder {
                     for m in membersByName[ref.name] ?? [] where m.component != comp && resolvedTypes.contains("\(m.component)|\(m.rootType)") {
                         let encl = file.enclosingDecl(line: ref.line)
                         usedBy[m.pair, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
-                                                                 isolation: file.isolation(line: ref.line), side: s))
+                                                                 isolation: lang.isolation(in: file, line: ref.line), side: s))
                     }
                 }
             }

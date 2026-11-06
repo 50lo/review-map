@@ -100,7 +100,7 @@ Go, Rust, and Kotlin each go through the same stages, in this order:
 Two pieces of shared work come before Go:
 
 - The viewer's language knowledge (extensions, manifests, icon, Shiki language, kind names) becomes one table, so a language is one entry in it.
-- Structural review's Swift and TypeScript assumptions move behind `Language`: public API is Swift's access levels or TypeScript's exports, conformers are found by inheritance clauses, and isolation comes from Swift attributes.
+- Structural review's Swift and TypeScript assumptions move behind `Language`: public API is Swift's access levels or TypeScript's exports, implicit callers are Swift's runtime attributes and special names, conformers are found by inheritance clauses, and isolation comes from Swift attributes.
 
 | Language | Grammar | Components | Indexer | Needs |
 | --- | --- | --- | --- | --- |

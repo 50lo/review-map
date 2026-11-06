@@ -3,6 +3,7 @@
 
 import type { Focus } from "./nav";
 import type { ChangeModel, Component, Edge, Entity, ExternalDepChange, Region } from "./types";
+import { entityKindLabel } from "./languages";
 
 export type { Focus } from "./nav";
 
@@ -419,22 +420,13 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
 // ---------------------------------------------------------------------------
 // Start here
 
-/**
- * Flag weights for ranking a model without regions (from an analyzer that doesn't score them).
- * They follow the brief's table: concurrency and persisted or networked models are high, other
- * contract changes medium.
- */
-/** Entity kinds as the entity's language names them: a TypeScript "protocol" is an interface. */
-const TS_KINDS: Record<string, string> = { protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function" };
-export const kindLabel = (e: Entity): string => {
-  if (!/\.(ts|tsx|mts|cts)$/.test(e.location.file)) return e.kind;
-  if (e.kind === "var") return e.qualifiedName.includes(".") ? "property" : "variable";
-  return TS_KINDS[e.kind] ?? e.kind;
-};
+/** Entity kinds as the entity's language names them. */
+export const kindLabel = entityKindLabel;
 
 /** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
 export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, "");
 
+/** Flag weights for ranking a model without regions: concurrency and persisted models rank highest. */
 const flagWeight = (prefixed: string): number => {
   const flag = flagName(prefixed);
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;

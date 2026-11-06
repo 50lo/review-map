@@ -1,13 +1,82 @@
-import type { ChangeModel } from "./types";
+import type { LanguageInput } from "shiki/core";
+import swiftGrammar from "shiki/langs/swift.mjs";
+import typescriptGrammar from "shiki/langs/typescript.mjs";
+import tsxGrammar from "shiki/langs/tsx.mjs";
+import swiftIcon from "./icons/swift.svg";
+import typescriptIcon from "./icons/typescript.svg";
+import type { ChangeModel, Entity } from "./types";
 
-export type Language = "swift" | "typescript";
-const ORDER: Language[] = ["swift", "typescript"];
+interface LanguageDefinition {
+  id: string;
+  name: string;
+  extensions: Record<string, { language: string; grammar: LanguageInput }>;
+  manifests: readonly RegExp[];
+  componentKinds: readonly string[];
+  icon: string;
+  kinds: Record<string, string | ((entity: Entity) => string)>;
+}
+
+/** Viewer language facts, in badge order. Adding a language adds one entry here. */
+export const LANGUAGES = [
+  {
+    id: "swift",
+    name: "Swift",
+    extensions: { swift: { language: "swift", grammar: swiftGrammar } },
+    manifests: [/\.xcodeproj(?:\/project\.pbxproj)?$/, /(?:^|\/)Package\.resolved$/],
+    componentKinds: ["spmTarget", "xcodeTarget"],
+    icon: swiftIcon,
+    kinds: {},
+  },
+  {
+    id: "typescript",
+    name: "TypeScript",
+    extensions: {
+      ts: { language: "typescript", grammar: typescriptGrammar },
+      tsx: { language: "tsx", grammar: tsxGrammar },
+      mts: { language: "typescript", grammar: typescriptGrammar },
+      cts: { language: "typescript", grammar: typescriptGrammar },
+    },
+    manifests: [/(?:^|\/)(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/],
+    componentKinds: ["npmPackage", "tsconfig"],
+    icon: typescriptIcon,
+    kinds: {
+      protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function",
+      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "property" : "variable",
+    },
+  },
+] as const satisfies readonly LanguageDefinition[];
+
+export type Language = (typeof LANGUAGES)[number]["id"];
+const ORDER = LANGUAGES.map((language) => language.id);
+const definitions: readonly LanguageDefinition[] = LANGUAGES;
+
+export const languageDefinition = (id: Language) => LANGUAGES.find((language) => language.id === id)!;
+
+function sourceLanguage(path: string): LanguageDefinition | undefined {
+  return definitions.find((language) => Object.keys(language.extensions).some((ext) => path.endsWith(`.${ext}`)));
+}
 
 /** The ecosystem indicated by a source file or manifest, not a package-name guess. */
-function languageOfPath(path: string): Language | undefined {
-  if (/\.swift$|\.xcodeproj(?:\/project\.pbxproj)?$|(?:^|\/)Package\.resolved$/.test(path)) return "swift";
-  if (/\.(?:ts|tsx|mts|cts)$|(?:^|\/)(?:package(?:-lock)?\.json|tsconfig(?:\.[^/]+)?\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/.test(path)) return "typescript";
-  return undefined;
+export function languageOfPath(path: string): Language | undefined {
+  return LANGUAGES.find((language) =>
+    Object.keys(language.extensions).some((ext) => path.endsWith(`.${ext}`)) || language.manifests.some((pattern) => pattern.test(path)),
+  )?.id;
+}
+
+/** The Shiki language for a file, by extension. */
+export function highlightLanguageOf(file: string): string | undefined {
+  const ext = file.slice(file.lastIndexOf(".") + 1);
+  return definitions.find((language) => Object.hasOwn(language.extensions, ext))?.extensions[ext].language;
+}
+
+/** Only load grammars the table's extensions use, once per grammar. */
+export const highlightGrammars = () => [...new Set(definitions.flatMap((language) => Object.values(language.extensions).map(({ grammar }) => grammar)))];
+
+/** Entity kinds as the entity's language names them. Unknown paths keep the model's kind. */
+export function entityKindLabel(entity: Entity): string {
+  const kinds = sourceLanguage(entity.location.file)?.kinds;
+  const kind = kinds && Object.hasOwn(kinds, entity.kind) ? kinds[entity.kind] : undefined;
+  return typeof kind === "function" ? kind(entity) : kind ?? entity.kind;
 }
 
 /** Works with existing models, including unchanged nodes with no changed entities. */
@@ -19,8 +88,9 @@ export function componentLanguages(model: ChangeModel): Map<string, Language[]> 
     if (lang) known.get(id)?.add(lang);
   };
   for (const c of model.components) {
-    if (c.kind === "spmTarget" || c.kind === "xcodeTarget") known.get(c.id)!.add("swift");
-    if (c.kind === "npmPackage" || c.kind === "tsconfig") known.get(c.id)!.add("typescript");
+    for (const language of LANGUAGES) {
+      if ((language.componentKinds as readonly string[]).includes(c.kind)) known.get(c.id)!.add(language.id);
+    }
     for (const path of c.paths) addPath(c.id, path);
   }
   for (const e of model.entities) {

@@ -92,6 +92,22 @@ struct TypeScriptLanguage: Language {
         return ["JSX.Element", "ReactNode", "ReactElement", "FC<", "FunctionComponent", "ComponentType"].contains(where: types.contains)
     }
 
+    // MARK: Structural review
+
+    /// Named exports and their public members; default exports keep their existing exclusion.
+    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool {
+        if decl.modifiers.contains("default") { return false }
+        guard !decl.isTopLevel else { return decl.modifiers.contains("export") }
+        if let access = decl.access, access != "public" { return false }
+        guard let top = enclosing.first(where: \.isTopLevel) else { return false }
+        return top.modifiers.contains("export") && !top.modifiers.contains("default")
+    }
+
+    /// Constructors, default exports, and names that aren't plain identifiers (`#private`, computed keys).
+    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+        ["constructor", "default"].contains(decl.name) || !(decl.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false)
+    }
+
     // MARK: Resolution
 
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {

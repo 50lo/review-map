@@ -56,12 +56,11 @@ extension ModelBuilder {
 private final class RegionBuilder {
     let b: ModelBuilder
     private var lineCache: [String: [String]] = [:]
-    /// "component|scope" -> head declarations directly inside that type scope (members and extensions' members).
+    /// "component|scope" -> all head members of the scope, for definition, override, and state context.
+    /// Unlike ModelBuilder.headMembers, this groups by component and includes every member name.
     private var members: [String: [Indexed]] = [:]
     /// Top-level head declarations by simple name (no extensions).
     private var topLevel: [String: [Indexed]] = [:]
-    /// Type name -> head types and extensions that list it in their inheritance clause.
-    private var inheritors: [String: [Indexed]] = [:]
     /// "component|Type" -> head type declarations (not extensions).
     private var types: [String: [Indexed]] = [:]
     /// "component|Type" -> what the head type and its extensions conform to or inherit from.
@@ -81,7 +80,6 @@ private final class RegionBuilder {
                     let typeName = d.kind == .extension ? d.name : d.qualifiedName
                     if d.kind != .extension { types["\(comp)|\(typeName)", default: []].append(item) }
                     for c in d.inherited.map(ModelBuilder.conformanceName) {
-                        inheritors[c, default: []].append(item)
                         typeInherits["\(comp)|\(typeName)", default: []].insert(c)
                     }
                 }
@@ -389,16 +387,22 @@ private final class RegionBuilder {
         }
 
         // Other conformers of a changed protocol, and their implementations of a changed requirement.
-        if d.kind == .protocol || d.parentKind == .protocol {
-            let proto = d.kind == .protocol ? d.name : (d.scope ?? "")
-            let requirement = d.kind == .protocol ? nil : d.name
+        if d.kind == .protocol || d.parentKind == .protocol,
+           let interface = d.kind == .protocol ? pair : b.parentPair(hd, side: .head).map({ b.pairs[$0] }) {
+            let requirement = d.kind == .protocol ? nil : pair
             var n = 0
-            for t in inheritors[proto] ?? [] where n < 5 {
-                let typeName = t.decl.kind == .extension ? t.decl.name : t.decl.qualifiedName
-                if let req = requirement {
-                    let impls = (members["\(t.component)|\(typeName)"] ?? []).filter { $0.decl.name == req }
-                    guard let impl = impls.first else { continue }
-                    add(declItem(impl, relation: "conformer", supports: headerSupports))
+            let candidates = b.language(of: hd.file).conformers(of: interface, requirement: requirement, in: b, for: .context)
+            for candidate in candidates where n < 5 {
+                let located: Located
+                if requirement != nil {
+                    guard let implementation = candidate.implementations.first else { continue }
+                    located = implementation
+                } else {
+                    located = candidate.declaration
+                }
+                let t = Indexed(component: located.component, file: located.file, index: located.index, decl: located.decl)
+                if requirement != nil {
+                    add(declItem(t, relation: "conformer", supports: headerSupports))
                 } else {
                     var it = declItem(t, relation: "conformer", supports: headerSupports)
                     it.lines = Array(t.decl.startLine...max(t.decl.startLine, t.decl.headerEndLine))
@@ -411,7 +415,7 @@ private final class RegionBuilder {
         // Overrides of a changed method, and the method a changed override overrides.
         if (d.kind == .func || d.kind == .var), let scope = d.scope, d.parentKind == .class || d.modifiers.contains("override") {
             var n = 0
-            for sub in inheritors[scope] ?? [] where n < 5 {
+            for sub in b.inheritors[scope] ?? [] where n < 5 {
                 let subName = sub.decl.kind == .extension ? sub.decl.name : sub.decl.qualifiedName
                 for m in members["\(sub.component)|\(subName)"] ?? [] where m.decl.labelsKey == d.labelsKey && m.decl.modifiers.contains("override") {
                     add(declItem(m, relation: "override", supports: headerSupports))
