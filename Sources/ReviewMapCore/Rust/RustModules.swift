@@ -19,7 +19,7 @@ enum RustModules {
                 let parentDir = ([directory] + local.dropLast()).filter { !$0.isEmpty }.joined(separator: "/")
                 let custom = decl.attributes.first { $0.hasPrefix("path") }.flatMap { $0.split(separator: "\"").dropFirst().first.map(String.init) }
                 let candidates: [String]
-                if let custom { candidates = [Paths.resolve(custom, from: parentDir + "/_") ?? ""] }
+                if let custom { candidates = [Paths.resolve(custom, from: join(join((path as NSString).deletingLastPathComponent, local.dropLast().joined(separator: "/")), "_")) ?? ""] }
                 else { candidates = [parentDir + "/" + decl.name + ".rs", parentDir + "/" + decl.name + "/mod.rs"] }
                 if let child = candidates.first(where: { rust[$0] != nil }) {
                     let childDir = child.hasSuffix("/mod.rs") ? (child as NSString).deletingLastPathComponent : (child as NSString).deletingPathExtension

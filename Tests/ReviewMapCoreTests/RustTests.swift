@@ -75,6 +75,16 @@ final class RustTests: XCTestCase {
         XCTAssertEqual(Set(file.decls.filter { $0.name == "f" }.map(\.qualifiedName)).count, 2)
     }
 
+    func testPathAttributeInNonModuleFile() {
+        var files = [
+            "src/lib.rs": RustExtractor.parse(path: "src/lib.rs", source: "mod outer;"),
+            "src/outer.rs": RustExtractor.parse(path: "src/outer.rs", source: #"#[path="actual.rs"] mod renamed; use self::renamed::Thing;"#),
+            "src/actual.rs": RustExtractor.parse(path: "src/actual.rs", source: "pub struct Thing;")
+        ]
+        RustModules.resolve(&files)
+        XCTAssertTrue(files["src/outer.rs"]!.typeRefs.contains { $0.name == "Thing" && $0.source == "/src/actual" })
+    }
+
     func testTuplePayloadsAreCompared() {
         let base = RustExtractor.parse(path: "src/lib.rs", source: "pub struct Value(pub i32); pub enum Choice { Some(i32) }")
         let head = RustExtractor.parse(path: "src/lib.rs", source: "pub struct Value(pub i64); pub enum Choice { Some(i64) }")
