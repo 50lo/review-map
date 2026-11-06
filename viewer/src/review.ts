@@ -1,15 +1,15 @@
 // Reviewed marks and notes. With the local server they're saved in a file next to the change
-// model (`<model>.review.json`); otherwise, as in the single-file build, in browser storage.
+// report (`<report>.review.json`); otherwise, as in the single-file build, in browser storage.
 // Both are keyed by the head commit, so a new analysis of a moved branch starts fresh.
 
 import { useSyncExternalStore } from "react";
-import { modelOrigin } from "./load";
+import { reportOrigin } from "./load";
 import type { ChangeReport, Region, Side } from "./types";
 
 export interface Note {
   text: string;
-  entity: string;
-  /** The entity's qualified name when the note was written. */
+  reviewItem: string;
+  /** The review item's qualified name when the note was written. */
   label: string;
   file: string;
   startLine: number;
@@ -33,10 +33,10 @@ const listeners = new Set<() => void>();
 
 const localKey = () => `reviewmap.review.${headSha}`;
 
-/** Loads the saved state for this model. Call once before rendering the viewer. */
-export async function initReview(model: ChangeReport): Promise<void> {
-  headSha = model.repo.headSha || "unknown";
-  useServer = modelOrigin() === "server" && !window.__REVIEWMAP_SOURCES__;
+/** Loads the saved state for this report. Call once before rendering the viewer. */
+export async function initReview(report: ChangeReport): Promise<void> {
+  headSha = report.repo.headSha || "unknown";
+  useServer = reportOrigin() === "server" && !window.__REVIEWMAP_SOURCES__;
   let loaded: Partial<ReviewState> | undefined;
   if (useServer) {
     try {
@@ -103,10 +103,10 @@ export function useReview(): ReviewState {
   );
 }
 
-export function setReviewed(entityId: string, on: boolean) {
+export function setReviewed(reviewItemId: string, on: boolean) {
   const reviewed = { ...state.reviewed };
-  if (on) reviewed[entityId] = true;
-  else delete reviewed[entityId];
+  if (on) reviewed[reviewItemId] = true;
+  else delete reviewed[reviewItemId];
   update({ ...state, reviewed });
 }
 
@@ -115,7 +115,7 @@ export function setNote(region: Region, label: string, text: string | null) {
   if (text && text.trim()) {
     notes[region.id] = {
       text: text.trim(),
-      entity: region.entity,
+      reviewItem: region.reviewItem,
       label,
       file: region.file,
       startLine: region.startLine,

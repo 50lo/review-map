@@ -5,11 +5,11 @@ private let observableAttrs: Set<String> = ["Published", "State", "Observable", 
 
 /// Swift's contract flags: changes to declarations that callers, persisted data, or isolation depend on.
 struct SwiftFlags {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
     /// The Swift pairs, as indices into `b.pairs`.
     let indices: [Int]
 
-    init(_ builder: ModelBuilder, pairs: [Int]) {
+    init(_ builder: ChangeReportBuilder, pairs: [Int]) {
         b = builder
         indices = pairs
     }
@@ -36,7 +36,7 @@ struct SwiftFlags {
                 for c in d.inherited {
                     let parts = c.split(separator: " ")
                     let attrs = parts.dropLast().filter { $0 != "@unchecked" && $0 != "@retroactive" && $0 != "@preconcurrency" }.joined(separator: " ")
-                    result[key, default: [:]][ModelBuilder.conformanceName(c)] = attrs
+                    result[key, default: [:]][ChangeReportBuilder.conformanceName(c)] = attrs
                 }
                 if d.attributes.contains("Sendable") { result[key, default: [:]]["Sendable"] = "" }
             }
@@ -46,7 +46,7 @@ struct SwiftFlags {
 
     func compute() -> [Int: [String]] {
         let pairs = b.pairs
-        let isCodable: (Declaration) -> Bool = { !codableNames.isDisjoint(with: $0.inherited.map(ModelBuilder.conformanceName)) }
+        let isCodable: (Declaration) -> Bool = { !codableNames.isDisjoint(with: $0.inherited.map(ChangeReportBuilder.conformanceName)) }
         let codable = typesWhere(b.base, isCodable).union(typesWhere(b.head, isCodable))
         let models = typesWhere(b.base, { $0.attributes.contains("Model") }).union(typesWhere(b.head, { $0.attributes.contains("Model") }))
         // With @Observable every stored property is tracked state; with ObservableObject only @Published ones are.
@@ -87,7 +87,7 @@ struct SwiftFlags {
                     let bsend = b.attributes.contains("Sendable"), hsend = h.attributes.contains("Sendable")
                     if bsend != hsend { flags.append(hsend ? "sendable-added" : "sendable-removed") }
                 }
-                if b.kind != h.kind && ModelBuilder.kindGroup(b.kind) == "type" { flags.append("kind-changed:\(b.kind.rawValue)->\(h.kind.rawValue)") }
+                if b.kind != h.kind && ChangeReportBuilder.kindGroup(b.kind) == "type" { flags.append("kind-changed:\(b.kind.rawValue)->\(h.kind.rawValue)") }
                 if b.kind != .extension || !typeDeclared.contains("\(p.any.component)|\(b.name)") {
                     // Conformances are compared per type, across the type and its extensions in the component,
                     // so moving a conformance into an extension is not a change.
@@ -110,7 +110,7 @@ struct SwiftFlags {
                 // A new or deleted extension: report conformances that the type gained or lost overall.
                 let key = "\(p.any.component)|\(d.name)"
                 let bc = baseConf[key] ?? [:], hc = headConf[key] ?? [:]
-                for c in d.inherited.map(ModelBuilder.conformanceName) where c != "Sendable" {
+                for c in d.inherited.map(ChangeReportBuilder.conformanceName) where c != "Sendable" {
                     if added && bc[c] == nil { flags.append("conformance-added:\(c)") }
                     if removed && hc[c] == nil { flags.append("conformance-removed:\(c)") }
                     if added, let old = bc[c], old != hc[c] { flags.append("conformance-isolation-changed:\(c)") }

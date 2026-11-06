@@ -97,12 +97,12 @@ final class ChecksTests: XCTestCase {
                    "App/App.swift": "func run() { Lib().used() }\n",
                    "Tests/LibTests.swift": "func testLib() { Lib().onlyTested() }\n"])
         let unused = findings(m, "unused-api")
-        XCTAssertEqual(Set(unused.compactMap { $0.anchors.first?.entity }), ["folder:Lib::Lib.onlyTested()", "folder:Lib::Lib.nobody()"])
-        XCTAssertTrue(unused.first { $0.anchors.first?.entity == "folder:Lib::Lib.onlyTested()" }!.evidence[0].hasPrefix("Only tests use it"))
-        // Tests reach Lib, so its changed entities that no test names are listed.
+        XCTAssertEqual(Set(unused.compactMap { $0.anchors.first?.reviewItem }), ["folder:Lib::Lib.onlyTested()", "folder:Lib::Lib.nobody()"])
+        XCTAssertTrue(unused.first { $0.anchors.first?.reviewItem == "folder:Lib::Lib.onlyTested()" }!.evidence[0].hasPrefix("Only tests use it"))
+        // Tests reach Lib, so its changed review items that no test names are listed.
         let untested = try XCTUnwrap(findings(m, "untested").first { $0.anchors.first == .component("folder:Lib") })
-        XCTAssertTrue(untested.anchors.contains(.entity("folder:Lib::Lib.used()")))
-        XCTAssertFalse(untested.anchors.contains(.entity("folder:Lib::Lib.onlyTested()")))
+        XCTAssertTrue(untested.anchors.contains(.reviewItem("folder:Lib::Lib.used()")))
+        XCTAssertFalse(untested.anchors.contains(.reviewItem("folder:Lib::Lib.onlyTested()")))
         // No test reaches App.
         XCTAssertFalse(findings(m, "untested").contains { $0.anchors.first == .component("folder:App") })
     }
@@ -114,7 +114,7 @@ final class ChecksTests: XCTestCase {
             head: ["App/App.swift": "func show() {\n    print(Format.current(\"b\"))\n}\n"])
         let f = try XCTUnwrap(findings(m, "orphaned").first)
         XCTAssertTrue(f.message.contains("Format.legacy(_:)"), f.message)
-        XCTAssertTrue(f.anchors.contains(.entity("folder:App::show()")), "the caller that dropped it")
+        XCTAssertTrue(f.anchors.contains(.reviewItem("folder:App::show()")), "the caller that dropped it")
         XCTAssertEqual(f.location?.file, "Lib/Format.swift")
         XCTAssertEqual(findings(m, "orphaned").count, 1)
     }
@@ -162,9 +162,9 @@ final class ChecksTests: XCTestCase {
         let m = try analyze(
             base: ["Lib/Format.swift": "func formatPrice(_ d: Double) -> String { \"\\(d)\" }\n"],
             head: ["App/App.swift": "func formatPrices(_ d: [Double]) -> [String] { d.map { \"\\($0)\" } }\n"])
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "formatPrices(_:)" })
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "formatPrices(_:)" })
         XCTAssertEqual(e.similar?.first?.symbol, "formatPrice(_:)")
-        XCTAssertEqual(ModelBuilder.nameWords("loadCartItems_v2"), ["load", "cart", "items", "v2"])
+        XCTAssertEqual(ChangeReportBuilder.nameWords("loadCartItems_v2"), ["load", "cart", "items", "v2"])
     }
 
     func testIsolationOfCallers() throws {
@@ -172,7 +172,7 @@ final class ChecksTests: XCTestCase {
             base: ["Lib/Lib.swift": "struct Counter { func tick() {} }\n",
                    "App/App.swift": "@MainActor final class Screen {\n    func tap() { Counter().tick() }\n}\nactor Worker {\n    func work() { Counter().tick() }\n}\n"],
             head: ["Lib/Lib.swift": "struct Counter { func tick() { print(1) } }\n"])
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Counter.tick()" })
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Counter.tick()" })
         XCTAssertEqual(Set(e.usedBy.compactMap(\.isolation)), ["@MainActor", "actor Worker"])
         XCTAssertTrue(e.usedBy.allSatisfy { $0.side == nil }, "uses at both sides count as head uses")
     }
@@ -184,7 +184,7 @@ final class ChecksTests: XCTestCase {
                    "Jobs/Jobs.swift": "func work() { Counter().tick() }\n"],
             head: ["Lib/Lib.swift": "struct Counter { func tick() { print(1) } }\n",
                    "Jobs/Jobs.swift": "func work() {}\n"])
-        let e = try XCTUnwrap(m.entities.first { $0.qualifiedName == "Counter.tick()" })
+        let e = try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Counter.tick()" })
         XCTAssertEqual(e.usedBy.first { $0.component == "folder:App" }?.side, nil)
         XCTAssertEqual(e.usedBy.first { $0.component == "folder:Jobs" }?.side, .base)
     }

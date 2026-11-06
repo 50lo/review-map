@@ -164,8 +164,8 @@ The native Bazel build required explicit sandbox inputs for tree-sitter's shared
 sources and dependency versions were unchanged.
 
 Both release executables passed version/help checks and produced identical parsed
-JSON models for the Swift `basic` fixture (38 entities) and the `typescript`
-fixture (28 entities). Both models also matched the repository snapshots after
+JSON models for the Swift `basic` fixture (38 review items) and the `typescript`
+fixture (28 review items). Both models also matched the repository snapshots after
 normalizing temporary repository paths and commit SHAs. Both debug executables
 passed version checks. All benchmark source edits were restored. This validation
 does not add a native Bazel test target or replace the SwiftPM test suite.

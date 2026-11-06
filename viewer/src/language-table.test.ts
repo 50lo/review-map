@@ -36,21 +36,21 @@ describe("viewer language table", () => {
   });
 
   it("keeps language kind names and TypeScript's property/variable distinction", () => {
-    const entity = validate({ components: [], edges: [], entities: [{ kind: "protocol", location: { file: "src/api.ts" } }] }).entities[0];
-    expect(kindLabel(entity)).toBe("interface");
-    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "value" })).toBe("variable");
-    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "Store.value" })).toBe("property");
-    expect(kindLabel({ ...entity, location: { ...entity.location, file: "src/api.swift" } })).toBe("protocol");
-    expect(kindLabel({ ...entity, location: { ...entity.location, file: "src/api.unknown" } })).toBe("protocol");
+    const reviewItem = validate({ components: [], edges: [], reviewItems: [{ kind: "protocol", location: { file: "src/api.ts" } }] }).reviewItems[0];
+    expect(kindLabel(reviewItem)).toBe("interface");
+    expect(kindLabel({ ...reviewItem, kind: "var", qualifiedName: "value" })).toBe("variable");
+    expect(kindLabel({ ...reviewItem, kind: "var", qualifiedName: "Store.value" })).toBe("property");
+    expect(kindLabel({ ...reviewItem, location: { ...reviewItem.location, file: "src/api.swift" } })).toBe("protocol");
+    expect(kindLabel({ ...reviewItem, location: { ...reviewItem.location, file: "src/api.unknown" } })).toBe("protocol");
   });
 
   it("names Go kinds, telling methods from functions and fields from variables", () => {
-    const entity = validate({ components: [], edges: [], entities: [{ kind: "func", qualifiedName: "New()", location: { file: "cart/cart.go" } }] }).entities[0];
-    expect(kindLabel(entity)).toBe("function");
-    expect(kindLabel({ ...entity, qualifiedName: "Cart.Add()" })).toBe("method");
-    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "Cart.Note" })).toBe("field");
-    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "ErrEmpty" })).toBe("variable");
-    expect(kindLabel({ ...entity, kind: "protocol", qualifiedName: "Store" })).toBe("interface");
-    expect(kindLabel({ ...entity, kind: "typealias", qualifiedName: "ID" })).toBe("type");
+    const reviewItem = validate({ components: [], edges: [], reviewItems: [{ kind: "func", qualifiedName: "New()", location: { file: "cart/cart.go" } }] }).reviewItems[0];
+    expect(kindLabel(reviewItem)).toBe("function");
+    expect(kindLabel({ ...reviewItem, qualifiedName: "Cart.Add()" })).toBe("method");
+    expect(kindLabel({ ...reviewItem, kind: "var", qualifiedName: "Cart.Note" })).toBe("field");
+    expect(kindLabel({ ...reviewItem, kind: "var", qualifiedName: "ErrEmpty" })).toBe("variable");
+    expect(kindLabel({ ...reviewItem, kind: "protocol", qualifiedName: "Store" })).toBe("interface");
+    expect(kindLabel({ ...reviewItem, kind: "typealias", qualifiedName: "ID" })).toBe("type");
   });
 });

@@ -7,10 +7,10 @@ import path from "node:path";
 import { collectSources, editorFrom, gitShow, openInEditor, repoInfo } from "./server/repo";
 
 // The change report to show. Set by `reviewmap --view`, or by hand:
-//   REVIEWMAP_MODEL=/path/to/change-report.json npm run dev
-const modelPath = process.env.REVIEWMAP_MODEL ? path.resolve(process.env.REVIEWMAP_MODEL) : undefined;
+//   REVIEWMAP_REPORT=/path/to/change-report.json npm run dev
+const reportPath = process.env.REVIEWMAP_REPORT ? path.resolve(process.env.REVIEWMAP_REPORT) : undefined;
 
-const readModel = () => JSON.parse(fs.readFileSync(modelPath!, "utf8"));
+const readReport = () => JSON.parse(fs.readFileSync(reportPath!, "utf8"));
 
 // The editor Open runs: REVIEWMAP_EDITOR, set by `reviewmap --editor` or by hand.
 const editor = editorFrom(process.env.REVIEWMAP_EDITOR);
@@ -18,13 +18,13 @@ if (process.env.REVIEWMAP_EDITOR && !editor) {
   console.warn(`REVIEWMAP_EDITOR="${process.env.REVIEWMAP_EDITOR}" is neither a known editor nor a command with {file}; Open is off.`);
 }
 
-// Serves the change report at /api/model, file contents at base and head at /api/source, and
+// Serves the change report at /api/report, file contents at base and head at /api/source, and
 // opening a file in the editor at /api/open.
-function modelServer(): Plugin {
+function reportServer(): Plugin {
   return {
-    name: "reviewmap-model",
+    name: "reviewmap-report",
     configureServer(server) {
-      const repo = () => (modelPath && fs.existsSync(modelPath) ? repoInfo(readModel()) : null);
+      const repo = () => (reportPath && fs.existsSync(reportPath) ? repoInfo(readReport()) : null);
       server.middlewares.use("/api/source", async (req, res) => {
         const q = new URL(req.url ?? "", "http://x").searchParams;
         const r = repo();
@@ -50,14 +50,14 @@ function modelServer(): Plugin {
         res.setHeader("Content-Type", "text/plain; charset=utf-8");
         res.end(result.message);
       });
-      // Reviewed marks and notes, in a file next to the model, keyed by head commit.
+      // Reviewed marks and notes, in a file next to the report, keyed by head commit.
       server.middlewares.use("/api/review", (req, res) => {
-        if (!modelPath) {
+        if (!reportPath) {
           res.statusCode = 404;
-          res.end("REVIEWMAP_MODEL is not set");
+          res.end("REVIEWMAP_REPORT is not set");
           return;
         }
-        const file = modelPath.replace(/\.json$/, "") + ".review.json";
+        const file = reportPath.replace(/\.json$/, "") + ".review.json";
         const read = () => {
           try {
             return JSON.parse(fs.readFileSync(file, "utf8"));
@@ -85,29 +85,29 @@ function modelServer(): Plugin {
         res.setHeader("Cache-Control", "no-store");
         res.end(JSON.stringify(read()));
       });
-      server.middlewares.use("/api/model", (_req, res) => {
-        if (!modelPath || !fs.existsSync(modelPath)) {
+      server.middlewares.use("/api/report", (_req, res) => {
+        if (!reportPath || !fs.existsSync(reportPath)) {
           res.statusCode = 404;
-          res.end(modelPath ? `No file at ${modelPath}` : "REVIEWMAP_MODEL is not set");
+          res.end(reportPath ? `No file at ${reportPath}` : "REVIEWMAP_REPORT is not set");
           return;
         }
         res.setHeader("Content-Type", "application/json");
         res.setHeader("Cache-Control", "no-store");
-        fs.createReadStream(modelPath).pipe(res);
+        fs.createReadStream(reportPath).pipe(res);
       });
     },
   };
 }
 
-// For `npm run build:single`: embeds the model, and the source files its entities live in, in
+// For `npm run build:single`: embeds the report, and the source files its review items live in, in
 // the page, so dist/index.html is one self-contained file that opens anywhere, with no server.
 // REVIEWMAP_EMBED_MAX caps the embedded sources (bytes, default 8 MB).
-function embedModel(): Plugin {
+function embedReport(): Plugin {
   return {
     name: "reviewmap-embed",
     transformIndexHtml(html) {
-      if (!modelPath) return html;
-      const raw = fs.readFileSync(modelPath, "utf8");
+      if (!reportPath) return html;
+      const raw = fs.readFileSync(reportPath, "utf8");
       const json = raw.replace(/</g, "\\u003c");
       const max = Number(process.env.REVIEWMAP_EMBED_MAX ?? 8_000_000);
       const { sources, skipped } = collectSources(JSON.parse(raw), max);
@@ -115,13 +115,13 @@ function embedModel(): Plugin {
       console.log(`Embedding ${count} source files${skipped ? `, ${skipped} skipped over the size cap` : ""}.`);
       const src = count ? `<script>window.__REVIEWMAP_SOURCES__ = ${JSON.stringify(sources).replace(/</g, "\\u003c")};</script>\n` : "";
       // A function replacement, so "$&" and similar in the sources aren't read as patterns.
-      return html.replace("</head>", () => `<script>window.__REVIEWMAP_MODEL__ = ${json};</script>\n${src}</head>`);
+      return html.replace("</head>", () => `<script>window.__REVIEWMAP_REPORT__ = ${json};</script>\n${src}</head>`);
     },
   };
 }
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), modelServer(), ...(mode === "single" ? [embedModel(), viteSingleFile()] : [])],
+  plugins: [react(), reportServer(), ...(mode === "single" ? [embedReport(), viteSingleFile()] : [])],
   // The editor's name for the Open buttons; null hides them.
   define: { __REVIEWMAP_EDITOR__: JSON.stringify(mode === "single" ? null : (editor?.name ?? null)) },
   build: { chunkSizeWarningLimit: 4000 }, // elkjs is large; this is a local tool

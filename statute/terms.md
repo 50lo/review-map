@@ -26,7 +26,7 @@ An individual part of a component that changed and that Review Map asks you to r
 
 ```yaml
 agreed: agreed
-code: [ReviewItem, EntityKind]
+code: [ReviewItem, ReviewItemKind]
 not:
   - name: Region
     means: A portion of code shown for review or context.
@@ -90,6 +90,6 @@ code: [Declaration]
 not:
   - name: Usage
     means: A reference involving a declaration in another component.
-  - name: ReviewItem
+  - name: Review item
     means: A review item describes a change to a declaration, a configuration file, or build settings. The declaration is the code itself.
 ```

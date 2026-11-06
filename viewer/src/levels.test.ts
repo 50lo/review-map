@@ -9,8 +9,8 @@ import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
 import { notesMarkdown } from "./review";
 
 const fixture = path.resolve(__dirname, "../../Tests/ReviewMapCoreTests/Fixtures/basic/expected.json");
-const model = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
-const index = buildIndex(model);
+const report = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
+const index = buildIndex(report);
 
 describe("signatureSegments", () => {
   it("marks only the tokens that differ from base", () => {
@@ -65,8 +65,8 @@ describe("nav", () => {
       { type: "component", id: "spm:Features/Checkout" },
       { type: "edge", key: "a->b" },
       { type: "interface", id: "cfg:Core" },
-      { type: "entity", id: "cfg:Core::Cart.price(for:)" },
-      { type: "entity", id: "cfg:Core::Cart.add(_:)", region: "cfg:Core::Cart.add(_:)/r1" },
+      { type: "reviewItem", id: "cfg:Core::Cart.price(for:)" },
+      { type: "reviewItem", id: "cfg:Core::Cart.add(_:)", region: "cfg:Core::Cart.add(_:)/r1" },
       { type: "location", side: "head", file: "Sources/A b/C.swift", line: 12 },
     ];
     for (const f of all) expect(hashToFocus("#" + focusToHash(f))).toEqual(f);
@@ -78,12 +78,12 @@ describe("interface view", () => {
   it("lists interface changes by kind and internal changes below", () => {
     const m = interfaceModel(index, "cfg:Core");
     expect(m.groups.map((g) => g.title)).toEqual(["Protocols and interfaces", "Types", "Functions", "Properties", "Enum cases and members"].filter((t) => m.groups.some((g) => g.title === t)));
-    expect(m.groups.find((g) => g.title === "Protocols and interfaces")?.entities.map((e) => e.qualifiedName)).toContain("CartRepository");
-    for (const g of m.groups) expect(g.entities.every((e) => e.isInterface)).toBe(true);
+    expect(m.groups.find((g) => g.title === "Protocols and interfaces")?.reviewItems.map((e) => e.qualifiedName)).toContain("CartRepository");
+    for (const g of m.groups) expect(g.reviewItems.every((e) => e.isInterface)).toBe(true);
     expect(m.internal.every((e) => !e.isInterface)).toBe(true);
   });
 
-  it("steps through entities in the interface view's order", () => {
+  it("steps through review items in the interface view's order", () => {
     const order = reviewOrder(index, "cfg:Core");
     const second = neighbors(index, order[1]);
     expect(second.prev?.id).toBe(order[0].id);
@@ -94,25 +94,25 @@ describe("interface view", () => {
 });
 
 describe("references", () => {
-  it("leads a caller to its changed entity, or else to the line", () => {
-    const total = index.entities.get("cfg:Core::Cart.total()")!;
+  it("leads a caller to its changed review item, or else to the line", () => {
+    const total = index.reviewItems.get("cfg:Core::Cart.total()")!;
     for (const u of total.usedBy ?? []) {
       const f = usedByTarget(index, u);
-      if (f?.type === "entity") expect(index.entities.get(f.id)?.qualifiedName).toBe(u.symbol);
+      if (f?.type === "reviewItem") expect(index.reviewItems.get(f.id)?.qualifiedName).toBe(u.symbol);
       else expect(f).toEqual({ type: "location", side: "head", file: u.file, line: u.line });
     }
   });
 
   it("leads a dependency to the changed declaration, or else to its component", () => {
-    const store = model.entities.find((e) => e.qualifiedName === "PriceCache.price(for:)")!;
+    const store = report.reviewItems.find((e) => e.qualifiedName === "PriceCache.price(for:)")!;
     const dep = store.dependsOn![0];
     const f = dependsOnTarget(index, dep);
-    expect(f?.type === "entity" || (f?.type === "interface" && f.id === dep.component)).toBe(true);
+    expect(f?.type === "reviewItem" || (f?.type === "interface" && f.id === dep.component)).toBe(true);
   });
 
   it("makes changed type names clickable in code", () => {
     const t = symbolTargets(index);
-    expect(t.get("CartRepository")).toEqual({ type: "entity", id: "cfg:Core::CartRepository" });
+    expect(t.get("CartRepository")).toEqual({ type: "reviewItem", id: "cfg:Core::CartRepository" });
   });
 
   it("splits the last name of a qualified name outside argument lists", () => {
@@ -125,9 +125,9 @@ describe("references", () => {
 describe("review notes", () => {
   it("exports notes as Markdown in file order", () => {
     const md = notesMarkdown({
-      b: { text: "Why drop the limit?", entity: "x", label: "Cart.add(_:)", file: "Sources/Core/Cart.swift", startLine: 8, endLine: 8, side: "base" },
-      a: { text: "Check callers", entity: "y", label: "Item", file: "Sources/Core/Item.swift", startLine: 3, endLine: 5, side: "head" },
-      c: { text: "first", entity: "z", label: "Cart.first()", file: "Sources/Core/Cart.swift", startLine: 15, endLine: 17, side: "head" },
+      b: { text: "Why drop the limit?", reviewItem: "x", label: "Cart.add(_:)", file: "Sources/Core/Cart.swift", startLine: 8, endLine: 8, side: "base" },
+      a: { text: "Check callers", reviewItem: "y", label: "Item", file: "Sources/Core/Item.swift", startLine: 3, endLine: 5, side: "head" },
+      c: { text: "first", reviewItem: "z", label: "Cart.first()", file: "Sources/Core/Cart.swift", startLine: 15, endLine: 17, side: "head" },
     });
     expect(md.split("\n").filter((l) => l.startsWith("**"))).toEqual([
       "**`Sources/Core/Cart.swift:8`** (removed code) · Cart.add(_:)",
@@ -139,9 +139,9 @@ describe("review notes", () => {
 });
 
 describe("context regions", () => {
-  it("each supports a review or removed region of its entity", () => {
-    for (const [entity, cs] of index.contextByEntity) {
-      const own = new Set((index.regionsByEntity.get(entity) ?? []).map((r) => r.id));
+  it("each supports a review or removed region of its review item", () => {
+    for (const [reviewItem, cs] of index.contextByReviewItem) {
+      const own = new Set((index.regionsByReviewItem.get(reviewItem) ?? []).map((r) => r.id));
       for (const c of cs) expect(c.supports?.every((id) => own.has(id))).toBe(true);
     }
   });

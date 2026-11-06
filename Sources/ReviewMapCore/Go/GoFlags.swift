@@ -3,11 +3,11 @@ import Foundation
 /// Go's contract flags: changes to exported API, to interface method sets, and to struct fields that
 /// other packages or serialized data depend on.
 struct GoFlags {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
     /// The Go pairs, as indices into `b.pairs`.
     let indices: [Int]
 
-    init(_ builder: ModelBuilder, pairs: [Int]) {
+    init(_ builder: ChangeReportBuilder, pairs: [Int]) {
         b = builder
         indices = pairs
     }

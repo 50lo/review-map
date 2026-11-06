@@ -217,7 +217,7 @@ private struct DeclWalker {
     private struct Scope {
         var qualified: String?
         var index: Int?
-        var kind: EntityKind?
+        var kind: ReviewItemKind?
     }
     private var stack: [Scope] = [Scope(qualified: nil, index: nil, kind: nil)]
     private var current: Scope { stack[stack.count - 1] }
@@ -297,7 +297,7 @@ private struct DeclWalker {
         return String(n.text.split(separator: ".").last ?? Substring(n.text))
     }
 
-    private mutating func container(_ n: SyntaxNode, kind: EntityKind, keyword: String, ctx: Context) {
+    private mutating func container(_ n: SyntaxNode, kind: ReviewItemKind, keyword: String, ctx: Context) {
         guard let body = n.child("body") else { return }
         let name = n.child("name")?.text ?? "default"
         var inherited: [String] = []
@@ -415,7 +415,7 @@ private struct DeclWalker {
     /// Adds a declaration. `n` is the declaration's own node; the context's outer node (an `export` or
     /// `declare`, or the first decorator) widens its lines.
     @discardableResult
-    private mutating func add(_ n: SyntaxNode, ctx: Context, kind: EntityKind, name: String, labelsKey: String,
+    private mutating func add(_ n: SyntaxNode, ctx: Context, kind: ReviewItemKind, name: String, labelsKey: String,
                               qualified: String? = nil, header: [SyntaxNode], body: SyntaxNode?,
                               inherited: [String] = [], headerEnd: SyntaxNode? = nil,
                               function: SyntaxNode? = nil, stored: Bool = false, type: SyntaxNode? = nil) -> Int {
@@ -439,7 +439,7 @@ private struct DeclWalker {
         let first = decorators.first ?? ctx.outer ?? n
         let start = min(first.startLine, ctx.outer?.startLine ?? n.startLine)
         let startByte = min(first.startByte, ctx.outer?.startByte ?? n.startByte)
-        let containerKinds: Set<EntityKind> = [.class, .protocol, .enum]
+        let containerKinds: Set<ReviewItemKind> = [.class, .protocol, .enum]
         let rawEnd = containerKinds.contains(kind) ? (headerEnd?.startByte ?? n.endByte) : n.endByte
         // Semicolons are optional, so adding or dropping one is cosmetic.
         let header = header.last?.type == ";" ? Array(header.dropLast()) : header

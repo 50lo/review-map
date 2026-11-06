@@ -9,7 +9,7 @@
   "components" : [
     {
       "changeScore" : 0,
-      "changedEntities" : 0,
+      "changedReviewItems" : 0,
       "id" : "ext:react",
       "interfaceChanges" : 0,
       "isTest" : false,
@@ -21,7 +21,7 @@
     },
     {
       "changeScore" : 0.01,
-      "changedEntities" : 0,
+      "changedReviewItems" : 0,
       "id" : "ext:zod",
       "interfaceChanges" : 0,
       "isTest" : false,
@@ -34,7 +34,7 @@
     },
     {
       "changeScore" : 0.039,
-      "changedEntities" : 1,
+      "changedReviewItems" : 1,
       "id" : "folder:scripts",
       "interfaceChanges" : 0,
       "isTest" : false,
@@ -46,7 +46,7 @@
     },
     {
       "changeScore" : 0.107,
-      "changedEntities" : 2,
+      "changedReviewItems" : 2,
       "id" : "npm:@shop/analytics",
       "interfaceChanges" : 1,
       "isTest" : false,
@@ -60,7 +60,7 @@
     },
     {
       "changeScore" : 1,
-      "changedEntities" : 18,
+      "changedReviewItems" : 18,
       "id" : "npm:@shop/core",
       "interfaceChanges" : 6,
       "isTest" : false,
@@ -73,7 +73,7 @@
     },
     {
       "changeScore" : 0.004,
-      "changedEntities" : 1,
+      "changedReviewItems" : 1,
       "id" : "npm:@shop/core:tests",
       "interfaceChanges" : 0,
       "isTest" : true,
@@ -86,7 +86,7 @@
     },
     {
       "changeScore" : 0.155,
-      "changedEntities" : 4,
+      "changedReviewItems" : 4,
       "id" : "npm:@shop/web",
       "interfaceChanges" : 0,
       "isTest" : false,
@@ -99,7 +99,7 @@
     },
     {
       "changeScore" : 0.019,
-      "changedEntities" : 1,
+      "changedReviewItems" : 1,
       "id" : "tsconfig:tools",
       "interfaceChanges" : 0,
       "isTest" : false,
@@ -301,7 +301,941 @@
       "to" : "npm:@shop/core"
     }
   ],
-  "entities" : [
+  "externalDeps" : [
+    {
+      "change" : "bumped",
+      "from" : "18.2.0",
+      "name" : "react",
+      "to" : "18.3.1"
+    },
+    {
+      "change" : "added",
+      "name" : "zod",
+      "to" : "3.23.8"
+    }
+  ],
+  "findings" : [
+    {
+      "anchors" : [
+        {
+          "reviewItem" : "npm:@shop/core::CartRepository.clear()"
+        },
+        {
+          "component" : "npm:@shop/core"
+        }
+      ],
+      "evidence" : [
+        "No clear in MemoryRepository, and no default implementation in an extension of CartRepository."
+      ],
+      "id" : "conformers:1",
+      "kind" : "conformers",
+      "location" : {
+        "endLine" : 60,
+        "file" : "packages/core/src/cart.ts",
+        "side" : "head",
+        "startLine" : 50
+      },
+      "message" : "New requirement CartRepository.clear(): 1 conformer wasn't updated.",
+      "severity" : "high",
+      "source" : "check",
+      "suggestion" : "Implement it in each conformer, or add a default implementation."
+    },
+    {
+      "anchors" : [
+        {
+          "from" : "npm:@shop/web",
+          "to" : "ext:zod"
+        },
+        {
+          "component" : "ext:zod"
+        }
+      ],
+      "evidence" : [
+        "zod is new in the lockfile at 3.23.8.",
+        "@shop/web → zod (dependency zod, packages/web/package.json)"
+      ],
+      "id" : "new-external:1",
+      "kind" : "new-external",
+      "message" : "@shop/web now depends on zod, a new package.",
+      "severity" : "medium",
+      "source" : "check"
+    },
+    {
+      "anchors" : [
+        {
+          "reviewItem" : "npm:@shop/web::ItemSchema"
+        }
+      ],
+      "evidence" : [
+        "The name ItemSchema appears nowhere else in the repo."
+      ],
+      "id" : "unused-api:1",
+      "kind" : "unused-api",
+      "location" : {
+        "endLine" : 3,
+        "file" : "packages/web/src/validate.ts",
+        "side" : "head",
+        "startLine" : 3
+      },
+      "message" : "New public var ItemSchema has no callers outside tests.",
+      "severity" : "medium",
+      "source" : "check",
+      "suggestion" : "Keep it internal until something outside needs it, or drop it."
+    },
+    {
+      "anchors" : [
+        {
+          "component" : "npm:@shop/core"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Item.name"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::CartRepository.load()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::CartRepository.clear()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Serializable.toJSON()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Cart.get size"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Cart.first()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Cart.persist()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::Cart.toJSON()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::MemoryRepository.load()"
+        },
+        {
+          "reviewItem" : "npm:@shop/core::round()"
+        }
+      ],
+      "evidence" : [
+        "var Item.name (added)",
+        "func CartRepository.load() (signature)",
+        "func CartRepository.clear() (added)",
+        "func Serializable.toJSON() (added)",
+        "var Cart.get size (added)",
+        "func Cart.first() (added)",
+        "func Cart.persist() (signature)",
+        "func Cart.toJSON() (added)",
+        "func MemoryRepository.load() (signature)",
+        "func round() (signature)"
+      ],
+      "id" : "untested:1",
+      "kind" : "untested",
+      "message" : "No test references 10 changed review items in @shop/core.",
+      "severity" : "low",
+      "source" : "check"
+    }
+  ],
+  "regions" : [
+    {
+      "endLine" : 4,
+      "file" : "scripts/release.ts",
+      "id" : "folder:scripts::version()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines"
+      ],
+      "reviewItem" : "folder:scripts::version()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "endLine" : 3,
+      "file" : "packages/analytics/src/track.ts",
+      "id" : "npm:@shop/analytics::track()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "concurrency: setTimeout",
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/analytics::track()",
+      "risk" : 0.402,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 7,
+      "file" : "packages/web/src/main.ts",
+      "id" : "npm:@shop/analytics::track()/c1",
+      "kind" : "context",
+      "lines" : [
+        4,
+        5
+      ],
+      "reasons" : [
+        "start()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/analytics::track()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "npm:@shop/analytics::track()/r1"
+      ]
+    },
+    {
+      "endLine" : 7,
+      "file" : "packages/analytics/src/track.ts",
+      "id" : "npm:@shop/analytics::format()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "reviewItem" : "npm:@shop/analytics::format()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "endLine" : 1,
+      "file" : "packages/core/package.json",
+      "id" : "npm:@shop/core::build settings/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:package-exports-changed",
+        "typescript:strictness-changed"
+      ],
+      "reviewItem" : "npm:@shop/core::build settings",
+      "risk" : 0.748,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "endLine" : 3,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Item/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:interface-member-added"
+      ],
+      "reviewItem" : "npm:@shop/core::Item",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 3
+    },
+    {
+      "endLine" : 6,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Item.name/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:interface-member-added"
+      ],
+      "reviewItem" : "npm:@shop/core::Item.name",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 6
+    },
+    {
+      "endLine" : 9,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::CartRepository/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:interface-member-added",
+        "typescript:interface-member-changed"
+      ],
+      "reviewItem" : "npm:@shop/core::CartRepository",
+      "risk" : 0.559,
+      "side" : "head",
+      "startLine" : 9
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 60,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::CartRepository/c1",
+      "kind" : "context",
+      "lines" : [
+        50
+      ],
+      "reasons" : [
+        "MemoryRepository"
+      ],
+      "relation" : "conformer",
+      "reviewItem" : "npm:@shop/core::CartRepository",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 50,
+      "supports" : [
+        "npm:@shop/core::CartRepository/r1"
+      ]
+    },
+    {
+      "endLine" : 10,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::CartRepository.load()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:interface-member-changed"
+      ],
+      "reviewItem" : "npm:@shop/core::CartRepository.load()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 10
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 55,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::CartRepository.load()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "MemoryRepository.load()"
+      ],
+      "relation" : "conformer",
+      "reviewItem" : "npm:@shop/core::CartRepository.load()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 53,
+      "supports" : [
+        "npm:@shop/core::CartRepository.load()/r1"
+      ]
+    },
+    {
+      "endLine" : 12,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::CartRepository.clear()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:interface-member-added"
+      ],
+      "reviewItem" : "npm:@shop/core::CartRepository.clear()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 12
+    },
+    {
+      "endLine" : 15,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Serializable/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "reviewItem" : "npm:@shop/core::Serializable",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 15
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 48,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Serializable/c1",
+      "kind" : "context",
+      "lines" : [
+        19
+      ],
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "conformer",
+      "reviewItem" : "npm:@shop/core::Serializable",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 19,
+      "supports" : [
+        "npm:@shop/core::Serializable/r1"
+      ]
+    },
+    {
+      "endLine" : 16,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Serializable.toJSON()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "reviewItem" : "npm:@shop/core::Serializable.toJSON()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 16
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 47,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Serializable.toJSON()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart.toJSON()"
+      ],
+      "relation" : "conformer",
+      "reviewItem" : "npm:@shop/core::Serializable.toJSON()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 45,
+      "supports" : [
+        "npm:@shop/core::Serializable.toJSON()/r1"
+      ]
+    },
+    {
+      "endLine" : 19,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:supertype-added:Serializable",
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart",
+      "risk" : 0.658,
+      "side" : "head",
+      "startLine" : 19
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 4,
+      "file" : "packages/web/src/cart/CartView.tsx",
+      "id" : "npm:@shop/core::Cart/c1",
+      "kind" : "context",
+      "lines" : [
+        4
+      ],
+      "reasons" : [
+        "Props"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 4,
+      "supports" : [
+        "npm:@shop/core::Cart/r1"
+      ]
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 3,
+      "file" : "packages/web/src/cart/store.ts",
+      "id" : "npm:@shop/core::Cart/c2",
+      "kind" : "context",
+      "lines" : [
+        3
+      ],
+      "reasons" : [
+        "shared"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "npm:@shop/core::Cart/r1"
+      ]
+    },
+    {
+      "component" : "npm:@shop/core:tests",
+      "endLine" : 8,
+      "file" : "packages/core/src/cart.test.ts",
+      "id" : "npm:@shop/core::Cart/c3",
+      "kind" : "context",
+      "lines" : [
+        3,
+        4
+      ],
+      "reasons" : [
+        "testTotal()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "npm:@shop/core::Cart/r1"
+      ]
+    },
+    {
+      "endLine" : 26,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.get size/r1",
+      "kind" : "review",
+      "reasons" : [
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart.get size",
+      "risk" : 0.145,
+      "side" : "head",
+      "startLine" : 24
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 16,
+      "file" : "packages/web/src/cart/CartView.tsx",
+      "id" : "npm:@shop/core::Cart.get size/c1",
+      "kind" : "context",
+      "lines" : [
+        6,
+        8,
+        13
+      ],
+      "reasons" : [
+        "CartView()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart.get size",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 6,
+      "supports" : [
+        "npm:@shop/core::Cart.get size/r1"
+      ]
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 20,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.get size/c2",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "reviewItem" : "npm:@shop/core::Cart.get size",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "npm:@shop/core::Cart.get size/r1"
+      ]
+    },
+    {
+      "anchor" : 28,
+      "endLine" : 21,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.add()/r1",
+      "kind" : "removed",
+      "reasons" : [
+        "early return removed",
+        "control flow: early return, if",
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart.add()",
+      "risk" : 0.761,
+      "side" : "base",
+      "startLine" : 19
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 8,
+      "file" : "packages/web/src/cart/store.ts",
+      "id" : "npm:@shop/core::Cart.add()/c1",
+      "kind" : "context",
+      "lines" : [
+        5,
+        6
+      ],
+      "reasons" : [
+        "reset()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart.add()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "npm:@shop/core::Cart.add()/r1"
+      ]
+    },
+    {
+      "component" : "npm:@shop/core:tests",
+      "endLine" : 8,
+      "file" : "packages/core/src/cart.test.ts",
+      "id" : "npm:@shop/core::Cart.add()/c2",
+      "kind" : "context",
+      "lines" : [
+        3,
+        5,
+        6
+      ],
+      "reasons" : [
+        "testTotal()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart.add()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "npm:@shop/core::Cart.add()/r1"
+      ]
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 20,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.add()/c3",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "reviewItem" : "npm:@shop/core::Cart.add()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "npm:@shop/core::Cart.add()/r1"
+      ]
+    },
+    {
+      "endLine" : 34,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.first()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new non-null assertion"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart.first()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 32
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 20,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.first()/c1",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "reviewItem" : "npm:@shop/core::Cart.first()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "npm:@shop/core::Cart.first()/r1"
+      ]
+    },
+    {
+      "endLine" : 41,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.persist()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:access-changed:private->public",
+        "typescript:async-added",
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart.persist()",
+      "risk" : 0.863,
+      "side" : "head",
+      "startLine" : 41
+    },
+    {
+      "component" : "npm:@shop/web",
+      "endLine" : 8,
+      "file" : "packages/web/src/cart/store.ts",
+      "id" : "npm:@shop/core::Cart.persist()/c1",
+      "kind" : "context",
+      "lines" : [
+        5,
+        7
+      ],
+      "reasons" : [
+        "reset()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Cart.persist()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 5,
+      "supports" : [
+        "npm:@shop/core::Cart.persist()/r1"
+      ]
+    },
+    {
+      "endLine" : 47,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.toJSON()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new any, new type assertion"
+      ],
+      "reviewItem" : "npm:@shop/core::Cart.toJSON()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 45
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 20,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::Cart.toJSON()/c1",
+      "kind" : "context",
+      "lines" : [
+        20
+      ],
+      "reasons" : [
+        "stored properties of Cart"
+      ],
+      "relation" : "state",
+      "reviewItem" : "npm:@shop/core::Cart.toJSON()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 20,
+      "supports" : [
+        "npm:@shop/core::Cart.toJSON()/r1"
+      ]
+    },
+    {
+      "endLine" : 53,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::MemoryRepository.load()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:async-added"
+      ],
+      "reviewItem" : "npm:@shop/core::MemoryRepository.load()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 53
+    },
+    {
+      "endLine" : 1,
+      "file" : "packages/core/src/money.ts",
+      "id" : "npm:@shop/core::Currency/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:enum-member-added",
+        "used from 1 component"
+      ],
+      "reviewItem" : "npm:@shop/core::Currency",
+      "risk" : 0.658,
+      "side" : "head",
+      "startLine" : 1
+    },
+    {
+      "component" : "folder:scripts",
+      "endLine" : 5,
+      "file" : "scripts/release.ts",
+      "id" : "npm:@shop/core::Currency/c1",
+      "kind" : "context",
+      "lines" : [
+        3,
+        4
+      ],
+      "reasons" : [
+        "version()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::Currency",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 3,
+      "supports" : [
+        "npm:@shop/core::Currency/r1"
+      ]
+    },
+    {
+      "endLine" : 4,
+      "file" : "packages/core/src/money.ts",
+      "id" : "npm:@shop/core::Currency.GBP/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:enum-member-added"
+      ],
+      "reviewItem" : "npm:@shop/core::Currency.GBP",
+      "risk" : 0.64,
+      "side" : "head",
+      "startLine" : 4
+    },
+    {
+      "endLine" : 16,
+      "file" : "packages/core/src/money.ts",
+      "id" : "npm:@shop/core::round()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "signature changed"
+      ],
+      "reviewItem" : "npm:@shop/core::round()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 14
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 39,
+      "file" : "packages/core/src/cart.ts",
+      "id" : "npm:@shop/core::round()/c1",
+      "kind" : "context",
+      "lines" : [
+        36,
+        38
+      ],
+      "reasons" : [
+        "Cart.total()"
+      ],
+      "relation" : "caller",
+      "reviewItem" : "npm:@shop/core::round()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 36,
+      "supports" : [
+        "npm:@shop/core::round()/r1"
+      ]
+    },
+    {
+      "endLine" : 7,
+      "file" : "packages/core/src/cart.test.ts",
+      "id" : "npm:@shop/core:tests::testTotal()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines",
+        "test code"
+      ],
+      "reviewItem" : "npm:@shop/core:tests::testTotal()",
+      "risk" : 0.02,
+      "side" : "head",
+      "startLine" : 6
+    },
+    {
+      "endLine" : 10,
+      "file" : "packages/web/src/cart/CartView.tsx",
+      "id" : "npm:@shop/web::CartView()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "view control flow: early return, if"
+      ],
+      "reviewItem" : "npm:@shop/web::CartView()",
+      "risk" : 0.235,
+      "side" : "head",
+      "startLine" : 8
+    },
+    {
+      "endLine" : 13,
+      "file" : "packages/web/src/cart/CartView.tsx",
+      "id" : "npm:@shop/web::CartView()/r2",
+      "kind" : "review",
+      "reasons" : [
+        "view control flow: ?:"
+      ],
+      "reviewItem" : "npm:@shop/web::CartView()",
+      "risk" : 0.235,
+      "side" : "head",
+      "startLine" : 13
+    },
+    {
+      "component" : "npm:@shop/core",
+      "endLine" : 12,
+      "file" : "packages/core/src/money.ts",
+      "id" : "npm:@shop/web::CartView()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "format()"
+      ],
+      "relation" : "definition",
+      "reviewItem" : "npm:@shop/web::CartView()",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 9,
+      "supports" : [
+        "npm:@shop/web::CartView()/r2"
+      ]
+    },
+    {
+      "endLine" : 5,
+      "file" : "packages/web/src/cart/store.ts",
+      "id" : "npm:@shop/web::reset()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "typescript:async-added"
+      ],
+      "reviewItem" : "npm:@shop/web::reset()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "endLine" : 7,
+      "file" : "packages/web/src/cart/store.ts",
+      "id" : "npm:@shop/web::reset()/r2",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines"
+      ],
+      "reviewItem" : "npm:@shop/web::reset()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 7
+    },
+    {
+      "endLine" : 5,
+      "file" : "packages/web/src/main.ts",
+      "id" : "npm:@shop/web::start()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "changed lines"
+      ],
+      "reviewItem" : "npm:@shop/web::start()",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 5
+    },
+    {
+      "endLine" : 3,
+      "file" : "packages/web/src/validate.ts",
+      "id" : "npm:@shop/web::ItemSchema/r1",
+      "kind" : "review",
+      "reasons" : [
+        "new declaration"
+      ],
+      "reviewItem" : "npm:@shop/web::ItemSchema",
+      "risk" : 0.1,
+      "side" : "head",
+      "startLine" : 3
+    },
+    {
+      "endLine" : 6,
+      "file" : "tools/src/lint.ts",
+      "id" : "tsconfig:tools::lint()/r1",
+      "kind" : "review",
+      "reasons" : [
+        "control flow: if, throw"
+      ],
+      "reviewItem" : "tsconfig:tools::lint()",
+      "risk" : 0.37,
+      "side" : "head",
+      "startLine" : 4
+    }
+  ],
+  "repo" : {
+    "base" : "base",
+    "baseSha" : "<base>",
+    "head" : "main",
+    "headSha" : "<head>",
+    "root" : "<repo>",
+    "usesMergeBase" : true
+  },
+  "reviewItems" : [
     {
       "baseLocation" : {
         "endLine" : 3,
@@ -1434,941 +2368,7 @@
       ]
     }
   ],
-  "externalDeps" : [
-    {
-      "change" : "bumped",
-      "from" : "18.2.0",
-      "name" : "react",
-      "to" : "18.3.1"
-    },
-    {
-      "change" : "added",
-      "name" : "zod",
-      "to" : "3.23.8"
-    }
-  ],
-  "findings" : [
-    {
-      "anchors" : [
-        {
-          "entity" : "npm:@shop/core::CartRepository.clear()"
-        },
-        {
-          "component" : "npm:@shop/core"
-        }
-      ],
-      "evidence" : [
-        "No clear in MemoryRepository, and no default implementation in an extension of CartRepository."
-      ],
-      "id" : "conformers:1",
-      "kind" : "conformers",
-      "location" : {
-        "endLine" : 60,
-        "file" : "packages/core/src/cart.ts",
-        "side" : "head",
-        "startLine" : 50
-      },
-      "message" : "New requirement CartRepository.clear(): 1 conformer wasn't updated.",
-      "severity" : "high",
-      "source" : "check",
-      "suggestion" : "Implement it in each conformer, or add a default implementation."
-    },
-    {
-      "anchors" : [
-        {
-          "from" : "npm:@shop/web",
-          "to" : "ext:zod"
-        },
-        {
-          "component" : "ext:zod"
-        }
-      ],
-      "evidence" : [
-        "zod is new in the lockfile at 3.23.8.",
-        "@shop/web → zod (dependency zod, packages/web/package.json)"
-      ],
-      "id" : "new-external:1",
-      "kind" : "new-external",
-      "message" : "@shop/web now depends on zod, a new package.",
-      "severity" : "medium",
-      "source" : "check"
-    },
-    {
-      "anchors" : [
-        {
-          "entity" : "npm:@shop/web::ItemSchema"
-        }
-      ],
-      "evidence" : [
-        "The name ItemSchema appears nowhere else in the repo."
-      ],
-      "id" : "unused-api:1",
-      "kind" : "unused-api",
-      "location" : {
-        "endLine" : 3,
-        "file" : "packages/web/src/validate.ts",
-        "side" : "head",
-        "startLine" : 3
-      },
-      "message" : "New public var ItemSchema has no callers outside tests.",
-      "severity" : "medium",
-      "source" : "check",
-      "suggestion" : "Keep it internal until something outside needs it, or drop it."
-    },
-    {
-      "anchors" : [
-        {
-          "component" : "npm:@shop/core"
-        },
-        {
-          "entity" : "npm:@shop/core::Item.name"
-        },
-        {
-          "entity" : "npm:@shop/core::CartRepository.load()"
-        },
-        {
-          "entity" : "npm:@shop/core::CartRepository.clear()"
-        },
-        {
-          "entity" : "npm:@shop/core::Serializable.toJSON()"
-        },
-        {
-          "entity" : "npm:@shop/core::Cart.get size"
-        },
-        {
-          "entity" : "npm:@shop/core::Cart.first()"
-        },
-        {
-          "entity" : "npm:@shop/core::Cart.persist()"
-        },
-        {
-          "entity" : "npm:@shop/core::Cart.toJSON()"
-        },
-        {
-          "entity" : "npm:@shop/core::MemoryRepository.load()"
-        },
-        {
-          "entity" : "npm:@shop/core::round()"
-        }
-      ],
-      "evidence" : [
-        "var Item.name (added)",
-        "func CartRepository.load() (signature)",
-        "func CartRepository.clear() (added)",
-        "func Serializable.toJSON() (added)",
-        "var Cart.get size (added)",
-        "func Cart.first() (added)",
-        "func Cart.persist() (signature)",
-        "func Cart.toJSON() (added)",
-        "func MemoryRepository.load() (signature)",
-        "func round() (signature)"
-      ],
-      "id" : "untested:1",
-      "kind" : "untested",
-      "message" : "No test references 10 changed entities in @shop/core.",
-      "severity" : "low",
-      "source" : "check"
-    }
-  ],
-  "regions" : [
-    {
-      "endLine" : 4,
-      "entity" : "folder:scripts::version()",
-      "file" : "scripts/release.ts",
-      "id" : "folder:scripts::version()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "changed lines"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 4
-    },
-    {
-      "endLine" : 3,
-      "entity" : "npm:@shop/analytics::track()",
-      "file" : "packages/analytics/src/track.ts",
-      "id" : "npm:@shop/analytics::track()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "concurrency: setTimeout",
-        "used from 1 component"
-      ],
-      "risk" : 0.402,
-      "side" : "head",
-      "startLine" : 1
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 7,
-      "entity" : "npm:@shop/analytics::track()",
-      "file" : "packages/web/src/main.ts",
-      "id" : "npm:@shop/analytics::track()/c1",
-      "kind" : "context",
-      "lines" : [
-        4,
-        5
-      ],
-      "reasons" : [
-        "start()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 4,
-      "supports" : [
-        "npm:@shop/analytics::track()/r1"
-      ]
-    },
-    {
-      "endLine" : 7,
-      "entity" : "npm:@shop/analytics::format()",
-      "file" : "packages/analytics/src/track.ts",
-      "id" : "npm:@shop/analytics::format()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new declaration"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 5
-    },
-    {
-      "endLine" : 1,
-      "entity" : "npm:@shop/core::build settings",
-      "file" : "packages/core/package.json",
-      "id" : "npm:@shop/core::build settings/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:package-exports-changed",
-        "typescript:strictness-changed"
-      ],
-      "risk" : 0.748,
-      "side" : "head",
-      "startLine" : 1
-    },
-    {
-      "endLine" : 3,
-      "entity" : "npm:@shop/core::Item",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Item/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:interface-member-added"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 3
-    },
-    {
-      "endLine" : 6,
-      "entity" : "npm:@shop/core::Item.name",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Item.name/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:interface-member-added"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 6
-    },
-    {
-      "endLine" : 9,
-      "entity" : "npm:@shop/core::CartRepository",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::CartRepository/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:interface-member-added",
-        "typescript:interface-member-changed"
-      ],
-      "risk" : 0.559,
-      "side" : "head",
-      "startLine" : 9
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 60,
-      "entity" : "npm:@shop/core::CartRepository",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::CartRepository/c1",
-      "kind" : "context",
-      "lines" : [
-        50
-      ],
-      "reasons" : [
-        "MemoryRepository"
-      ],
-      "relation" : "conformer",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 50,
-      "supports" : [
-        "npm:@shop/core::CartRepository/r1"
-      ]
-    },
-    {
-      "endLine" : 10,
-      "entity" : "npm:@shop/core::CartRepository.load()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::CartRepository.load()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:interface-member-changed"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 10
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 55,
-      "entity" : "npm:@shop/core::CartRepository.load()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::CartRepository.load()/c1",
-      "kind" : "context",
-      "reasons" : [
-        "MemoryRepository.load()"
-      ],
-      "relation" : "conformer",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 53,
-      "supports" : [
-        "npm:@shop/core::CartRepository.load()/r1"
-      ]
-    },
-    {
-      "endLine" : 12,
-      "entity" : "npm:@shop/core::CartRepository.clear()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::CartRepository.clear()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:interface-member-added"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 12
-    },
-    {
-      "endLine" : 15,
-      "entity" : "npm:@shop/core::Serializable",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Serializable/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new declaration"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 15
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 48,
-      "entity" : "npm:@shop/core::Serializable",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Serializable/c1",
-      "kind" : "context",
-      "lines" : [
-        19
-      ],
-      "reasons" : [
-        "Cart"
-      ],
-      "relation" : "conformer",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 19,
-      "supports" : [
-        "npm:@shop/core::Serializable/r1"
-      ]
-    },
-    {
-      "endLine" : 16,
-      "entity" : "npm:@shop/core::Serializable.toJSON()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Serializable.toJSON()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new declaration"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 16
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 47,
-      "entity" : "npm:@shop/core::Serializable.toJSON()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Serializable.toJSON()/c1",
-      "kind" : "context",
-      "reasons" : [
-        "Cart.toJSON()"
-      ],
-      "relation" : "conformer",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 45,
-      "supports" : [
-        "npm:@shop/core::Serializable.toJSON()/r1"
-      ]
-    },
-    {
-      "endLine" : 19,
-      "entity" : "npm:@shop/core::Cart",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:supertype-added:Serializable",
-        "used from 1 component"
-      ],
-      "risk" : 0.658,
-      "side" : "head",
-      "startLine" : 19
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 4,
-      "entity" : "npm:@shop/core::Cart",
-      "file" : "packages/web/src/cart/CartView.tsx",
-      "id" : "npm:@shop/core::Cart/c1",
-      "kind" : "context",
-      "lines" : [
-        4
-      ],
-      "reasons" : [
-        "Props"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 4,
-      "supports" : [
-        "npm:@shop/core::Cart/r1"
-      ]
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 3,
-      "entity" : "npm:@shop/core::Cart",
-      "file" : "packages/web/src/cart/store.ts",
-      "id" : "npm:@shop/core::Cart/c2",
-      "kind" : "context",
-      "lines" : [
-        3
-      ],
-      "reasons" : [
-        "shared"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 3,
-      "supports" : [
-        "npm:@shop/core::Cart/r1"
-      ]
-    },
-    {
-      "component" : "npm:@shop/core:tests",
-      "endLine" : 8,
-      "entity" : "npm:@shop/core::Cart",
-      "file" : "packages/core/src/cart.test.ts",
-      "id" : "npm:@shop/core::Cart/c3",
-      "kind" : "context",
-      "lines" : [
-        3,
-        4
-      ],
-      "reasons" : [
-        "testTotal()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 3,
-      "supports" : [
-        "npm:@shop/core::Cart/r1"
-      ]
-    },
-    {
-      "endLine" : 26,
-      "entity" : "npm:@shop/core::Cart.get size",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.get size/r1",
-      "kind" : "review",
-      "reasons" : [
-        "used from 1 component"
-      ],
-      "risk" : 0.145,
-      "side" : "head",
-      "startLine" : 24
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 16,
-      "entity" : "npm:@shop/core::Cart.get size",
-      "file" : "packages/web/src/cart/CartView.tsx",
-      "id" : "npm:@shop/core::Cart.get size/c1",
-      "kind" : "context",
-      "lines" : [
-        6,
-        8,
-        13
-      ],
-      "reasons" : [
-        "CartView()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 6,
-      "supports" : [
-        "npm:@shop/core::Cart.get size/r1"
-      ]
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 20,
-      "entity" : "npm:@shop/core::Cart.get size",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.get size/c2",
-      "kind" : "context",
-      "lines" : [
-        20
-      ],
-      "reasons" : [
-        "stored properties of Cart"
-      ],
-      "relation" : "state",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 20,
-      "supports" : [
-        "npm:@shop/core::Cart.get size/r1"
-      ]
-    },
-    {
-      "anchor" : 28,
-      "endLine" : 21,
-      "entity" : "npm:@shop/core::Cart.add()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.add()/r1",
-      "kind" : "removed",
-      "reasons" : [
-        "early return removed",
-        "control flow: early return, if",
-        "used from 1 component"
-      ],
-      "risk" : 0.761,
-      "side" : "base",
-      "startLine" : 19
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 8,
-      "entity" : "npm:@shop/core::Cart.add()",
-      "file" : "packages/web/src/cart/store.ts",
-      "id" : "npm:@shop/core::Cart.add()/c1",
-      "kind" : "context",
-      "lines" : [
-        5,
-        6
-      ],
-      "reasons" : [
-        "reset()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 5,
-      "supports" : [
-        "npm:@shop/core::Cart.add()/r1"
-      ]
-    },
-    {
-      "component" : "npm:@shop/core:tests",
-      "endLine" : 8,
-      "entity" : "npm:@shop/core::Cart.add()",
-      "file" : "packages/core/src/cart.test.ts",
-      "id" : "npm:@shop/core::Cart.add()/c2",
-      "kind" : "context",
-      "lines" : [
-        3,
-        5,
-        6
-      ],
-      "reasons" : [
-        "testTotal()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 3,
-      "supports" : [
-        "npm:@shop/core::Cart.add()/r1"
-      ]
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 20,
-      "entity" : "npm:@shop/core::Cart.add()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.add()/c3",
-      "kind" : "context",
-      "lines" : [
-        20
-      ],
-      "reasons" : [
-        "stored properties of Cart"
-      ],
-      "relation" : "state",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 20,
-      "supports" : [
-        "npm:@shop/core::Cart.add()/r1"
-      ]
-    },
-    {
-      "endLine" : 34,
-      "entity" : "npm:@shop/core::Cart.first()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.first()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new non-null assertion"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 32
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 20,
-      "entity" : "npm:@shop/core::Cart.first()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.first()/c1",
-      "kind" : "context",
-      "lines" : [
-        20
-      ],
-      "reasons" : [
-        "stored properties of Cart"
-      ],
-      "relation" : "state",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 20,
-      "supports" : [
-        "npm:@shop/core::Cart.first()/r1"
-      ]
-    },
-    {
-      "endLine" : 41,
-      "entity" : "npm:@shop/core::Cart.persist()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.persist()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:access-changed:private->public",
-        "typescript:async-added",
-        "used from 1 component"
-      ],
-      "risk" : 0.863,
-      "side" : "head",
-      "startLine" : 41
-    },
-    {
-      "component" : "npm:@shop/web",
-      "endLine" : 8,
-      "entity" : "npm:@shop/core::Cart.persist()",
-      "file" : "packages/web/src/cart/store.ts",
-      "id" : "npm:@shop/core::Cart.persist()/c1",
-      "kind" : "context",
-      "lines" : [
-        5,
-        7
-      ],
-      "reasons" : [
-        "reset()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 5,
-      "supports" : [
-        "npm:@shop/core::Cart.persist()/r1"
-      ]
-    },
-    {
-      "endLine" : 47,
-      "entity" : "npm:@shop/core::Cart.toJSON()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.toJSON()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new any, new type assertion"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 45
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 20,
-      "entity" : "npm:@shop/core::Cart.toJSON()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::Cart.toJSON()/c1",
-      "kind" : "context",
-      "lines" : [
-        20
-      ],
-      "reasons" : [
-        "stored properties of Cart"
-      ],
-      "relation" : "state",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 20,
-      "supports" : [
-        "npm:@shop/core::Cart.toJSON()/r1"
-      ]
-    },
-    {
-      "endLine" : 53,
-      "entity" : "npm:@shop/core::MemoryRepository.load()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::MemoryRepository.load()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:async-added"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 53
-    },
-    {
-      "endLine" : 1,
-      "entity" : "npm:@shop/core::Currency",
-      "file" : "packages/core/src/money.ts",
-      "id" : "npm:@shop/core::Currency/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:enum-member-added",
-        "used from 1 component"
-      ],
-      "risk" : 0.658,
-      "side" : "head",
-      "startLine" : 1
-    },
-    {
-      "component" : "folder:scripts",
-      "endLine" : 5,
-      "entity" : "npm:@shop/core::Currency",
-      "file" : "scripts/release.ts",
-      "id" : "npm:@shop/core::Currency/c1",
-      "kind" : "context",
-      "lines" : [
-        3,
-        4
-      ],
-      "reasons" : [
-        "version()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 3,
-      "supports" : [
-        "npm:@shop/core::Currency/r1"
-      ]
-    },
-    {
-      "endLine" : 4,
-      "entity" : "npm:@shop/core::Currency.GBP",
-      "file" : "packages/core/src/money.ts",
-      "id" : "npm:@shop/core::Currency.GBP/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:enum-member-added"
-      ],
-      "risk" : 0.64,
-      "side" : "head",
-      "startLine" : 4
-    },
-    {
-      "endLine" : 16,
-      "entity" : "npm:@shop/core::round()",
-      "file" : "packages/core/src/money.ts",
-      "id" : "npm:@shop/core::round()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "signature changed"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 14
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 39,
-      "entity" : "npm:@shop/core::round()",
-      "file" : "packages/core/src/cart.ts",
-      "id" : "npm:@shop/core::round()/c1",
-      "kind" : "context",
-      "lines" : [
-        36,
-        38
-      ],
-      "reasons" : [
-        "Cart.total()"
-      ],
-      "relation" : "caller",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 36,
-      "supports" : [
-        "npm:@shop/core::round()/r1"
-      ]
-    },
-    {
-      "endLine" : 7,
-      "entity" : "npm:@shop/core:tests::testTotal()",
-      "file" : "packages/core/src/cart.test.ts",
-      "id" : "npm:@shop/core:tests::testTotal()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "changed lines",
-        "test code"
-      ],
-      "risk" : 0.02,
-      "side" : "head",
-      "startLine" : 6
-    },
-    {
-      "endLine" : 10,
-      "entity" : "npm:@shop/web::CartView()",
-      "file" : "packages/web/src/cart/CartView.tsx",
-      "id" : "npm:@shop/web::CartView()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "view control flow: early return, if"
-      ],
-      "risk" : 0.235,
-      "side" : "head",
-      "startLine" : 8
-    },
-    {
-      "endLine" : 13,
-      "entity" : "npm:@shop/web::CartView()",
-      "file" : "packages/web/src/cart/CartView.tsx",
-      "id" : "npm:@shop/web::CartView()/r2",
-      "kind" : "review",
-      "reasons" : [
-        "view control flow: ?:"
-      ],
-      "risk" : 0.235,
-      "side" : "head",
-      "startLine" : 13
-    },
-    {
-      "component" : "npm:@shop/core",
-      "endLine" : 12,
-      "entity" : "npm:@shop/web::CartView()",
-      "file" : "packages/core/src/money.ts",
-      "id" : "npm:@shop/web::CartView()/c1",
-      "kind" : "context",
-      "reasons" : [
-        "format()"
-      ],
-      "relation" : "definition",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 9,
-      "supports" : [
-        "npm:@shop/web::CartView()/r2"
-      ]
-    },
-    {
-      "endLine" : 5,
-      "entity" : "npm:@shop/web::reset()",
-      "file" : "packages/web/src/cart/store.ts",
-      "id" : "npm:@shop/web::reset()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "typescript:async-added"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 5
-    },
-    {
-      "endLine" : 7,
-      "entity" : "npm:@shop/web::reset()",
-      "file" : "packages/web/src/cart/store.ts",
-      "id" : "npm:@shop/web::reset()/r2",
-      "kind" : "review",
-      "reasons" : [
-        "changed lines"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 7
-    },
-    {
-      "endLine" : 5,
-      "entity" : "npm:@shop/web::start()",
-      "file" : "packages/web/src/main.ts",
-      "id" : "npm:@shop/web::start()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "changed lines"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 5
-    },
-    {
-      "endLine" : 3,
-      "entity" : "npm:@shop/web::ItemSchema",
-      "file" : "packages/web/src/validate.ts",
-      "id" : "npm:@shop/web::ItemSchema/r1",
-      "kind" : "review",
-      "reasons" : [
-        "new declaration"
-      ],
-      "risk" : 0.1,
-      "side" : "head",
-      "startLine" : 3
-    },
-    {
-      "endLine" : 6,
-      "entity" : "tsconfig:tools::lint()",
-      "file" : "tools/src/lint.ts",
-      "id" : "tsconfig:tools::lint()/r1",
-      "kind" : "review",
-      "reasons" : [
-        "control flow: if, throw"
-      ],
-      "risk" : 0.37,
-      "side" : "head",
-      "startLine" : 4
-    }
-  ],
-  "repo" : {
-    "base" : "base",
-    "baseSha" : "<base>",
-    "head" : "main",
-    "headSha" : "<head>",
-    "root" : "<repo>",
-    "usesMergeBase" : true
-  },
-  "version" : 3,
+  "version" : 4,
   "warnings" : [
 
   ]

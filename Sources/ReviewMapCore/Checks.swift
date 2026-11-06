@@ -4,7 +4,7 @@ import Foundation
 // dependency graph, and usage, so it can check what a review of the diff alone can't: new cycles,
 // edges against the declared layering, new external dependencies, new public API nobody calls,
 // code its callers left behind, conformers a changed protocol missed, and changed code no test
-// references. Each finding is anchored to the components, edges, or entities it is about.
+// references. Each finding is anchored to the components, edges, or review items it is about.
 //
 // Without an index, "is X referenced" means "does the identifier X appear outside its own
 // declaration". That over-counts uses, so the unused-code checks err towards saying nothing.
@@ -60,19 +60,19 @@ private final class WordIndex {
 private let severityOrder = ["high": 0, "medium": 1, "low": 2]
 
 struct StructuralChecks {
-    let b: ModelBuilder
-    let entities: [ReviewItem]
+    let b: ChangeReportBuilder
+    let reviewItems: [ReviewItem]
     let edges: [Edge]
     let config: Config
     private let words: [Side: WordIndex]
     /// Index mode: (side, file, decl index) -> the places that reference the declaration.
     private let indexed: [Side: [DeclKey: [Occurrence]]]
-    private let entityIds: Set<String>
+    private let reviewItemIds: Set<String>
     private var pairId: [DeclKey: String] = [:]
 
-    init(_ b: ModelBuilder, entities: [ReviewItem], edges: [Edge], config: Config) {
+    init(_ b: ChangeReportBuilder, reviewItems: [ReviewItem], edges: [Edge], config: Config) {
         self.b = b
-        self.entities = entities
+        self.reviewItems = reviewItems
         self.edges = edges
         self.config = config
         words = [.base: WordIndex(b.base), .head: WordIndex(b.head)]
@@ -92,7 +92,7 @@ struct StructuralChecks {
             idx[s] = map
         }
         indexed = idx
-        entityIds = Set(entities.map(\.id))
+        reviewItemIds = Set(reviewItems.map(\.id))
         for p in b.pairs {
             if let h = p.head { pairId[DeclKey(side: .head, file: h.file, index: h.index)] = p.id }
             if let x = p.base { pairId[DeclKey(side: .base, file: x.file, index: x.index)] = p.id }
@@ -393,7 +393,7 @@ struct StructuralChecks {
                 message: "New public \(h.decl.kind.rawValue) \(h.decl.qualifiedName) has no callers outside tests.",
                 evidence: evidence,
                 suggestion: "Keep it internal until something outside needs it, or drop it.",
-                anchors: [entityIds.contains(p.id) ? .entity(p.id) : .component(h.component)],
+                anchors: [reviewItemIds.contains(p.id) ? .reviewItem(p.id) : .component(h.component)],
                 location: location(h, .head)))
         }
         return out
@@ -413,15 +413,15 @@ struct StructuralChecks {
             let before = references(bl, .base).filter { !$0.isTest }
             guard !before.isEmpty, !references(h, .head).contains(where: { !$0.isTest }) else { continue }
             reported.insert(p.id)
-            // Base callers that are gone or changed, and the entities they are.
+            // Base callers that are gone or changed, and the review items they are.
             var callers: [Anchor] = []
             for o in before {
                 guard let file = b.base.files[o.file], let encl = file.enclosingDecl(line: o.line),
                       let i = file.decls.firstIndex(where: { $0.startLine == encl.startLine && $0.qualifiedName == encl.qualifiedName }),
-                      let id = pairId[DeclKey(side: .base, file: o.file, index: i)], entityIds.contains(id) else { continue }
-                if !callers.contains(.entity(id)) { callers.append(.entity(id)) }
+                      let id = pairId[DeclKey(side: .base, file: o.file, index: i)], reviewItemIds.contains(id) else { continue }
+                if !callers.contains(.reviewItem(id)) { callers.append(.reviewItem(id)) }
             }
-            let main: Anchor = entityIds.contains(p.id) ? .entity(p.id) : .component(h.component)
+            let main: Anchor = reviewItemIds.contains(p.id) ? .reviewItem(p.id) : .component(h.component)
             out.append(Finding(
                 id: "", source: "check", kind: "orphaned", severity: "medium",
                 message: "\(h.decl.kind.rawValue) \(h.decl.qualifiedName) is no longer used: the change removed its last callers.",
@@ -472,7 +472,7 @@ struct StructuralChecks {
                 message: "\(what) \(h.decl.qualifiedName): \(all.count) conformer\(all.count == 1 ? " wasn't" : "s weren't") updated.",
                 evidence: evidence,
                 suggestion: missing.isEmpty ? "Check that each implementation still does what the new signature promises." : "Implement it in each conformer, or add a default implementation.",
-                anchors: [entityIds.contains(p.id) ? .entity(p.id) : .component(h.component)] + Array(Set(all.map(\.component))).sorted().map(Anchor.component),
+                anchors: [reviewItemIds.contains(p.id) ? .reviewItem(p.id) : .component(h.component)] + Array(Set(all.map(\.component))).sorted().map(Anchor.component),
                 location: all.first.map { location($0, .head) }))
         }
         return out
@@ -493,13 +493,13 @@ struct StructuralChecks {
         var pairOfId: [String: Pair] = [:]
         for p in b.pairs { pairOfId[p.id] = p }
         var byComponent: [String: [ReviewItem]] = [:]
-        for e in entities where e.change != .cosmetic && e.change != .removed && [.func, .`init`, .var].contains(e.kind)
+        for e in reviewItems where e.change != .cosmetic && e.change != .removed && [.func, .`init`, .var].contains(e.kind)
             && !e.tags.contains("test") && !e.tags.contains("generated") && !isTestComponent(e.component) && tested.contains(root(e.component, .head)) {
             guard let p = pairOfId[e.id], let h = p.head else { continue }
             let d = h.decl
             if ["private", "fileprivate", "#private", "protected"].contains(d.access ?? "") { continue }
             let parent = decl(.head, h.file, d.parentIndex)
-            let inherits = Set((parent?.inherited ?? []).map(ModelBuilder.conformanceName))
+            let inherits = Set((parent?.inherited ?? []).map(ChangeReportBuilder.conformanceName))
             if b.language(of: h.file).isViewCode(d, inherits: inherits) { continue }
             // An initializer is used through its type's name.
             var probe = h
@@ -511,17 +511,17 @@ struct StructuralChecks {
             let list = byComponent[comp]!
             return Finding(
                 id: "", source: "check", kind: "untested", severity: "low",
-                message: "No test references \(list.count == 1 ? list[0].qualifiedName : "\(list.count) changed entities") in \(name(comp)).",
+                message: "No test references \(list.count == 1 ? list[0].qualifiedName : "\(list.count) changed review items") in \(name(comp)).",
                 evidence: list.prefix(10).map { "\($0.kind.rawValue) \($0.qualifiedName) (\($0.change.rawValue))" } + (list.count > 10 ? ["and \(list.count - 10) more"] : []),
                 suggestion: nil,
-                anchors: [.component(comp)] + list.map { .entity($0.id) })
+                anchors: [.component(comp)] + list.map { .reviewItem($0.id) })
         }
     }
 }
 
 // MARK: - Similar names
 
-extension ModelBuilder {
+extension ChangeReportBuilder {
     /// "loadCartItems" -> ["load", "cart", "items"]; "load_cart" -> ["load", "cart"].
     static func nameWords(_ name: String) -> [String] {
         var words: [String] = []
@@ -541,9 +541,9 @@ extension ModelBuilder {
         return words
     }
 
-    /// For each added entity, existing head declarations whose names are close: the same name in another
+    /// For each added review item, existing head declarations whose names are close: the same name in another
     /// scope, most of the same words, or a near-identical spelling. Up to 5 each, closest first.
-    func similarDeclarations(_ entities: [ReviewItem]) -> [String: [Usage]] {
+    func similarDeclarations(_ reviewItems: [ReviewItem]) -> [String: [Usage]] {
         struct Candidate { var located: Located; var words: Set<String> }
         var byWord: [String: [Int]] = [:]
         var candidates: [Candidate] = []
@@ -560,7 +560,7 @@ extension ModelBuilder {
         var pairById: [String: Pair] = [:]
         for p in pairs { pairById[p.id] = p }
         var out: [String: [Usage]] = [:]
-        for e in entities where e.change == .added && !e.tags.contains("test") && !e.tags.contains("generated") {
+        for e in reviewItems where e.change == .added && !e.tags.contains("test") && !e.tags.contains("generated") {
             guard let h = pairById[e.id]?.head, h.decl.kind != .case, !language(of: h.file).isImplicitlyCalled(h.decl) else { continue }
             let name = h.decl.name
             let words = Set(Self.nameWords(name))

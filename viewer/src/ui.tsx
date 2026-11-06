@@ -58,7 +58,7 @@ export function Signature({ e }: { e: ReviewItem }) {
   );
 }
 
-/** The reviewed checkbox of an entity. */
+/** The reviewed checkbox of a review item. */
 export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) {
   const review = useReview();
   const on = !!review.reviewed[id];
@@ -70,7 +70,7 @@ export function ReviewedBox({ id, compact }: { id: string; compact?: boolean }) 
   );
 }
 
-/** The LLM's one-line behavior summary of an entity or component. */
+/** The LLM's one-line behavior summary of a review item or component. */
 export const LLMSummary = ({ text }: { text: string }) => (
   <div className="llm-text llm-summary" title="Summary written by the LLM">
     {text}

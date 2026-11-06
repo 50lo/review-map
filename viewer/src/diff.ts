@@ -6,7 +6,7 @@
 function lcs<T>(a: T[], b: T[], eq: (x: T, y: T) => boolean): Array<[number, number]> {
   const n = a.length;
   const m = b.length;
-  // Trim the common prefix and suffix first: most entity changes touch a few lines.
+  // Trim the common prefix and suffix first: most review item changes touch a few lines.
   let pre = 0;
   while (pre < n && pre < m && eq(a[pre], b[pre])) pre++;
   let suf = 0;
@@ -86,7 +86,7 @@ export interface LineChanges {
 
 const norm = (s: string) => s.trim().replace(/\s+/g, " ");
 
-/** Compares base and head lines of one entity, ignoring indentation and spacing. */
+/** Compares base and head lines of one review item, ignoring indentation and spacing. */
 export function lineChanges(base: string[], head: string[]): LineChanges {
   const pairs = lcs(base.map(norm), head.map(norm), (x, y) => x === y);
   const changed = head.map(() => true);

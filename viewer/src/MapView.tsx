@@ -12,7 +12,7 @@ import {
   type Node as RFNode,
   type NodeProps,
 } from "@xyflow/react";
-import { componentEntities, externalChangeOf, isChanged, related, rollup, shortName, within, type Focus, type Index, type MapGraph } from "./graph";
+import { componentReviewItems, externalChangeOf, isChanged, related, rollup, shortName, within, type Focus, type Index, type MapGraph } from "./graph";
 import { findingCounts, topSeverity } from "./findings";
 import { useReview } from "./review";
 import { layout, type Placed } from "./layout";
@@ -41,12 +41,12 @@ interface NodeData extends Record<string, unknown> {
   changed: boolean;
   dim: boolean;
   selected: boolean;
-  /** Reviewed entities out of the ones the component's views list. */
+  /** Reviewed review items out of the ones the component's views list. */
   progress?: { done: number; total: number };
   /** Set on groups: collapsed state, how many components a collapsed one hides, and the toggle. */
   group?: { collapsed: boolean; hides: number; toggle: () => void };
   /** Change counts and score, rolled up over a collapsed group's contents. */
-  counts: { changedEntities: number; interfaceChanges: number };
+  counts: { changedReviewItems: number; interfaceChanges: number };
   score: number;
   /** Structural review findings anchored to the component or to code in it. */
   findings?: Finding[];
@@ -69,10 +69,10 @@ const Handles = () => (
 const statusClass = (c: Component) => (c.status === "added" ? "st-added" : c.status === "removed" ? "st-removed" : "");
 
 const Badges = ({ counts }: { counts: NodeData["counts"] }) =>
-  counts.changedEntities > 0 ? (
+  counts.changedReviewItems > 0 ? (
     <span className="badges">
-      <span className="badge" title="Changed entities">
-        {counts.changedEntities} changed
+      <span className="badge" title="Changed review items">
+        {counts.changedReviewItems} changed
       </span>
       {counts.interfaceChanges > 0 && (
         <span className="badge iface" title="Interface changes">
@@ -188,7 +188,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
   useEffect(() => {
     let live = true;
     // Only edges that changed shape the layout. Unchanged edges in a real app connect almost
-    // everything to the model and core modules, and spread the map out until it's unreadable.
+    // everything to the report and core modules, and spread the map out until it's unreadable.
     layout(index, graph.nodes, graph.edges.filter((e) => e.status !== "unchanged")).then((p) => {
       if (!live) return;
       setPlaced(p);
@@ -212,15 +212,15 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
   const progress = useMemo(() => {
     const out = new Map<string, { done: number; total: number }>();
     for (const id of graph.nodes) {
-      const inside = graph.collapsed.has(id) ? index.model.components.filter((c) => within(index, c.id, id)).map((c) => c.id) : [id];
-      const shown = inside.flatMap((c) => componentEntities(index, c).shown);
+      const inside = graph.collapsed.has(id) ? index.report.components.filter((c) => within(index, c.id, id)).map((c) => c.id) : [id];
+      const shown = inside.flatMap((c) => componentReviewItems(index, c).shown);
       out.set(id, { done: shown.filter((e) => reviewed[e.id]).length, total: shown.length });
     }
     return out;
   }, [index, graph, reviewed]);
 
   const found = useMemo(() => findingCounts(index, graph), [index, graph]);
-  const languages = useMemo(() => componentLanguages(index.model), [index]);
+  const languages = useMemo(() => componentLanguages(index.report), [index]);
 
   const nodes = useMemo<RFNode<NodeData>[]>(() => {
     if (!placed) return [];

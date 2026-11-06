@@ -1,7 +1,7 @@
-// Pure logic for levels 2 and 3: how a component's entities are grouped and ordered, and where
-// a reference leads. Kept free of React so it can be tested against the fixture model.
+// Pure logic for levels 2 and 3: how a component's review items are grouped and ordered, and where
+// a reference leads. Kept free of React so it can be tested against the fixture report.
 
-import { componentEntities, entityRank, type Index } from "./graph";
+import { componentReviewItems, reviewItemRank, type Index } from "./graph";
 import type { Focus } from "./nav";
 import type { ReviewItem, Usage } from "./types";
 
@@ -15,9 +15,9 @@ export const KIND_GROUPS: Array<{ title: string; kinds: string[] }> = [
 ];
 
 export interface InterfaceModel {
-  /** Changed interface entities, grouped by kind, most significant first within a group. */
-  groups: Array<{ title: string; entities: ReviewItem[] }>;
-  /** Changed internal entities, shown collapsed below the interface. */
+  /** Changed interface review items, grouped by kind, most significant first within a group. */
+  groups: Array<{ title: string; reviewItems: ReviewItem[] }>;
+  /** Changed internal review items, shown collapsed below the interface. */
   internal: ReviewItem[];
   /** Cosmetic, test, and generated changes, reachable through a filter. */
   hidden: ReviewItem[];
@@ -25,17 +25,17 @@ export interface InterfaceModel {
 
 
 export function interfaceModel(index: Index, componentId: string): InterfaceModel {
-  const byScore = (a: ReviewItem, b: ReviewItem) => entityRank(index, b) - entityRank(index, a) || a.qualifiedName.localeCompare(b.qualifiedName);
-  const { shown } = componentEntities(index, componentId);
+  const byScore = (a: ReviewItem, b: ReviewItem) => reviewItemRank(index, b) - reviewItemRank(index, a) || a.qualifiedName.localeCompare(b.qualifiedName);
+  const { shown } = componentReviewItems(index, componentId);
   const shownIds = new Set(shown.map((e) => e.id));
-  const hidden = (index.entitiesByComponent.get(componentId) ?? []).filter((e) => !shownIds.has(e.id));
+  const hidden = (index.reviewItemsByComponent.get(componentId) ?? []).filter((e) => !shownIds.has(e.id));
   const iface = shown.filter((e) => e.isInterface);
-  const groups = KIND_GROUPS.map((g) => ({ title: g.title, entities: iface.filter((e) => g.kinds.includes(e.kind)).sort(byScore) }));
+  const groups = KIND_GROUPS.map((g) => ({ title: g.title, reviewItems: iface.filter((e) => g.kinds.includes(e.kind)).sort(byScore) }));
   const known = new Set(KIND_GROUPS.flatMap((g) => g.kinds));
   const other = iface.filter((e) => !known.has(e.kind)).sort(byScore);
-  if (other.length) groups.push({ title: "Other", entities: other });
+  if (other.length) groups.push({ title: "Other", reviewItems: other });
   return {
-    groups: groups.filter((g) => g.entities.length > 0),
+    groups: groups.filter((g) => g.reviewItems.length > 0),
     internal: shown.filter((e) => !e.isInterface).sort(byScore),
     hidden,
   };
@@ -44,7 +44,7 @@ export function interfaceModel(index: Index, componentId: string): InterfaceMode
 /** The order level 3 steps through with previous and next: the interface view's order. */
 export function reviewOrder(index: Index, componentId: string): ReviewItem[] {
   const m = interfaceModel(index, componentId);
-  return [...m.groups.flatMap((g) => g.entities), ...m.internal, ...m.hidden];
+  return [...m.groups.flatMap((g) => g.reviewItems), ...m.internal, ...m.hidden];
 }
 
 export function neighbors(index: Index, e: ReviewItem): { prev?: ReviewItem; next?: ReviewItem; position: number; total: number } {
@@ -53,11 +53,11 @@ export function neighbors(index: Index, e: ReviewItem): { prev?: ReviewItem; nex
   return { prev: i > 0 ? order[i - 1] : undefined, next: i >= 0 ? order[i + 1] : undefined, position: i + 1, total: order.length };
 }
 
-/** An entity in the model by component and qualified name, if that declaration changed. */
-export function findEntity(index: Index, component: string, qualifiedName: string): ReviewItem | undefined {
-  const direct = index.entities.get(`${component}::${qualifiedName}`);
+/** A review item in the report by component and qualified name, if that declaration changed. */
+export function findReviewItem(index: Index, component: string, qualifiedName: string): ReviewItem | undefined {
+  const direct = index.reviewItems.get(`${component}::${qualifiedName}`);
   if (direct) return direct;
-  return index.entitiesByComponent.get(component)?.find((e) => e.qualifiedName === qualifiedName);
+  return index.reviewItemsByComponent.get(component)?.find((e) => e.qualifiedName === qualifiedName);
 }
 
 /**
@@ -65,8 +65,8 @@ export function findEntity(index: Index, component: string, qualifiedName: strin
  * the line that makes the reference.
  */
 export function usedByTarget(index: Index, u: Usage): Focus {
-  const e = findEntity(index, u.component, u.symbol);
-  return e ? { type: "entity", id: e.id } : { type: "location", side: "head", file: u.file, line: u.line };
+  const e = findReviewItem(index, u.component, u.symbol);
+  return e ? { type: "reviewItem", id: e.id } : { type: "location", side: "head", file: u.file, line: u.line };
 }
 
 /**
@@ -74,8 +74,8 @@ export function usedByTarget(index: Index, u: Usage): Focus {
  * the interface view of the component that declares it.
  */
 export function dependsOnTarget(index: Index, u: Usage): Focus {
-  const e = findEntity(index, u.component, u.symbol);
-  return e ? { type: "entity", id: e.id } : { type: "interface", id: u.component };
+  const e = findReviewItem(index, u.component, u.symbol);
+  return e ? { type: "reviewItem", id: e.id } : { type: "interface", id: u.component };
 }
 
 /** Usages grouped by component, components with the most usages first. */
@@ -89,7 +89,7 @@ export function groupUsages(usages: Usage[], index?: Index): Array<{ component: 
 }
 
 /** Changed members of a type, for its level 3 view. */
-export const membersOf = (index: Index, e: ReviewItem) => index.model.entities.filter((x) => x.parent === e.id);
+export const membersOf = (index: Index, e: ReviewItem) => index.report.reviewItems.filter((x) => x.parent === e.id);
 
 /** The last part of a qualified name: "Cart.total()" → "total()". */
 export function lastName(qualifiedName: string): string {
@@ -105,8 +105,8 @@ export function lastName(qualifiedName: string): string {
 }
 
 /**
- * Identifiers in code that lead somewhere in the tool: changed top-level types in the model,
- * and the declarations an entity depends on in other components. Ambiguous names are left out.
+ * Identifiers in code that lead somewhere in the tool: changed top-level types in the report,
+ * and the declarations a review item depends on in other components. Ambiguous names are left out.
  */
 export function symbolTargets(index: Index, e?: ReviewItem): Map<string, Focus> {
   const out = new Map<string, Focus>();
@@ -121,9 +121,9 @@ export function symbolTargets(index: Index, e?: ReviewItem): Map<string, Focus> 
     }
     out.set(name, f);
   };
-  for (const x of index.model.entities) {
+  for (const x of index.report.reviewItems) {
     if (["struct", "class", "enum", "actor", "protocol", "typealias"].includes(x.kind) && !x.qualifiedName.includes(".") && x.change !== "removed") {
-      add(x.qualifiedName, { type: "entity", id: x.id });
+      add(x.qualifiedName, { type: "reviewItem", id: x.id });
     }
   }
   for (const u of e?.dependsOn ?? []) {

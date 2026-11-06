@@ -34,3 +34,16 @@
   - Finding
   - Region
   - Declaration
+- id: D261106-639at
+  timestamp: 2026-11-06T10:05:01Z
+  actor: agent
+  status: proposed
+  approved_by: null
+  summary: Use the Review item and Change report names everywhere, including the change report's JSON.
+  rationale: Code, viewer text, LLM prompts and docs now say review item and change report instead of entity and model. The JSON keys become reviewItems, reviewItem, and changedReviewItems, and the report version goes to 4, replacing the earlier choice to preserve the JSON schema. Review item maps to ReviewItemKind instead of EntityKind, and Declaration's not entry names the term Review item.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Review item
+  - Declaration

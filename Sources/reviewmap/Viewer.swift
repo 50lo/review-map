@@ -27,11 +27,11 @@ enum ViewerLauncher {
     }
 
     /// Runs until the server is stopped (Ctrl-C). `editor` overrides REVIEWMAP_EDITOR.
-    static func run(model: String, port: Int, open: Bool, editor: String? = nil) throws {
+    static func run(report: String, port: Int, open: Bool, editor: String? = nil) throws {
         let dir = try directory()
-        let modelPath = URL(fileURLWithPath: model).standardizedFileURL.path
-        guard FileManager.default.fileExists(atPath: modelPath) else {
-            throw ValidationError("No change report at \(modelPath).")
+        let reportPath = URL(fileURLWithPath: report).standardizedFileURL.path
+        guard FileManager.default.fileExists(atPath: reportPath) else {
+            throw ValidationError("No change report at \(reportPath).")
         }
         if !FileManager.default.fileExists(atPath: dir.appendingPathComponent("node_modules").path) {
             log("Installing viewer dependencies (first run)…")
@@ -39,8 +39,8 @@ enum ViewerLauncher {
         }
         var args = ["npm", "run", "dev", "--", "--port", String(port), "--strictPort"]
         if open { args.append("--open") }
-        log("Serving \(modelPath) at http://localhost:\(port)/ (Ctrl-C to stop)")
-        var env = ["REVIEWMAP_MODEL": modelPath]
+        log("Serving \(reportPath) at http://localhost:\(port)/ (Ctrl-C to stop)")
+        var env = ["REVIEWMAP_REPORT": reportPath]
         if let editor { env["REVIEWMAP_EDITOR"] = editor }
         try exec(args, in: dir, env: env)
     }
@@ -72,8 +72,8 @@ struct ViewCommand: ParsableCommand {
         abstract: "Open an existing change-report.json in the browser viewer."
     )
 
-    @Argument(help: "Path to the change report (default: the model of the current branch of the repo in the current directory).")
-    var model: String?
+    @Argument(help: "Path to the change report (default: the report of the current branch of the repo in the current directory).")
+    var report: String?
 
     @Option(help: "Port for the local viewer server.")
     var port: Int = 5173
@@ -85,6 +85,6 @@ struct ViewCommand: ParsableCommand {
     var editor: String?
 
     func run() throws {
-        try ViewerLauncher.run(model: try model ?? ModelPath.current(), port: port, open: !noOpen, editor: editor)
+        try ViewerLauncher.run(report: try report ?? ReportPath.current(), port: port, open: !noOpen, editor: editor)
     }
 }

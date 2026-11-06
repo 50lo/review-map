@@ -44,7 +44,7 @@ struct TypeScriptLanguage: Language {
 
     // MARK: Contracts and risk
 
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] {
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] {
         TypeScriptFlags(builder, pairs: pairs).compute()
     }
 

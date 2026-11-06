@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import {
   bundleMembers,
   componentEdges,
-  componentEntities,
+  componentReviewItems,
   edgeKey,
   hiddenNeighbors,
   isGroupOf,
@@ -49,7 +49,7 @@ export function Sidebar({ index, focus, setFocus, setLLM, map }: Props) {
   if (focus?.type === "component" && index.components.has(focus.id)) {
     body = <ComponentPanel index={index} c={index.components.get(focus.id)!} setFocus={setFocus} map={map} />;
   } else if (focus?.type === "edge") {
-    const e = index.model.edges.find((x) => edgeKey(x) === focus.key);
+    const e = index.report.edges.find((x) => edgeKey(x) === focus.key);
     body = e ? <EdgePanel index={index} e={e} setFocus={setFocus} /> : <Overview index={index} setFocus={setFocus} setLLM={setLLM} />;
   } else if (focus?.type === "bundle" && index.components.has(focus.from) && index.components.has(focus.to)) {
     body = <BundlePanel index={index} from={focus.from} to={focus.to} setFocus={setFocus} map={map} />;
@@ -69,13 +69,13 @@ const Name = ({ index, id, setFocus }: { index: Index; id: string; setFocus: Pro
 // ---------------------------------------------------------------------------
 
 function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["setFocus"]; setLLM: Props["setLLM"] }) {
-  const { model } = index;
+  const { report } = index;
   const items = startHere(index);
   const review = useReview();
-  const changedComponents = model.components.filter((c) => c.kind !== "external" && c.changedEntities > 0).length;
-  const byStatus = (s: Edge["status"]) => model.edges.filter((e) => e.status === s).length;
+  const changedComponents = report.components.filter((c) => c.kind !== "external" && c.changedReviewItems > 0).length;
+  const byStatus = (s: Edge["status"]) => report.edges.filter((e) => e.status === s).length;
   const [showWarnings, setShowWarnings] = useState(false);
-  const toReview = model.entities.filter((e) => !isLowRisk(index, e));
+  const toReview = report.reviewItems.filter((e) => !isLowRisk(index, e));
   const done = toReview.filter((e) => review.reviewed[e.id]).length;
   return (
     <>
@@ -93,10 +93,10 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
           </p>
         )}
         {items.length === 0 && <p className="muted">No changes that need review.</p>}
-        {items[0]?.source === "flags" && <p className="muted small">Ranked by contract flags: this model has no risk regions.</p>}
+        {items[0]?.source === "flags" && <p className="muted small">Ranked by contract flags: this report has no risk regions.</p>}
         <ol className="start">
           {items.map((it) => (
-            <StartRow key={it.id} index={index} it={it} reviewed={!!review.reviewed[it.entity.id]} setFocus={setFocus} />
+            <StartRow key={it.id} index={index} it={it} reviewed={!!review.reviewed[it.reviewItem.id]} setFocus={setFocus} />
           ))}
         </ol>
       </section>
@@ -107,7 +107,7 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
             <span style={{ width: `${(100 * done) / toReview.length}%` }} />
           </div>
           <p className="small muted">
-            {done} of {toReview.length} entities reviewed
+            {done} of {toReview.length} review items reviewed
           </p>
         </section>
       )}
@@ -116,16 +116,16 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
         <h2>This change</h2>
         <ul className="facts">
           <li>
-            {changedComponents} component{changedComponents === 1 ? "" : "s"} changed, {model.entities.filter((e) => e.change !== "cosmetic").length} entities
+            {changedComponents} component{changedComponents === 1 ? "" : "s"} changed, {report.reviewItems.filter((e) => e.change !== "cosmetic").length} review items
           </li>
           <li>
             <StatusDot status="added" /> {byStatus("added")} added, <StatusDot status="removed" /> {byStatus("removed")} removed,{" "}
             <StatusDot status="changed" /> {byStatus("changed")} changed dependencies
           </li>
           <li className="muted">
-            {model.analyzer?.resolution === "index" ? "References resolved exactly from the build index" : "References matched by name"}
+            {report.analyzer?.resolution === "index" ? "References resolved exactly from the build index" : "References matched by name"}
           </li>
-          {model.externalDeps.map((d) => (
+          {report.externalDeps.map((d) => (
             <li key={d.name}>
               <button className="link" onClick={() => setFocus({ type: "component", id: `ext:${d.name}` })}>
                 {d.name}
@@ -153,14 +153,14 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
         </ul>
         <p className="muted small">Arrows point from the code that uses to the code it uses. Stronger tint means a larger change.</p>
       </section>
-      {model.warnings.length > 0 && (
+      {report.warnings.length > 0 && (
         <section>
           <button className="link" onClick={() => setShowWarnings(!showWarnings)}>
-            {model.warnings.length} analyzer warning{model.warnings.length === 1 ? "" : "s"}
+            {report.warnings.length} analyzer warning{report.warnings.length === 1 ? "" : "s"}
           </button>
           {showWarnings && (
             <ul className="warnings small">
-              {model.warnings.map((w, i) => (
+              {report.warnings.map((w, i) => (
                 <li key={i}>
                   <span className="muted">{w.kind}</span> {w.message}
                   {w.file && (
@@ -181,31 +181,31 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
 }
 
 function StartRow({ index, it, reviewed, setFocus }: { index: Index; it: StartItem; reviewed: boolean; setFocus: Props["setFocus"] }) {
-  const comp = index.components.get(it.entity.component);
+  const comp = index.components.get(it.reviewItem.component);
   return (
     <li className={reviewed ? "is-reviewed" : ""}>
       <button className="row" onClick={() => setFocus(it.focus)}>
         <span className="row-main">
           {it.source === "regions" && <span className={`risk risk-${riskTier(it.score)}`}>{it.score.toFixed(2)}</span>}{" "}
-          <span className="kind">{kindLabel(it.entity)}</span> <span className="qname">{it.entity.qualifiedName}</span>
+          <span className="kind">{kindLabel(it.reviewItem)}</span> <span className="qname">{it.reviewItem.qualifiedName}</span>
           {it.members.length > 0 && <span className="muted"> +{it.members.length} members</span>}
           {reviewed && <span className="muted small"> · reviewed</span>}
         </span>
         <span className="row-sub muted">
-          {comp?.name ?? it.entity.component} · {it.entity.change}
-          {it.entity.isInterface ? " · interface" : ""}
+          {comp?.name ?? it.reviewItem.component} · {it.reviewItem.change}
+          {it.reviewItem.isInterface ? " · interface" : ""}
           {it.regionCount > 1 ? ` · ${it.regionCount} regions` : ""}
         </span>
-        <Chips flags={it.reasons.filter((r) => r !== it.entity.change).slice(0, 4)} />
+        <Chips flags={it.reasons.filter((r) => r !== it.reviewItem.change).slice(0, 4)} />
       </button>
     </li>
   );
 }
 
-/** Which CLI annotated the model, and how many components kept deterministic scores. */
+/** Which CLI annotated the report, and how many components kept deterministic scores. */
 function LLMStatus({ index }: { index: Index }) {
-  const run = index.model.llm!;
-  const rejected = index.model.warnings.filter((w) => w.kind === "llm-rejected");
+  const run = index.report.llm!;
+  const rejected = index.report.warnings.filter((w) => w.kind === "llm-rejected");
   const [open, setOpen] = useState(false);
   return (
     <div className="small muted llm-status">
@@ -234,8 +234,8 @@ function LLMStatus({ index }: { index: Index }) {
 /** The structural review's findings, most severe first. */
 function ReviewSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
   const findings = findingsOf(index);
-  const run = index.model.llm;
-  const hidden = !index.llm && (index.model.findings ?? []).some((f) => f.source === "llm");
+  const run = index.report.llm;
+  const hidden = !index.llm && (index.report.findings ?? []).some((f) => f.source === "llm");
   let note: string | undefined;
   if (findings.length === 0) note = "The structural checks found nothing.";
   if (hidden) note = "The LLM's findings are hidden while the LLM layer is off.";
@@ -265,7 +265,7 @@ function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setF
       <ul className="notes-list">
         {notes.map(([id, n]) => (
           <li key={id}>
-            <button className="link mono small" onClick={() => setFocus(index.regions.has(id) ? { type: "entity", id: n.entity, region: id } : { type: "location", side: n.side, file: n.file, line: n.startLine })}>
+            <button className="link mono small" onClick={() => setFocus(index.regions.has(id) ? { type: "reviewItem", id: n.reviewItem, region: id } : { type: "location", side: n.side, file: n.file, line: n.startLine })}>
               {n.label}
             </button>
             <div className="small">{n.text}</div>
@@ -295,8 +295,8 @@ function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setF
 // ---------------------------------------------------------------------------
 
 function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Component; setFocus: Props["setFocus"]; map: MapControls }) {
-  const { shown, cosmetic, lowRisk } = componentEntities(index, c.id);
-  const edges = componentEdges(index.model, c.id);
+  const { shown, cosmetic, lowRisk } = componentReviewItems(index, c.id);
+  const edges = componentEdges(index.report, c.id);
   const ext = externalChangeOf(index, c);
   const children = index.children.get(c.id) ?? [];
   const hidden = hiddenNeighbors(index, map.vis, c.id, map.showTests);
@@ -355,11 +355,11 @@ function ComponentPanel({ index, c, setFocus, map }: { index: Index; c: Componen
       {(shown.length > 0 || cosmetic + lowRisk > 0) && (
         <section>
           <h2>
-            Changed entities <span className="muted">{shown.length}</span>
+            Changed review items <span className="muted">{shown.length}</span>
           </h2>
-          <ul className="entities">
+          <ul className="review-items">
             {shown.map((e) => (
-              <EntityRow key={e.id} e={e} setFocus={setFocus} />
+              <ReviewItemRow key={e.id} e={e} setFocus={setFocus} />
             ))}
           </ul>
           {cosmetic + lowRisk > 0 && (
@@ -386,11 +386,11 @@ const componentKindLabel = (k: string) =>
     external: "external package",
   })[k] ?? k;
 
-function EntityRow({ e, setFocus }: { e: ReviewItem; setFocus: Props["setFocus"] }) {
+function ReviewItemRow({ e, setFocus }: { e: ReviewItem; setFocus: Props["setFocus"] }) {
   return (
     <li className={`with-check ${e.isInterface ? "iface" : ""}`}>
       <ReviewedBox id={e.id} compact />
-      <button className="entity-link" onClick={() => setFocus({ type: "entity", id: e.id })}>
+      <button className="review-item-link" onClick={() => setFocus({ type: "reviewItem", id: e.id })}>
         <span className="kind">{kindLabel(e)}</span> <span className="qname">{e.qualifiedName}</span> <ChangeTag change={e.change} />
         {e.isInterface && <span className="muted small"> interface</span>}
       </button>

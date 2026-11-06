@@ -2,11 +2,11 @@ import Foundation
 
 /// TypeScript's contract flags: changes to declarations that importers and implementers depend on.
 struct TypeScriptFlags {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
     /// The TypeScript pairs, as indices into `b.pairs`.
     let indices: [Int]
 
-    init(_ builder: ModelBuilder, pairs: [Int]) {
+    init(_ builder: ChangeReportBuilder, pairs: [Int]) {
         b = builder
         indices = pairs
     }

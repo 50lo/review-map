@@ -63,7 +63,7 @@ private final class DeclVisitor: SyntaxVisitor {
     private struct Scope {
         var qualified: String?
         var index: Int?
-        var kind: EntityKind?
+        var kind: ReviewItemKind?
     }
     private var stack: [Scope] = [Scope(qualified: nil, index: nil, kind: nil)]
 
@@ -124,7 +124,7 @@ private final class DeclVisitor: SyntaxVisitor {
     // MARK: containers
 
     private func visitContainer(
-        _ node: some DeclSyntaxProtocol, kind: EntityKind, name: String, keyword: TokenSyntax,
+        _ node: some DeclSyntaxProtocol, kind: ReviewItemKind, name: String, keyword: TokenSyntax,
         attributes: AttributeListSyntax, modifiers: DeclModifierListSyntax,
         inheritance: InheritanceClauseSyntax?, memberBlock: MemberBlockSyntax,
         qualifiedOverride: String? = nil, scopeName: String? = nil
@@ -210,7 +210,7 @@ private final class DeclVisitor: SyntaxVisitor {
     // MARK: leaves
 
     private func leaf(
-        _ node: some SyntaxProtocol, kind: EntityKind, name: String, labelsKey: String,
+        _ node: some SyntaxProtocol, kind: ReviewItemKind, name: String, labelsKey: String,
         attributes: AttributeListSyntax, modifiers: DeclModifierListSyntax,
         headerFrom: AbsolutePosition, headerTo: AbsolutePosition, body: (any SyntaxProtocol)?,
         effects: FunctionEffectSpecifiersSyntax? = nil, extraHeader: String = ""

@@ -2,9 +2,9 @@ import Foundation
 
 // The LLM annotator. It only annotates facts the analyzer produced: it re-ranks review and removed
 // regions, prunes and ranks context regions, and writes one-line summaries for components and changed
-// entities, in one batch or more per component. Then one structural review of the whole change looks
+// review items, in one batch or more per component. Then one structural review of the whole change looks
 // at its shape (see StructuralReview.swift). It runs a coding-agent CLI (`claude -p` or `codex exec`),
-// validates every reply strictly against the model, and caches accepted results. A batch that fails
+// validates every reply strictly against the change report, and caches accepted results. A batch that fails
 // validation leaves the deterministic scores in place.
 
 public struct AnnotateOptions {
@@ -20,7 +20,7 @@ public struct AnnotateOptions {
     public var jobs: Int
     /// Seconds before a CLI call is stopped.
     public var timeout: TimeInterval
-    /// Prompt size per batch, in characters of entity material.
+    /// Prompt size per batch, in characters of review item material.
     public var maxBatchChars: Int
     /// A file with the change's description (a PR's title and body). Without one, the annotator asks
     /// `gh pr view` about the head branch, then falls back to the commit messages.
@@ -54,38 +54,38 @@ public struct AnnotateOptions {
 
 public enum Annotator {
     /// Bump when the prompt or the reply format changes, so cached results are not reused.
-    public static let promptVersion = "2"
+    public static let promptVersion = "3"
 
-    public static func run(_ model: ChangeReport, options: AnnotateOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeReport {
+    public static func run(_ report: ChangeReport, options: AnnotateOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeReport {
         guard ["claude", "codex"].contains(options.tool) else {
             throw AnnotatorError("Unknown LLM tool \(options.tool). Use claude or codex.")
         }
-        let root = (model.repo.root as NSString).standardizingPath
+        let root = (report.repo.root as NSString).standardizingPath
         let cacheDir = (options.cacheDir as NSString).standardizingPath
         if cacheDir == root || cacheDir.hasPrefix(root + "/") {
             throw AnnotatorError("The cache directory \(cacheDir) is inside the target repo. Choose one outside it.")
         }
         try FileManager.default.createDirectory(atPath: cacheDir, withIntermediateDirectories: true)
 
-        let sources = SourceReader(git: GitRepo(root: model.repo.root), baseSha: model.repo.baseSha, headSha: model.repo.headSha)
+        let sources = SourceReader(git: GitRepo(root: report.repo.root), baseSha: report.repo.baseSha, headSha: report.repo.headSha)
         let reviewNotes = sources.text(.head, "REVIEW.md").map { String($0.prefix(20_000)) }
-        let builder = PromptBuilder(model: model, sources: sources, reviewNotes: reviewNotes)
+        let builder = PromptBuilder(report: report, sources: sources, reviewNotes: reviewNotes)
         let fingerprint = [promptVersion, options.tool, options.model ?? "", reviewNotes ?? ""].joined(separator: "\u{1}")
         let cache = AnnotationCache(dir: cacheDir)
 
         var batches: [Batch] = []
-        var fromCache: [String: EntityReply] = [:]
+        var fromCache: [String: ReviewItemReply] = [:]
         var componentFromCache: [String: String] = [:]
         var cachedBatches = 0
-        for comp in model.components where comp.kind != .external && !comp.isTest {
-            let entities = builder.entities(of: comp.id)
-            if entities.isEmpty { continue }
-            let blocks = entities.map { e in (e, builder.entityBlock(e)) }
+        for comp in report.components where comp.kind != .external && !comp.isTest {
+            let reviewItems = builder.reviewItems(of: comp.id)
+            if reviewItems.isEmpty { continue }
+            let blocks = reviewItems.map { e in (e, builder.reviewItemBlock(e)) }
             let keys = Dictionary(uniqueKeysWithValues: blocks.map { ($0.0.id, Hash.hex(fingerprint + "\u{2}" + $0.1)) })
             let compKey = Hash.hex(fingerprint + "\u{3}" + builder.componentHeader(comp) + blocks.map { keys[$0.0.id]! }.joined())
             var misses: [(ReviewItem, String)] = []
             for (e, block) in blocks {
-                if let hit = cache.entity(keys[e.id]!), validate(hit, against: e, builder: builder).isEmpty {
+                if let hit = cache.reviewItem(keys[e.id]!), validate(hit, against: e, builder: builder).isEmpty {
                     fromCache[e.id] = hit
                 } else {
                     misses.append((e, block))
@@ -97,7 +97,7 @@ public enum Annotator {
                 cachedBatches += 1
                 continue
             }
-            // Split large components into batches of whole entities. The first batch also asks
+            // Split large components into batches of whole review items. The first batch also asks
             // for the component summary.
             var chunk: [(ReviewItem, String)] = []
             var size = 0
@@ -113,15 +113,15 @@ public enum Annotator {
             }
             if !chunk.isEmpty || chunks.isEmpty { chunks.append(chunk) }
             for (i, c) in chunks.enumerated() {
-                batches.append(Batch(component: comp, entities: c.map(\.0), blocks: c.map(\.1),
+                batches.append(Batch(component: comp, reviewItems: c.map(\.0), blocks: c.map(\.1),
                                      wantsSummary: i == 0 && compSummary == nil, part: i + 1, parts: chunks.count,
-                                     entityKeys: keys, componentKey: compKey))
+                                     reviewItemKeys: keys, componentKey: compKey))
             }
         }
 
         // The structural review of the whole change, unless its reply for the same prompt is cached.
-        let description = try ChangeDescription.load(model: model, file: options.descriptionFile)
-        let review = options.noReview ? nil : StructuralReview(model: model, sources: sources, reviewNotes: reviewNotes, description: description)
+        let description = try ChangeDescription.load(report: report, file: options.descriptionFile)
+        let review = options.noReview ? nil : StructuralReview(report: report, sources: sources, reviewNotes: reviewNotes, description: description)
         let reviewPrompt = review?.prompt()
         let reviewKey = reviewPrompt.map { Hash.hex(fingerprint + "\u{4}" + $0) }
         let cachedReview = reviewKey.flatMap { key in cache.review(key).flatMap { review!.validate($0).isEmpty ? $0 : nil } }
@@ -140,7 +140,7 @@ public enum Annotator {
                 results.set(i, outcome)
                 switch outcome {
                 case .accepted(let reply):
-                    for e in reply.entities { cache.store(entity: e, key: batch.entityKeys[e.id]!) }
+                    for e in reply.reviewItems { cache.store(reviewItem: e, key: batch.reviewItemKeys[e.id]!) }
                     if let s = reply.component?.summary { cache.store(component: s, key: batch.componentKey) }
                     log("  \(batch.label): ok")
                 case .rejected(let errors):
@@ -171,8 +171,8 @@ public enum Annotator {
         }
         queue.waitUntilAllOperationsAreFinished()
 
-        var out = model
-        var entityReplies = fromCache
+        var out = report
+        var reviewItemReplies = fromCache
         var componentSummaries = componentFromCache
         var failed = 0
         var unavailable: String?
@@ -180,7 +180,7 @@ public enum Annotator {
             let batch = batches[i]
             switch outcome {
             case .accepted(let reply)?:
-                for e in reply.entities { entityReplies[e.id] = e }
+                for e in reply.reviewItems { reviewItemReplies[e.id] = e }
                 if let s = reply.component?.summary { componentSummaries[batch.component.id] = s }
             case .rejected(let errors)?:
                 failed += 1
@@ -211,16 +211,16 @@ public enum Annotator {
         if let unavailable {
             log(unavailable)
             out.warnings.append(Warning(kind: "llm-unavailable", message: unavailable))
-            if entityReplies.isEmpty && reviewReply == nil { return out }
+            if reviewItemReplies.isEmpty && reviewReply == nil { return out }
         }
-        apply(&out, entities: entityReplies, components: componentSummaries)
+        apply(&out, reviewItems: reviewItemReplies, components: componentSummaries)
         out.findings.removeAll { $0.source == "llm" }
         if let reviewReply { out.findings += StructuralReview.findings(reviewReply) }
         out.llm = LLMRun(tool: options.tool, model: options.model,
                          command: options.command.map { ($0 as NSString).lastPathComponent }, promptVersion: promptVersion,
                          batches: batches.count + cachedBatches, cached: cachedBatches, failed: failed,
                          reviewNotes: reviewNotes != nil, review: reviewStatus, description: description?.source)
-        log("LLM annotator: \(entityReplies.count) entities annotated, \(failed) batch\(failed == 1 ? "" : "es") rejected.")
+        log("LLM annotator: \(reviewItemReplies.count) review items annotated, \(failed) batch\(failed == 1 ? "" : "es") rejected.")
         return out
     }
 
@@ -282,26 +282,26 @@ public enum Annotator {
 
     // MARK: - Validation
 
-    /// Checks the reply against the batch: the same entities and regions, values in range, one-line text.
+    /// Checks the reply against the batch: the same review items and regions, values in range, one-line text.
     static func validate(_ reply: BatchReply, batch: Batch, builder: PromptBuilder) -> [String] {
         var errors: [String] = []
         if batch.wantsSummary {
             if let s = reply.component?.summary { errors += checkText(s, "component summary", max: 200) }
             else { errors.append("component summary missing") }
         }
-        let expected = Set(batch.entities.map(\.id))
-        let got = reply.entities.map(\.id)
-        if Set(got).count != got.count { errors.append("an entity appears twice") }
-        for id in Set(got).subtracting(expected) { errors.append("unknown entity \(id)") }
-        for id in expected.subtracting(got) { errors.append("entity \(id) missing") }
-        let byId = Dictionary(reply.entities.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        for e in batch.entities {
+        let expected = Set(batch.reviewItems.map(\.id))
+        let got = reply.reviewItems.map(\.id)
+        if Set(got).count != got.count { errors.append("a review item appears twice") }
+        for id in Set(got).subtracting(expected) { errors.append("unknown review item \(id)") }
+        for id in expected.subtracting(got) { errors.append("review item \(id) missing") }
+        let byId = Dictionary(reply.reviewItems.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        for e in batch.reviewItems {
             if let r = byId[e.id] { errors += validate(r, against: e, builder: builder) }
         }
         return errors
     }
 
-    static func validate(_ r: EntityReply, against e: ReviewItem, builder: PromptBuilder) -> [String] {
+    static func validate(_ r: ReviewItemReply, against e: ReviewItem, builder: PromptBuilder) -> [String] {
         var errors = checkText(r.summary, "summary of \(e.id)", max: 200)
         let own = Set(builder.reviewRegions(e.id).map(\.id))
         let ctx = Set(builder.contextRegions(e.id).map(\.id))
@@ -334,7 +334,7 @@ public enum Annotator {
     static func normalize(_ reply: BatchReply) -> BatchReply {
         var r = reply
         r.component = r.component.map { BatchReply.ComponentReply(summary: $0.summary.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        r.entities = r.entities.map { e in
+        r.reviewItems = r.reviewItems.map { e in
             var e = e
             e.summary = e.summary.trimmingCharacters(in: .whitespacesAndNewlines)
             if var ctx = e.context {
@@ -350,18 +350,18 @@ public enum Annotator {
 
     // MARK: - Applying
 
-    static func apply(_ m: inout ChangeReport, entities: [String: EntityReply], components: [String: String]) {
-        var regionReply: [String: EntityReply.RegionReply] = [:]
-        var contextReply: [String: EntityReply.ContextReply] = [:]
-        for e in entities.values {
+    static func apply(_ m: inout ChangeReport, reviewItems: [String: ReviewItemReply], components: [String: String]) {
+        var regionReply: [String: ReviewItemReply.RegionReply] = [:]
+        var contextReply: [String: ReviewItemReply.ContextReply] = [:]
+        for e in reviewItems.values {
             for g in e.regions { regionReply[g.id] = g }
             for c in e.context ?? [] { contextReply[c.id] = c }
         }
         for i in m.components.indices {
             m.components[i].llm = components[m.components[i].id].map(LLMSummary.init(summary:))
         }
-        for i in m.entities.indices {
-            m.entities[i].llm = entities[m.entities[i].id].map { LLMSummary(summary: $0.summary) }
+        for i in m.reviewItems.indices {
+            m.reviewItems[i].llm = reviewItems[m.reviewItems[i].id].map { LLMSummary(summary: $0.summary) }
         }
         for i in m.regions.indices {
             let id = m.regions[i].id
@@ -393,10 +393,10 @@ struct BatchReply: Codable {
         var summary: String
     }
     var component: ComponentReply?
-    var entities: [EntityReply]
+    var reviewItems: [ReviewItemReply]
 }
 
-struct EntityReply: Codable, Equatable {
+struct ReviewItemReply: Codable, Equatable {
     struct RegionReply: Codable, Equatable {
         var id: String
         var risk: Double
@@ -408,18 +408,18 @@ struct EntityReply: Codable, Equatable {
     }
     var id: String
     var summary: String
-    var regions: [EntityReply.RegionReply]
-    var context: [EntityReply.ContextReply]?
+    var regions: [ReviewItemReply.RegionReply]
+    var context: [ReviewItemReply.ContextReply]?
 }
 
 struct Batch {
     var component: Component
-    var entities: [ReviewItem]
+    var reviewItems: [ReviewItem]
     var blocks: [String]
     var wantsSummary: Bool
     var part: Int
     var parts: Int
-    var entityKeys: [String: String]
+    var reviewItemKeys: [String: String]
     var componentKey: String
 
     var label: String { parts > 1 ? "\(component.name) (part \(part) of \(parts))" : component.name }
@@ -445,42 +445,42 @@ private final class ResultBox: @unchecked Sendable {
 
 // MARK: - Prompt
 
-/// Builds the prompt for a batch. Each entity's block is also what its cache key hashes, so a
-/// result is reused only when everything the LLM saw about the entity is the same.
+/// Builds the prompt for a batch. Each review item's block is also what its cache key hashes, so a
+/// result is reused only when everything the LLM saw about the review item is the same.
 struct PromptBuilder: @unchecked Sendable {
-    let model: ChangeReport
+    let report: ChangeReport
     let sources: SourceReader
     let reviewNotes: String?
-    private let regionsByEntity: [String: [Region]]
-    private let contextByEntity: [String: [Region]]
+    private let regionsByReviewItem: [String: [Region]]
+    private let contextByReviewItem: [String: [Region]]
     private let componentById: [String: Component]
-    private let entitiesByComponent: [String: [ReviewItem]]
+    private let reviewItemsByComponent: [String: [ReviewItem]]
 
-    /// Whole entity code is included up to this many lines; longer entities show their regions with a margin.
+    /// Whole review item code is included up to this many lines; longer review items show their regions with a margin.
     static let maxWholeLines = 150
     static let margin = 3
 
-    init(model: ChangeReport, sources: SourceReader, reviewNotes: String?) {
-        self.model = model
+    init(report: ChangeReport, sources: SourceReader, reviewNotes: String?) {
+        self.report = report
         self.sources = sources
         self.reviewNotes = reviewNotes
         var own: [String: [Region]] = [:]
         var ctx: [String: [Region]] = [:]
-        for r in model.regions {
-            if r.kind == "context" { ctx[r.entity, default: []].append(r) } else { own[r.entity, default: []].append(r) }
+        for r in report.regions {
+            if r.kind == "context" { ctx[r.reviewItem, default: []].append(r) } else { own[r.reviewItem, default: []].append(r) }
         }
-        regionsByEntity = own
-        contextByEntity = ctx
-        componentById = Dictionary(model.components.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        let low = Set(model.components.filter(\.isTest).map(\.id))
-        entitiesByComponent = Dictionary(grouping: model.entities.filter { e in
+        regionsByReviewItem = own
+        contextByReviewItem = ctx
+        componentById = Dictionary(report.components.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        let low = Set(report.components.filter(\.isTest).map(\.id))
+        reviewItemsByComponent = Dictionary(grouping: report.reviewItems.filter { e in
             e.change != .cosmetic && !low.contains(e.component) && !e.tags.contains("test") && !e.tags.contains("generated")
         }, by: \.component)
     }
 
-    func entities(of component: String) -> [ReviewItem] { entitiesByComponent[component] ?? [] }
-    func reviewRegions(_ entity: String) -> [Region] { regionsByEntity[entity] ?? [] }
-    func contextRegions(_ entity: String) -> [Region] { contextByEntity[entity] ?? [] }
+    func reviewItems(of component: String) -> [ReviewItem] { reviewItemsByComponent[component] ?? [] }
+    func reviewRegions(_ reviewItem: String) -> [Region] { regionsByReviewItem[reviewItem] ?? [] }
+    func contextRegions(_ reviewItem: String) -> [Region] { contextByReviewItem[reviewItem] ?? [] }
 
     func componentHeader(_ c: Component) -> String {
         var parts = [kindName(c.kind)]
@@ -504,7 +504,7 @@ struct PromptBuilder: @unchecked Sendable {
         }
     }
 
-    func entityBlock(_ e: ReviewItem) -> String {
+    func reviewItemBlock(_ e: ReviewItem) -> String {
         var out = "### ReviewItem \(e.id)\n"
         out += "\(e.kind.rawValue) \(e.qualifiedName), change: \(e.changes.map(\.rawValue).joined(separator: ", "))"
         out += e.isInterface ? ", interface\n" : ", internal\n"
@@ -557,7 +557,7 @@ struct PromptBuilder: @unchecked Sendable {
         if end - loc.startLine + 1 <= Self.maxWholeLines {
             shown = [loc.startLine...end]
         } else {
-            // A long declaration shows its first lines and its regions; a type's members are entities of their own.
+            // A long declaration shows its first lines and its regions; a type's members are review items of their own.
             shown = [loc.startLine...min(end, loc.startLine + 2)]
             for r in regions {
                 let last = min(r.endLine, r.startLine + Self.maxWholeLines - 1)
@@ -585,11 +585,11 @@ struct PromptBuilder: @unchecked Sendable {
     }
 
     func prompt(_ b: Batch) -> String {
-        let languages = (model.analyzer.languages ?? ["swift"]).map(Languages.displayName).joined(separator: " and ")
+        let languages = (report.analyzer.languages ?? ["swift"]).map(Languages.displayName).joined(separator: " and ")
         var out = """
         You are helping a reviewer read a \(languages.isEmpty ? "code" : languages) change. A deterministic analyzer already found the changed \
-        declarations (entities) of one component, cut them into review regions with a risk score, and collected \
-        unchanged context regions that may explain them. You only annotate these facts: never add entities, \
+        declarations (review items) of one component, cut them into review regions with a risk score, and collected \
+        unchanged context regions that may explain them. You only annotate these facts: never add review items, \
         regions, or ids, and never drop any.
 
         Tasks:
@@ -597,8 +597,8 @@ struct PromptBuilder: @unchecked Sendable {
         a real problem (callers that break, persisted or network data that no longer decodes, isolation or \
         concurrency mistakes, removed checks, changed behavior). The deterministic risk is a hint, not an anchor.
         2. Every context region: keep true only when the reviewer needs it to understand the region it supports, \
-        and rank the kept ones of each entity from 1 (most needed). Use rank null when keep is false.
-        3. A one-line behavior summary, at most 20 words, for each entity\(b.wantsSummary ? " and for the component" : ""): \
+        and rank the kept ones of each review item from 1 (most needed). Use rank null when keep is false.
+        3. A one-line behavior summary, at most 20 words, for each review item\(b.wantsSummary ? " and for the component" : ""): \
         what the code does now that it didn't before, not which lines changed.
 
         Reply with only the JSON object in <reply-template>, filled in: replace every null risk and keep and \
@@ -611,11 +611,11 @@ struct PromptBuilder: @unchecked Sendable {
         }
         out += "\n## " + componentHeader(b.component) + "\n"
         if b.parts > 1 {
-            out += "This is part \(b.part) of \(b.parts) of the component's changed entities.\n"
+            out += "This is part \(b.part) of \(b.parts) of the component's changed review items.\n"
         }
-        let others = entities(of: b.component.id).filter { e in !b.entities.contains { $0.id == e.id } }
+        let others = reviewItems(of: b.component.id).filter { e in !b.reviewItems.contains { $0.id == e.id } }
         if b.wantsSummary && !others.isEmpty {
-            out += "Other changed entities in this component, not part of this batch:\n"
+            out += "Other changed review items in this component, not part of this batch:\n"
             for e in others.prefix(60) { out += "- \(e.kind.rawValue) \(e.qualifiedName) (\(e.change.rawValue))\n" }
         }
         out += "\n" + b.blocks.joined(separator: "\n")
@@ -631,8 +631,8 @@ struct PromptBuilder: @unchecked Sendable {
         }
         var lines = ["{"]
         if b.wantsSummary { lines.append("  \"component\": {\"id\": \(q(b.component.id)), \"summary\": \"\"},") }
-        lines.append("  \"entities\": [")
-        for (i, e) in b.entities.enumerated() {
+        lines.append("  \"reviewItems\": [")
+        for (i, e) in b.reviewItems.enumerated() {
             lines.append("    {")
             lines.append("      \"id\": \(q(e.id)),")
             lines.append("      \"summary\": \"\",")
@@ -648,7 +648,7 @@ struct PromptBuilder: @unchecked Sendable {
                 lines.append("        {\"id\": \(q(c.id)), \"keep\": null, \"rank\": null}" + (j < ctx.count - 1 ? "," : ""))
             }
             lines.append("      ]")
-            lines.append("    }" + (i < b.entities.count - 1 ? "," : ""))
+            lines.append("    }" + (i < b.reviewItems.count - 1 ? "," : ""))
         }
         lines.append("  ]")
         lines.append("}")
@@ -696,13 +696,13 @@ final class SourceReader: @unchecked Sendable {
 
 // MARK: - Cache
 
-/// Accepted results under <cache>/<key>.json, one file per entity and one per component summary.
+/// Accepted results under <cache>/<key>.json, one file per review item and one per component summary.
 struct AnnotationCache: @unchecked Sendable {
     let dir: String
 
-    func entity(_ key: String) -> EntityReply? {
+    func reviewItem(_ key: String) -> ReviewItemReply? {
         guard let data = FileManager.default.contents(atPath: path(key)) else { return nil }
-        return try? JSONDecoder().decode(EntityReply.self, from: data)
+        return try? JSONDecoder().decode(ReviewItemReply.self, from: data)
     }
 
     func component(_ key: String) -> String? {
@@ -719,8 +719,8 @@ struct AnnotationCache: @unchecked Sendable {
         write(try? JSONEncoder().encode(review), "review-" + key)
     }
 
-    func store(entity: EntityReply, key: String) {
-        write(try? JSONEncoder().encode(entity), key)
+    func store(reviewItem: ReviewItemReply, key: String) {
+        write(try? JSONEncoder().encode(reviewItem), key)
     }
 
     func store(component summary: String, key: String) {

@@ -276,7 +276,7 @@ code,
 }
 
 .start li + li,
-.entities li + li {
+.review-items li + li {
   margin-top: 6px;
 }
 .row {
@@ -304,11 +304,11 @@ code,
   word-break: break-word;
 }
 
-.entities li {
+.review-items li {
   border-left: 3px solid var(--line);
   padding: 3px 0 3px 8px;
 }
-.entities li.iface {
+.review-items li.iface {
   border-left-color: var(--accent);
 }
 .sig {
@@ -760,7 +760,7 @@ code,
 }
 .card-title,
 .one-liner,
-.entity-link,
+.review-item-link,
 .usage {
   display: block;
   width: 100%;
@@ -778,7 +778,7 @@ code,
 }
 .card-title:hover .qname,
 .one-liner:hover .qname,
-.entity-link:hover .qname {
+.review-item-link:hover .qname {
   color: var(--accent);
 }
 .chev {
@@ -907,7 +907,7 @@ code,
 .open-iface {
   margin: 2px 0 6px;
 }
-.entity-link {
+.review-item-link {
   display: flex;
   flex-wrap: wrap;
   gap: 2px 6px;

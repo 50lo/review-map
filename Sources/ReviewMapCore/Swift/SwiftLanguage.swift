@@ -78,7 +78,7 @@ struct SwiftLanguage: Language {
 
     // MARK: Contracts and risk
 
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] {
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] {
         SwiftFlags(builder, pairs: pairs).compute()
     }
 
@@ -169,7 +169,7 @@ struct SwiftLanguage: Language {
             if let a = d.attributes.first(where: { $0.hasSuffix("Actor") }) { return "@" + a }
             if d.kind == .actor { return "actor \(d.qualifiedName)" }
             // SwiftUI's View is @MainActor, and so are the types that conform to it.
-            if d.isContainer && d.inherited.contains(where: { ModelBuilder.conformanceName($0) == "View" }) {
+            if d.isContainer && d.inherited.contains(where: { ChangeReportBuilder.conformanceName($0) == "View" }) {
                 return "@MainActor"
             }
             cur = d.parentIndex

@@ -118,14 +118,14 @@ final class LanguageTests: XCTestCase {
             head: ["API/Store.swift": "protocol Store {\n  func load() async -> Int\n  func clear(_ value: Int)\n}\n",
                    "Impl/Store.swift": "struct HiddenConformer {\n  func load() -> Int { 1 }\n  func clear() {}\n}\n",
                    "Unrelated/Other.swift": "struct HiddenConformer {\n  func load() async -> Int { 2 }\n  func clear(_ value: Int) {}\n}\n"], language: language)
-        builder.matchEntities()
+        builder.matchReviewItems()
         builder.resolveReferences()
-        let model = finish(builder)
+        let report = finish(builder)
         XCTAssertNil(builder.edgeRefs[.head]?["folder:Impl"]?["folder:API"])
-        let findings = model.findings.filter { $0.kind == "conformers" }
+        let findings = report.findings.filter { $0.kind == "conformers" }
         XCTAssertTrue(findings.contains { $0.message.contains("clear") && $0.severity == "high" && $0.evidence.contains { $0.hasPrefix("No clear") } }, "A wrong-arity method and an unrelated type's matching method cannot satisfy the hook's empty result")
         XCTAssertTrue(findings.contains { $0.message.contains("load") && $0.evidence.contains { $0.contains("HiddenConformer") } })
-        XCTAssertTrue(model.regions.contains { $0.relation == "conformer" && $0.component == "folder:Impl" && $0.reasons == ["HiddenConformer.load()"] })
+        XCTAssertTrue(report.regions.contains { $0.relation == "conformer" && $0.component == "folder:Impl" && $0.reasons == ["HiddenConformer.load()"] })
         XCTAssertTrue(language.sawBaseInterfaceAndConformer)
         XCTAssertEqual(Set(language.conformanceUses), [.check, .context], "Checks and region context both delegate discovery")
     }
@@ -143,7 +143,7 @@ final class LanguageTests: XCTestCase {
             base: ["API/Store.swift": store, "API/Qualified.swift": qualified, "Remote/Qualified.swift": qualified],
             head: ["API/Store.swift": store.replacingOccurrences(of: "protocol Store { func load() -> Int }", with: "protocol Store { func load() async -> Int }"),
                    "API/Qualified.swift": qualified, "Remote/Qualified.swift": qualified], language: language)
-        builder.matchEntities()
+        builder.matchReviewItems()
         let interface = try XCTUnwrap(builder.pairs.first { $0.head?.decl.qualifiedName == "Namespace.Store" })
         let requirement = try XCTUnwrap(builder.pairs.first { $0.head?.decl.qualifiedName == "Namespace.Store.load()" })
 
@@ -177,10 +177,10 @@ final class LanguageTests: XCTestCase {
                 builder.addIndex([.base: SideIndex(refs: ["Lib/Counter.swift": [], "Old/Caller.swift": [ref]]),
                                   .head: SideIndex(refs: ["Lib/Counter.swift": [], "New/Caller.swift": [ref]])], language: language)
             }
-            builder.matchEntities()
+            builder.matchReviewItems()
             builder.resolveReferences()
-            let model = finish(builder)
-            let tick = try XCTUnwrap(model.entities.first { $0.qualifiedName == "Counter.tick()" })
+            let report = finish(builder)
+            let tick = try XCTUnwrap(report.reviewItems.first { $0.qualifiedName == "Counter.tick()" })
             XCTAssertTrue(tick.usedBy.contains { $0.file == "Old/Caller.swift" && $0.side == .base && $0.isolation == "base-block" }, "indexed: \(indexed)")
             XCTAssertTrue(tick.usedBy.contains { $0.file == "New/Caller.swift" && $0.side == nil && $0.isolation == "head-block" }, "indexed: \(indexed)")
         }
@@ -206,9 +206,9 @@ final class LanguageTests: XCTestCase {
                 let index = SideIndex(refs: ["Lib/counter.ts": [], "App/caller.ts": refs])
                 builder.addIndex([.base: index, .head: index], language: language)
             }
-            builder.matchEntities()
+            builder.matchReviewItems()
             builder.resolveReferences()
-            let tick = try XCTUnwrap(finish(builder).entities.first { $0.qualifiedName == "Counter.tick()" })
+            let tick = try XCTUnwrap(finish(builder).reviewItems.first { $0.qualifiedName == "Counter.tick()" })
             XCTAssertEqual(Set(tick.usedBy.map(\.symbol)), ["Screen.tap()", "Screen.work()"], "indexed: \(indexed)")
             XCTAssertTrue(tick.usedBy.allSatisfy { $0.isolation == nil }, "TypeScript decorators do not imply actor isolation; indexed: \(indexed)")
         }
@@ -218,13 +218,13 @@ final class LanguageTests: XCTestCase {
         let language = HookLanguage()
         var builder = try builder(base: ["Lib/API.swift": "func old() {}\n"],
                                   head: ["Lib/API.swift": "func old() {}\nfunc api() {}\nfunc entry() {}\npublic func excluded() {}\n"], language: language)
-        builder.matchEntities()
+        builder.matchReviewItems()
         builder.resolveReferences()
         let unused = finish(builder).findings.filter { $0.kind == "unused-api" }
-        XCTAssertEqual(unused.compactMap { $0.anchors.first?.entity }, ["folder:Lib::api()"], "The language hooks, rather than Swift rules, define public API and implicit callers")
+        XCTAssertEqual(unused.compactMap { $0.anchors.first?.reviewItem }, ["folder:Lib::api()"], "The language hooks, rather than Swift rules, define public API and implicit callers")
     }
 
-    private func builder(base: [String: String], head: [String: String], language: Language) throws -> ModelBuilder {
+    private func builder(base: [String: String], head: [String: String], language: Language) throws -> ChangeReportBuilder {
         let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-language-\(UUID().uuidString)")
         temporary.append(root)
         let options = AnalyzeOptions(repo: root, base: "base", head: "head")
@@ -239,10 +239,10 @@ final class LanguageTests: XCTestCase {
             }
             return try SideData.load(side: side, dir: dir, blobs: files, languages: [language], config: &config, parser: parser, options: options)
         }
-        return try ModelBuilder(base: side(.base, base), head: side(.head, head), languages: [language], options: options)
+        return try ChangeReportBuilder(base: side(.base, base), head: side(.head, head), languages: [language], options: options)
     }
 
-    private func finish(_ builder: ModelBuilder) -> ChangeReport {
+    private func finish(_ builder: ChangeReportBuilder) -> ChangeReport {
         builder.finish(repo: RepoInfo(root: builder.options.repo, base: "base", head: "head", baseSha: "base", headSha: "head", usesMergeBase: false))
     }
 }
@@ -260,7 +260,7 @@ private final class HookLanguage: Language {
 
     func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool { ["api", "entry"].contains(decl.name) }
     func isImplicitlyCalled(_ decl: Declaration) -> Bool { decl.name == "entry" }
-    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer] {
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder, for use: ConformanceUse) -> [Conformer] {
         conformanceUses.append(use)
         if interface.base != nil && builder.pairs.contains(where: { $0.base?.decl.name == "HiddenConformer" && $0.head != nil }) {
             sawBaseInterfaceAndConformer = true
@@ -289,7 +289,7 @@ private final class HookLanguage: Language {
     }
     func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { swift.pinnedPackages(blobs: blobs, dir: dir) }
     func package(ofModule module: String, pinned: Set<String>) -> String? { swift.package(ofModule: module, pinned: pinned) }
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] { swift.contractFlags(builder, pairs: pairs) }
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { swift.contractFlags(builder, pairs: pairs) }
     func contractFile(_ path: String) -> (key: String, flag: String)? { swift.contractFile(path) }
     func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] {
         swift.contractFileFlags(key: key, flag: flag, basePath: basePath, headPath: headPath)

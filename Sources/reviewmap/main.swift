@@ -30,7 +30,7 @@ struct AnalyzeArgs: ParsableArguments {
     @Option(help: "Path to a reviewmap.yml (default: reviewmap.yml at the head of the repo, if present).")
     var config: String?
 
-    @Option(name: .shortAndLong, help: "Output file, or - for stdout (default: ~/.reviewmap/models/<repo>/<head>/change-report.json).")
+    @Option(name: .shortAndLong, help: "Output file, or - for stdout (default: ~/.reviewmap/reports/<repo>/<head>/change-report.json).")
     var output: String?
 
     @Option(help: "Maximum references kept per edge.")
@@ -61,14 +61,14 @@ struct AnalyzeArgs: ParsableArguments {
         }
         let start = Date()
         let head = self.head ?? Analyzer.currentBranch(repo: repo)
-        let output = try self.output ?? ModelPath.default(repo: repo, head: head)
+        let output = try self.output ?? ReportPath.default(repo: repo, head: head)
         let opts = AnalyzeOptions(repo: repo, base: base, head: head, useMergeBase: !noMergeBase,
                                   configPath: config, maxRefsPerEdge: maxRefs, dumpPackage: dumpPackage, index: indexArgs.options)
-        var model = try Analyzer.run(opts, log: log)
+        var report = try Analyzer.run(opts, log: log)
         if !noLLM {
-            model = try Annotator.run(model, options: llm.options, log: log)
+            report = try Annotator.run(report, options: llm.options, log: log)
         }
-        let data = try ChangeReportIO.encode(model)
+        let data = try ChangeReportIO.encode(report)
         if output == "-" {
             FileHandle.standardOutput.write(data)
         } else {
@@ -77,11 +77,11 @@ struct AnalyzeArgs: ParsableArguments {
         let elapsed = String(format: "%.1fs", Date().timeIntervalSince(start))
         var lines = ["Wrote \(output == "-" ? "stdout" : output) in \(elapsed)."]
         if summary {
-            lines += ChangeReportIO.summary(model)
+            lines += ChangeReportIO.summary(report)
         }
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
         if view {
-            try ViewerLauncher.run(model: output, port: port, open: true, editor: editor)
+            try ViewerLauncher.run(report: output, port: port, open: true, editor: editor)
         }
     }
 }
@@ -108,7 +108,7 @@ struct Analyze: ParsableCommand {
 
     @OptionGroup var args: AnalyzeArgs
 
-    @Flag(help: "After writing the model, serve it in the browser viewer and open it.")
+    @Flag(help: "After writing the change report, serve it in the browser viewer and open it.")
     var view = false
 
     func run() throws {
@@ -185,8 +185,8 @@ struct Annotate: ParsableCommand {
         abstract: "Run the LLM annotator on an existing change report and write it back."
     )
 
-    @Argument(help: "The change report to annotate (default: the model of the current branch of the repo in the current directory).")
-    var model: String?
+    @Argument(help: "The change report to annotate (default: the report of the current branch of the repo in the current directory).")
+    var report: String?
 
     @Option(name: .shortAndLong, help: "Output file (default: overwrite the input). Use - for stdout.")
     var output: String?
@@ -194,11 +194,11 @@ struct Annotate: ParsableCommand {
     @OptionGroup var llm: LLMOptions
 
     func run() throws {
-        let model = try self.model ?? ModelPath.current()
-        let input = try ChangeReportIO.decode(Data(contentsOf: URL(fileURLWithPath: model)))
+        let report = try self.report ?? ReportPath.current()
+        let input = try ChangeReportIO.decode(Data(contentsOf: URL(fileURLWithPath: report)))
         let annotated = try Annotator.run(input, options: llm.options, log: log)
         let data = try ChangeReportIO.encode(annotated)
-        let out = output ?? model
+        let out = output ?? report
         if out == "-" {
             FileHandle.standardOutput.write(data)
         } else {
@@ -208,27 +208,27 @@ struct Annotate: ParsableCommand {
     }
 }
 
-/// Where models go when no path is given: outside the target repo, one per repo and head,
-/// so reviewed marks and notes (saved next to the model) stay per branch.
-enum ModelPath {
+/// Where reports go when no path is given: outside the target repo, one per repo and head,
+/// so reviewed marks and notes (saved next to the report) stay per branch.
+enum ReportPath {
     static func `default`(repo: String, head: String) throws -> String {
         let root: String
         do {
             root = try Analyzer.repoRoot(repo: repo)
         } catch {
-            throw ValidationError("\(repo == "." ? "The current directory" : repo) is not inside a git repository. Pass a repo or model path.")
+            throw ValidationError("\(repo == "." ? "The current directory" : repo) is not inside a git repository. Pass a repo or report path.")
         }
-        let dir = (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/models")
+        let dir = (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/reports")
             + "/" + Paths.slug((root as NSString).lastPathComponent) + "/" + Paths.slug(head)
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         return dir + "/change-report.json"
     }
 
-    /// The default model of the current branch of the repo in the current directory.
+    /// The default report of the current branch of the repo in the current directory.
     static func current() throws -> String {
         let path = try `default`(repo: ".", head: Analyzer.currentBranch(repo: "."))
         guard FileManager.default.fileExists(atPath: path) else {
-            throw ValidationError("No change report at \(path). Run reviewmap first, or pass a model path.")
+            throw ValidationError("No change report at \(path). Run reviewmap first, or pass a report path.")
         }
         return path
     }

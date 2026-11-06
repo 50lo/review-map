@@ -1,6 +1,6 @@
 import Foundation
 
-// Review, removed, and context regions: where in each changed entity the reviewer should look,
+// Review, removed, and context regions: where in each changed review item the reviewer should look,
 // how risky each place is, and which unchanged code explains it. Everything here is
 // deterministic; the weights follow the brief's starting table and are meant to be tuned.
 // Languages weigh their own contract flags and say which code is view code.
@@ -14,7 +14,7 @@ private struct Signal {
     var reason: String
 }
 
-/// A run of changed lines in one entity: head lines, removed base lines, or both.
+/// A run of changed lines in one review item: head lines, removed base lines, or both.
 struct ChangeBlock: Equatable {
     var head: ClosedRange<Int>?
     var base: ClosedRange<Int>?
@@ -40,13 +40,13 @@ private struct ContextItem {
     var supports: [String]
 }
 
-extension ModelBuilder {
-    func buildRegions(_ entities: [ReviewItem]) -> [Region] {
+extension ChangeReportBuilder {
+    func buildRegions(_ reviewItems: [ReviewItem]) -> [Region] {
         let ctx = RegionBuilder(self)
         var pairById: [String: Int] = [:]
         for (i, p) in pairs.enumerated() { pairById[p.id] = i }
         var out: [Region] = []
-        for e in entities where e.change != .cosmetic {
+        for e in reviewItems where e.change != .cosmetic {
             out += ctx.regions(for: e, pair: pairById[e.id].map { pairs[$0] })
         }
         return out
@@ -54,10 +54,10 @@ extension ModelBuilder {
 }
 
 private final class RegionBuilder {
-    let b: ModelBuilder
+    let b: ChangeReportBuilder
     private var lineCache: [String: [String]] = [:]
     /// "component|scope" -> all head members of the scope, for definition, override, and state context.
-    /// Unlike ModelBuilder.headMembers, this groups by component and includes every member name.
+    /// Unlike ChangeReportBuilder.headMembers, this groups by component and includes every member name.
     private var members: [String: [Indexed]] = [:]
     /// Top-level head declarations by simple name (no extensions).
     private var topLevel: [String: [Indexed]] = [:]
@@ -65,10 +65,10 @@ private final class RegionBuilder {
     private var types: [String: [Indexed]] = [:]
     /// "component|Type" -> what the head type and its extensions conform to or inherit from.
     private var typeInherits: [String: Set<String>] = [:]
-    /// Head declarations whose entity changed.
+    /// Head declarations whose review item changed.
     private var changedHead = Set<DeclKey>()
 
-    init(_ b: ModelBuilder) {
+    init(_ b: ChangeReportBuilder) {
         self.b = b
         for path in b.head.files.keys.sorted() {
             guard let file = b.head.files[path], let comp = b.head.layout.fileComponent[path] else { continue }
@@ -79,7 +79,7 @@ private final class RegionBuilder {
                 if d.isContainer {
                     let typeName = d.kind == .extension ? d.name : d.qualifiedName
                     if d.kind != .extension { types["\(comp)|\(typeName)", default: []].append(item) }
-                    for c in d.inherited.map(ModelBuilder.conformanceName) {
+                    for c in d.inherited.map(ChangeReportBuilder.conformanceName) {
                         typeInherits["\(comp)|\(typeName)", default: []].insert(c)
                     }
                 }
@@ -113,7 +113,7 @@ private final class RegionBuilder {
             // Non-code contracts: one region over the file or setting, scored by its flags.
             var signals = flagSignals(e)
             signals.append(Signal(weight: base, reason: e.change == .added ? "new file" : e.change == .removed ? "removed file" : "changed"))
-            let r = Region(id: "\(e.id)/r1", entity: e.id, kind: e.change == .removed ? "removed" : "review",
+            let r = Region(id: "\(e.id)/r1", reviewItem: e.id, kind: e.change == .removed ? "removed" : "review",
                            file: e.location.file, startLine: e.location.startLine, endLine: e.location.endLine,
                            side: e.location.side, risk: score(signals, low: isLow), reasons: reasons(signals, e: e, low: isLow))
             return [r]
@@ -166,10 +166,10 @@ private final class RegionBuilder {
             let risk = score(signals, low: isLow)
             let why = reasons(signals, e: e, low: isLow)
             if let h = blk.head, let hd {
-                out.append(Region(id: "", entity: e.id, kind: "review", file: hd.file, startLine: h.lowerBound, endLine: h.upperBound,
+                out.append(Region(id: "", reviewItem: e.id, kind: "review", file: hd.file, startLine: h.lowerBound, endLine: h.upperBound,
                                   side: .head, risk: risk, reasons: why))
             } else if let bb = blk.base, let bd {
-                out.append(Region(id: "", entity: e.id, kind: "removed", file: bd.file, startLine: bb.lowerBound, endLine: bb.upperBound,
+                out.append(Region(id: "", reviewItem: e.id, kind: "removed", file: bd.file, startLine: bb.lowerBound, endLine: bb.upperBound,
                                   side: .base, risk: risk, reasons: why, anchor: hd != nil ? blk.anchor : nil))
             }
         }
@@ -243,7 +243,7 @@ private final class RegionBuilder {
         return out
     }
 
-    /// Changed blocks between the base and head lines of one entity, ignoring indentation,
+    /// Changed blocks between the base and head lines of one review item, ignoring indentation,
     /// spacing, and blank lines.
     static func blocks(base: [String], baseStart: Int, head: [String], headStart: Int) -> [ChangeBlock] {
         func norm(_ s: String) -> String {
@@ -309,7 +309,7 @@ private final class RegionBuilder {
         var items: [ContextItem] = []
         var keys: [String: Int] = [:]
         func add(_ it: ContextItem) {
-            // Never point at the entity itself.
+            // Never point at the review item itself.
             if it.file == hd.file && it.startLine == d.startLine { return }
             // One snippet per declaration; a specific relation (override, conformer) wins over caller.
             let key = "\(it.file)|\(it.startLine)|\(it.endLine)"
@@ -349,7 +349,7 @@ private final class RegionBuilder {
                     guard let comp = b.head.layout.fileComponent[ref.targetFile],
                           let t = b.declAt(.head, file: ref.targetFile, line: ref.targetLine, name: ref.name) else { continue }
                     let x = Indexed(component: comp, file: ref.targetFile, index: t.index, decl: t.decl)
-                    // Not the entity or its own parts, nothing that changed (it has its own entity), and no
+                    // Not the review item or its own parts, nothing that changed (it has its own review item), and no
                     // stored properties of the same type (state context shows those).
                     if x.file == hd.file && x.decl.startLine >= d.startLine && x.decl.endLine <= d.endLine { continue }
                     if x.file == hd.file && d.startLine >= x.decl.startLine && d.endLine <= x.decl.endLine { continue }
@@ -373,7 +373,7 @@ private final class RegionBuilder {
             }
             var perRegion = 0
             for (name, isMember) in names where perRegion < 4 && definitions < 6 {
-                guard let x = definition(of: name, member: isMember, from: hd, entityRange: d.startLine...d.endLine),
+                guard let x = definition(of: name, member: isMember, from: hd, reviewItemRange: d.startLine...d.endLine),
                       !changedHead.contains(DeclKey(side: .head, file: x.file, index: x.index)) else { continue }
                 let before = items.count
                 add(declItem(x, relation: "definition", supports: [r.id]))
@@ -423,7 +423,7 @@ private final class RegionBuilder {
                 }
             }
             if d.modifiers.contains("override"),
-               let owner = types["\(hd.component)|\(scope)"]?.first, let superName = owner.decl.inherited.first.map(ModelBuilder.conformanceName) {
+               let owner = types["\(hd.component)|\(scope)"]?.first, let superName = owner.decl.inherited.first.map(ChangeReportBuilder.conformanceName) {
                 for (key, ms) in members where key.hasSuffix("|\(superName)") {
                     for m in ms where m.decl.labelsKey == d.labelsKey { add(declItem(m, relation: "override", supports: headerSupports)) }
                 }
@@ -443,14 +443,14 @@ private final class RegionBuilder {
         }
 
         return items.enumerated().map { i, it in
-            Region(id: "\(e.id)/c\(i + 1)", entity: e.id, kind: "context", file: it.file, startLine: it.startLine, endLine: it.endLine,
+            Region(id: "\(e.id)/c\(i + 1)", reviewItem: e.id, kind: "context", file: it.file, startLine: it.startLine, endLine: it.endLine,
                    side: .head, risk: 0, reasons: [it.label], supports: it.supports, relation: it.relation,
                    component: it.component, lines: it.lines)
         }
     }
 
     /// The unchanged declaration a name in changed code refers to, when it can be told by name.
-    private func definition(of name: String, member: Bool, from hd: Located, entityRange: ClosedRange<Int>) -> Indexed? {
+    private func definition(of name: String, member: Bool, from hd: Located, reviewItemRange: ClosedRange<Int>) -> Indexed? {
         let d = hd.decl
         let comp = hd.component
         // Members of the same type: `helper()`, `self.helper()`. Stored properties are covered by state context.
@@ -468,9 +468,9 @@ private final class RegionBuilder {
             if Set(cands.map(\.component)).count == 1 { return cands.first }
             return nil
         }
-        // `x.foo`: a member of a type the entity mentions, if exactly one such type declares it.
+        // `x.foo`: a member of a type the review item mentions, if exactly one such type declares it.
         var typeNames = Set<String>()
-        for ref in file?.typeRefs ?? [] where entityRange.contains(ref.line) && ref.name.first?.isUppercase == true { typeNames.insert(ref.name) }
+        for ref in file?.typeRefs ?? [] where reviewItemRange.contains(ref.line) && ref.name.first?.isUppercase == true { typeNames.insert(ref.name) }
         if let scope = d.scope {
             for p in (members["\(comp)|\(scope)"] ?? []) where p.decl.isStored {
                 for ref in b.head.files[p.file]?.typeRefs ?? [] where (p.decl.startLine...p.decl.endLine).contains(ref.line) { typeNames.insert(ref.name) }
@@ -487,8 +487,8 @@ private final class RegionBuilder {
         return owners.count == 1 ? found.first : nil
     }
 
-    /// Declarations that reference the entity: other components first (from usedBy), then the
-    /// entity's own component, tests last. At most five.
+    /// Declarations that reference the review item: other components first (from usedBy), then the
+    /// review item's own component, tests last. At most five.
     private func callers(of e: ReviewItem, hd: Located, supports: [String]) -> [ContextItem] {
         let d = hd.decl
         var byDecl: [String: (x: Indexed, lines: [Int], rank: Int)] = [:]

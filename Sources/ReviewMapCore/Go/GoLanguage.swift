@@ -53,7 +53,7 @@ struct GoLanguage: Language {
 
     // MARK: Contracts and risk
 
-    func contractFlags(_ builder: ModelBuilder, pairs: [Int]) -> [Int: [String]] {
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] {
         GoFlags(builder, pairs: pairs).compute()
     }
 
@@ -108,7 +108,7 @@ struct GoLanguage: Language {
     }
 
     /// Go interfaces are implicit: see `GoConformance`.
-    func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder,
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder,
                     for use: ConformanceUse) -> [Conformer] {
         GoConformance(builder).conformers(of: interface, requirement: requirement, for: use)
     }

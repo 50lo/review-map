@@ -3,7 +3,7 @@ import Foundation
 /// A declaration found in one source file at one side of the change. Kinds and fields are shared by
 /// every language; a language leaves the ones it has no equivalent for at their defaults.
 struct Declaration {
-    var kind: EntityKind
+    var kind: ReviewItemKind
     /// Simple name ("add", "init", "CartService"); for extensions the extended type.
     var name: String
     /// Human-readable qualified name: "CartService.add(item:)", "extension CartService: Sendable".
@@ -36,7 +36,7 @@ struct Declaration {
     /// Declared inside a protocol (a requirement).
     var inProtocol = false
     /// Kind of the enclosing container, if any.
-    var parentKind: EntityKind?
+    var parentKind: ReviewItemKind?
     var startLine: Int
     var endLine: Int
     /// Last line of the declaration's header: the line of the opening brace of its body or members.

@@ -5,14 +5,14 @@ import type { Anchor, Finding } from "./types";
 
 const anchorLabel = (index: Index, a: Anchor): string => {
   const name = (id: string) => index.components.get(id)?.name ?? id;
-  if (a.entity) return index.entities.get(a.entity)?.qualifiedName ?? a.entity;
+  if (a.reviewItem) return index.reviewItems.get(a.reviewItem)?.qualifiedName ?? a.reviewItem;
   if (a.from && a.to) return `${name(a.from)} → ${name(a.to)}`;
   return a.component ? name(a.component) : "";
 };
 
 const anchorFocus = (index: Index, a: Anchor): Focus =>
-  a.entity && index.entities.has(a.entity)
-    ? { type: "entity", id: a.entity }
+  a.reviewItem && index.reviewItems.has(a.reviewItem)
+    ? { type: "reviewItem", id: a.reviewItem }
     : a.from && a.to
       ? { type: "edge", key: `${a.from}->${a.to}` }
       : a.component && index.components.has(a.component)

@@ -6,12 +6,12 @@ import XCTest
 /// compares the change report with Fixtures/<name>/expected.json.
 /// Set UPDATE_SNAPSHOTS=1 to rewrite the snapshot.
 final class FixtureTests: XCTestCase {
-    func model(_ name: String) throws -> ChangeReport {
-        try Fixture.model(name)
+    func report(_ name: String) throws -> ChangeReport {
+        try Fixture.report(name)
     }
 
-    func entity(_ m: ChangeReport, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
-        try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName }, "no entity \(qualifiedName)", file: file, line: line)
+    func reviewItem(_ m: ChangeReport, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
+        try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == qualifiedName }, "no review item \(qualifiedName)", file: file, line: line)
     }
 
     func testSnapshot() throws {
@@ -19,16 +19,16 @@ final class FixtureTests: XCTestCase {
     }
 
     func testProtocolRequirements() throws {
-        let m = try model("basic")
-        XCTAssertEqual(try entity(m, "CartRepository.clear()").contractFlags, ["swift:protocol-requirement-added"])
-        XCTAssertEqual(try entity(m, "CartRepository.items()").contractFlags, ["swift:async-added", "swift:protocol-requirement-changed"])
-        let proto = try entity(m, "CartRepository")
+        let m = try report("basic")
+        XCTAssertEqual(try reviewItem(m, "CartRepository.clear()").contractFlags, ["swift:protocol-requirement-added"])
+        XCTAssertEqual(try reviewItem(m, "CartRepository.items()").contractFlags, ["swift:async-added", "swift:protocol-requirement-changed"])
+        let proto = try reviewItem(m, "CartRepository")
         XCTAssertTrue(proto.contractFlags.contains("swift:protocol-requirement-added"))
         XCTAssertTrue(proto.isInterface)
     }
 
     func testDependencyEdges() throws {
-        let m = try model("basic")
+        let m = try report("basic")
         let added = m.edges.first { $0.from == "spm:Features/Checkout" && $0.to == "spm:Networking" }
         XCTAssertEqual(added?.status, .added)
         XCTAssertEqual(added?.symbolsAdded.contains("PaymentClient"), true)
@@ -40,79 +40,79 @@ final class FixtureTests: XCTestCase {
     }
 
     func testConcurrency() throws {
-        let m = try model("basic")
-        XCTAssertTrue(try entity(m, "CheckoutViewModel").contractFlags.contains("swift:mainactor-added"))
-        XCTAssertEqual(try entity(m, "CheckoutViewModel.refresh()").contractFlags, ["swift:nonisolated-removed"])
-        XCTAssertEqual(try entity(m, "PriceCache").contractFlags, ["swift:kind-changed:class->actor"])
+        let m = try report("basic")
+        XCTAssertTrue(try reviewItem(m, "CheckoutViewModel").contractFlags.contains("swift:mainactor-added"))
+        XCTAssertEqual(try reviewItem(m, "CheckoutViewModel.refresh()").contractFlags, ["swift:nonisolated-removed"])
+        XCTAssertEqual(try reviewItem(m, "PriceCache").contractFlags, ["swift:kind-changed:class->actor"])
     }
 
     func testCodableShape() throws {
-        let m = try model("basic")
-        XCTAssertEqual(try entity(m, "Item.price").contractFlags, ["swift:codable-shape"])
-        XCTAssertEqual(try entity(m, "Item.currency").change, .added)
-        XCTAssertTrue(try entity(m, "Item").contractFlags.contains("swift:codable-shape"))
-        XCTAssertTrue(try entity(m, "Item.CodingKeys.currency").contractFlags.contains("swift:codable-shape"))
+        let m = try report("basic")
+        XCTAssertEqual(try reviewItem(m, "Item.price").contractFlags, ["swift:codable-shape"])
+        XCTAssertEqual(try reviewItem(m, "Item.currency").change, .added)
+        XCTAssertTrue(try reviewItem(m, "Item").contractFlags.contains("swift:codable-shape"))
+        XCTAssertTrue(try reviewItem(m, "Item.CodingKeys.currency").contractFlags.contains("swift:codable-shape"))
     }
 
     func testBodyAccessCosmeticAndOverloads() throws {
-        let m = try model("basic")
-        XCTAssertEqual(try entity(m, "Cart.add(_:)").change, .body, "removed guard is a body change")
-        XCTAssertEqual(try entity(m, "Cart.format(_:)").contractFlags, ["swift:access-changed:internal->public"])
-        XCTAssertEqual(try entity(m, "CatalogView.title()").change, .cosmetic)
-        let prices = m.entities.filter { $0.qualifiedName == "Cart.price(for:)" }
+        let m = try report("basic")
+        XCTAssertEqual(try reviewItem(m, "Cart.add(_:)").change, .body, "removed guard is a body change")
+        XCTAssertEqual(try reviewItem(m, "Cart.format(_:)").contractFlags, ["swift:access-changed:internal->public"])
+        XCTAssertEqual(try reviewItem(m, "CatalogView.title()").change, .cosmetic)
+        let prices = m.reviewItems.filter { $0.qualifiedName == "Cart.price(for:)" }
         XCTAssertEqual(prices.count, 1, "only the changed overload is reported")
         XCTAssertEqual(prices.first?.signature.head, "func price(for item: Item) -> Decimal")
     }
 
     func testEnumModelObservable() throws {
-        let m = try model("basic")
-        XCTAssertEqual(try entity(m, "PaymentMethod.applePay").contractFlags, ["swift:enum-case-added"])
-        XCTAssertTrue(try entity(m, "PaymentMethod").contractFlags.contains("swift:enum-case-added"))
-        XCTAssertEqual(try entity(m, "Order.placedAt").contractFlags, ["swift:swiftdata-model-changed"])
-        XCTAssertTrue(try entity(m, "Order").contractFlags.contains("swift:swiftdata-model-changed"))
-        XCTAssertEqual(try entity(m, "CheckoutViewModel.total").contractFlags, ["swift:observable-state-changed"])
-        XCTAssertEqual(try entity(m, "CheckoutViewModel.client").contractFlags, [], "not @Published")
-        XCTAssertEqual(try entity(m, "PaymentClient.charge(_:method:)").contractFlags,
+        let m = try report("basic")
+        XCTAssertEqual(try reviewItem(m, "PaymentMethod.applePay").contractFlags, ["swift:enum-case-added"])
+        XCTAssertTrue(try reviewItem(m, "PaymentMethod").contractFlags.contains("swift:enum-case-added"))
+        XCTAssertEqual(try reviewItem(m, "Order.placedAt").contractFlags, ["swift:swiftdata-model-changed"])
+        XCTAssertTrue(try reviewItem(m, "Order").contractFlags.contains("swift:swiftdata-model-changed"))
+        XCTAssertEqual(try reviewItem(m, "CheckoutViewModel.total").contractFlags, ["swift:observable-state-changed"])
+        XCTAssertEqual(try reviewItem(m, "CheckoutViewModel.client").contractFlags, [], "not @Published")
+        XCTAssertEqual(try reviewItem(m, "PaymentClient.charge(_:method:)").contractFlags,
                        ["swift:access-changed:internal->public", "swift:typed-throws-changed"])
     }
 
     func testNonCodeContractsAndPackages() throws {
-        let m = try model("basic")
-        XCTAssertEqual(try entity(m, "App/Info.plist").contractFlags, ["swift:info-plist-changed", "swift:url-schemes-changed"])
-        XCTAssertEqual(try entity(m, "App/Shop.entitlements").change, .added)
+        let m = try report("basic")
+        XCTAssertEqual(try reviewItem(m, "App/Info.plist").contractFlags, ["swift:info-plist-changed", "swift:url-schemes-changed"])
+        XCTAssertEqual(try reviewItem(m, "App/Shop.entitlements").change, .added)
         XCTAssertEqual(m.externalDeps, [ExternalDepChange(name: "swift-collections", change: "bumped", from: "1.1.0", to: "1.2.0")])
     }
 
     func testBuildSettingsAndConformanceMoves() throws {
-        let m = try model("basic")
-        let settings = try entity(m, "Features build settings")
+        let m = try report("basic")
+        let settings = try reviewItem(m, "Features build settings")
         XCTAssertEqual(settings.kind, .target)
         XCTAssertEqual(settings.contractFlags, ["swift:default-isolation-changed"])
         XCTAssertEqual(settings.signature.head, "swiftSettings: .defaultIsolation(MainActor.self)")
-        XCTAssertFalse(m.entities.contains { $0.qualifiedName == "Banner" }, "conformance moved to an extension is not a change")
-        let ext = try entity(m, "extension Banner: Hashable")
+        XCTAssertFalse(m.reviewItems.contains { $0.qualifiedName == "Banner" }, "conformance moved to an extension is not a change")
+        let ext = try reviewItem(m, "extension Banner: Hashable")
         XCTAssertEqual(ext.change, .added)
         XCTAssertEqual(ext.contractFlags, [])
     }
 
     func testComponentsAndWarnings() throws {
-        let m = try model("basic")
+        let m = try report("basic")
         let ids = Set(m.components.map(\.id))
         XCTAssertTrue(ids.isSuperset(of: ["cfg:Core", "spm:Features", "spm:Features/Checkout", "spm:Features/Catalog", "spm:Networking"]))
         XCTAssertFalse(ids.contains("spm:Core"), "config rule took over the Core module")
         XCTAssertEqual(m.components.first { $0.id == "cfg:Core" }?.layer, "domain")
         XCTAssertEqual(m.components.first { $0.id == "spm:Features/Checkout" }?.parent, "spm:Features")
         XCTAssertTrue(m.warnings.contains { $0.kind == "ambiguous-name" && $0.message.hasPrefix("Logger ") })
-        XCTAssertFalse(m.entities.contains { $0.location.file == "Package.swift" && $0.kind != .target })
+        XCTAssertFalse(m.reviewItems.contains { $0.location.file == "Package.swift" && $0.kind != .target })
     }
 
     func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
-        let e = try entity(m, qualifiedName)
-        return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
+        let e = try reviewItem(m, qualifiedName)
+        return m.regions.filter { $0.reviewItem == e.id && (kind == nil || $0.kind == kind) }
     }
 
     func testReviewRegions() throws {
-        let m = try model("basic")
+        let m = try report("basic")
         XCTAssertEqual(Set(m.regions.map(\.id)).count, m.regions.count, "region ids are unique")
         let removed = try regions(m, "Cart.add(_:)", kind: "removed")
         XCTAssertEqual(removed.count, 1)
@@ -138,13 +138,13 @@ final class FixtureTests: XCTestCase {
         XCTAssertTrue(item[0].reasons.contains("swift:codable-shape"))
 
         XCTAssertTrue(try regions(m, "CatalogView.title()").isEmpty, "cosmetic changes have no regions")
-        let testIds = Set(m.entities.filter { $0.tags.contains("test") }.map(\.id))
-        let test = m.regions.filter { testIds.contains($0.entity) }
+        let testIds = Set(m.reviewItems.filter { $0.tags.contains("test") }.map(\.id))
+        let test = m.regions.filter { testIds.contains($0.reviewItem) }
         XCTAssertTrue(test.allSatisfy { $0.kind != "context" && $0.risk < 0.2 }, "test code ranks low and gets no context")
     }
 
     func testContextRegions() throws {
-        let m = try model("basic")
+        let m = try report("basic")
         let ids = Set(m.regions.map(\.id))
         for r in m.regions where r.kind == "context" {
             XCTAssertFalse(r.supports?.isEmpty ?? true, "\(r.id) supports a review region")
@@ -198,7 +198,7 @@ enum Fixture {
         return repo
     }
 
-    static func model(_ name: String) throws -> ChangeReport {
+    static func report(_ name: String) throws -> ChangeReport {
         if let m = cached[name] { return m }
         let repo = try repo(name)
         defer { try? FileManager.default.removeItem(atPath: repo) }
@@ -210,9 +210,9 @@ enum Fixture {
         return m
     }
 
-    /// Compares the model with Fixtures/<name>/expected.json; UPDATE_SNAPSHOTS=1 rewrites it.
+    /// Compares the change report with Fixtures/<name>/expected.json; UPDATE_SNAPSHOTS=1 rewrites it.
     static func checkSnapshot(_ name: String, sourceFile: String = #filePath) throws {
-        let actual = try ChangeReportIO.encode(try model(name))
+        let actual = try ChangeReportIO.encode(try report(name))
         // Write to the source tree, not the copied bundle.
         let sourceSnapshot = URL(fileURLWithPath: sourceFile).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/\(name)/expected.json")

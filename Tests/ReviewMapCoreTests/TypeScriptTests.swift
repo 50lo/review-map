@@ -5,16 +5,16 @@ import XCTest
 /// TypeScript: the parser on its own, and the analyzer on Fixtures/typescript, an npm workspace with a
 /// base and a head tree.
 final class TypeScriptTests: XCTestCase {
-    func model() throws -> ChangeReport { try Fixture.model("typescript") }
+    func report() throws -> ChangeReport { try Fixture.report("typescript") }
 
-    func entity(_ m: ChangeReport, _ qualifiedName: String, component: String? = nil, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
-        try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName && (component == nil || $0.component == component) },
-                      "no entity \(qualifiedName)", file: file, line: line)
+    func reviewItem(_ m: ChangeReport, _ qualifiedName: String, component: String? = nil, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
+        try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == qualifiedName && (component == nil || $0.component == component) },
+                      "no review item \(qualifiedName)", file: file, line: line)
     }
 
     func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
-        let e = try entity(m, qualifiedName)
-        return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
+        let e = try reviewItem(m, qualifiedName)
+        return m.regions.filter { $0.reviewItem == e.id && (kind == nil || $0.kind == kind) }
     }
 
     // MARK: Parsing
@@ -346,7 +346,7 @@ final class TypeScriptTests: XCTestCase {
     }
 
     func testComponents() throws {
-        let m = try model()
+        let m = try report()
         XCTAssertEqual(m.analyzer.languages, ["typescript"])
         let kinds = Dictionary(uniqueKeysWithValues: m.components.map { ($0.id, $0.kind) })
         XCTAssertEqual(kinds["npm:@shop/core"], .npmPackage)
@@ -357,12 +357,12 @@ final class TypeScriptTests: XCTestCase {
         XCTAssertTrue(tests.isTest)
         XCTAssertEqual(tests.module, "@shop/core")
         XCTAssertEqual(m.components.first { $0.id == "npm:@shop/analytics" }?.status, "added")
-        XCTAssertEqual(try entity(m, "testTotal()").tags, ["test"])
+        XCTAssertEqual(try reviewItem(m, "testTotal()").tags, ["test"])
         XCTAssertTrue(m.warnings.isEmpty, "\(m.warnings)")
     }
 
     func testEdges() throws {
-        let m = try model()
+        let m = try report()
         func edge(_ from: String, _ to: String) -> Edge? { m.edges.first { $0.from == from && $0.to == to } }
         let analytics = try XCTUnwrap(edge("npm:@shop/web", "npm:@shop/analytics"))
         XCTAssertEqual(analytics.status, .added)
@@ -377,30 +377,30 @@ final class TypeScriptTests: XCTestCase {
     }
 
     func testFlags() throws {
-        let m = try model()
-        XCTAssertEqual(try entity(m, "CartRepository.load()").contractFlags, ["typescript:interface-member-changed"])
-        XCTAssertEqual(try entity(m, "CartRepository.clear()").contractFlags, ["typescript:interface-member-added"])
-        XCTAssertEqual(try entity(m, "CartRepository").contractFlags, ["typescript:interface-member-added", "typescript:interface-member-changed"])
-        XCTAssertEqual(try entity(m, "Item.name").contractFlags, ["typescript:interface-member-added"])
-        XCTAssertEqual(try entity(m, "Currency.GBP").contractFlags, ["typescript:enum-member-added"])
-        XCTAssertEqual(try entity(m, "Cart").contractFlags, ["typescript:supertype-added:Serializable"])
-        XCTAssertEqual(try entity(m, "Cart.persist()").contractFlags, ["typescript:access-changed:private->public", "typescript:async-added"])
-        XCTAssertEqual(try entity(m, "reset()").contractFlags, ["typescript:async-added"])
-        XCTAssertEqual(try entity(m, "Serializable").contractFlags, [], "a new interface's members are not flagged one by one")
-        XCTAssertEqual(try entity(m, "Serializable.toJSON()").contractFlags, [])
-        let settings = try entity(m, "@shop/core build settings")
+        let m = try report()
+        XCTAssertEqual(try reviewItem(m, "CartRepository.load()").contractFlags, ["typescript:interface-member-changed"])
+        XCTAssertEqual(try reviewItem(m, "CartRepository.clear()").contractFlags, ["typescript:interface-member-added"])
+        XCTAssertEqual(try reviewItem(m, "CartRepository").contractFlags, ["typescript:interface-member-added", "typescript:interface-member-changed"])
+        XCTAssertEqual(try reviewItem(m, "Item.name").contractFlags, ["typescript:interface-member-added"])
+        XCTAssertEqual(try reviewItem(m, "Currency.GBP").contractFlags, ["typescript:enum-member-added"])
+        XCTAssertEqual(try reviewItem(m, "Cart").contractFlags, ["typescript:supertype-added:Serializable"])
+        XCTAssertEqual(try reviewItem(m, "Cart.persist()").contractFlags, ["typescript:access-changed:private->public", "typescript:async-added"])
+        XCTAssertEqual(try reviewItem(m, "reset()").contractFlags, ["typescript:async-added"])
+        XCTAssertEqual(try reviewItem(m, "Serializable").contractFlags, [], "a new interface's members are not flagged one by one")
+        XCTAssertEqual(try reviewItem(m, "Serializable.toJSON()").contractFlags, [])
+        let settings = try reviewItem(m, "@shop/core build settings")
         XCTAssertEqual(settings.contractFlags, ["typescript:package-exports-changed", "typescript:strictness-changed"])
         XCTAssertEqual(settings.signature.head, "package.json exports = {\".\":\".\\/src\\/index.ts\"}\ntsconfig strict = true")
     }
 
     func testChangesAndUsage() throws {
-        let m = try model()
-        XCTAssertEqual(try entity(m, "format()", component: "npm:@shop/core").change, .cosmetic)
-        XCTAssertEqual(try entity(m, "round()").changes, [.signature, .body])
-        XCTAssertTrue(try entity(m, "Cart").isInterface)
-        XCTAssertTrue(try entity(m, "track()").isInterface)
-        XCTAssertFalse(try entity(m, "format()", component: "npm:@shop/analytics").isInterface)
-        XCTAssertEqual(Set(try entity(m, "Cart.get size").usedBy.map(\.symbol)), ["CartView()"], "member use through an imported type")
+        let m = try report()
+        XCTAssertEqual(try reviewItem(m, "format()", component: "npm:@shop/core").change, .cosmetic)
+        XCTAssertEqual(try reviewItem(m, "round()").changes, [.signature, .body])
+        XCTAssertTrue(try reviewItem(m, "Cart").isInterface)
+        XCTAssertTrue(try reviewItem(m, "track()").isInterface)
+        XCTAssertFalse(try reviewItem(m, "format()", component: "npm:@shop/analytics").isInterface)
+        XCTAssertEqual(Set(try reviewItem(m, "Cart.get size").usedBy.map(\.symbol)), ["CartView()"], "member use through an imported type")
         XCTAssertEqual(m.externalDeps, [
             ExternalDepChange(name: "react", change: "bumped", from: "18.2.0", to: "18.3.1"),
             ExternalDepChange(name: "zod", change: "added", from: nil, to: "3.23.8"),
@@ -408,7 +408,7 @@ final class TypeScriptTests: XCTestCase {
     }
 
     func testRegions() throws {
-        let m = try model()
+        let m = try report()
         let removed = try regions(m, "Cart.add()", kind: "removed")
         XCTAssertEqual(removed.count, 1)
         XCTAssertTrue(removed[0].reasons.contains("early return removed"))

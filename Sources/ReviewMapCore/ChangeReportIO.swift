@@ -1,10 +1,10 @@
 import Foundation
 
 public enum ChangeReportIO {
-    public static func encode(_ model: ChangeReport) throws -> Data {
+    public static func encode(_ report: ChangeReport) throws -> Data {
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        var data = try enc.encode(model)
+        var data = try enc.encode(report)
         data.append(UInt8(ascii: "\n"))
         return data
     }
@@ -15,14 +15,14 @@ public enum ChangeReportIO {
 
     /// A few human-readable lines for the terminal.
     public static func summary(_ m: ChangeReport) -> [String] {
-        let changed = m.entities.filter { $0.change != .cosmetic }
+        let changed = m.reviewItems.filter { $0.change != .cosmetic }
         let interface = changed.filter(\.isInterface)
         let flagged = changed.filter { !$0.contractFlags.isEmpty }
         let edgeCounts = Dictionary(grouping: m.edges, by: \.status).mapValues(\.count)
         var lines = [
-            "Components: \(m.components.count) (\(m.components.filter { $0.changedEntities > 0 }.count) changed)",
+            "Components: \(m.components.count) (\(m.components.filter { $0.changedReviewItems > 0 }.count) changed)",
             "Edges: +\(edgeCounts[.added] ?? 0) -\(edgeCounts[.removed] ?? 0) ~\(edgeCounts[.changed] ?? 0) =\(edgeCounts[.unchanged] ?? 0)",
-            "Entities changed: \(changed.count) (interface: \(interface.count), with contract flags: \(flagged.count), cosmetic: \(m.entities.count - changed.count))",
+            "Review items changed: \(changed.count) (interface: \(interface.count), with contract flags: \(flagged.count), cosmetic: \(m.reviewItems.count - changed.count))",
             "External packages changed: \(m.externalDeps.count)",
             "Warnings: \(m.warnings.count)",
         ]
