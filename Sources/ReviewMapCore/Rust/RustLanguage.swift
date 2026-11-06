@@ -24,5 +24,7 @@ struct RustLanguage: Language {
     func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder, for use: ConformanceUse) -> [Conformer] {
         RustConformance(b: builder).conformers(of: interface, requirement: requirement, for: use)
     }
-    func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? { nil }
+    func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {
+        try RustIndex.load(options: options, repoRoot: repoRoot, sides: sides, log: log)
+    }
 }
