@@ -1,11 +1,11 @@
 ---
 # rm-wa33
 title: Rust support
-status: todo
+status: in-progress
 type: epic
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T21:05:44Z
 ---
 
 Step 6 of docs/plan.md. Review Map analyzes Rust changes with exact references, and is usable on real Rust PRs.

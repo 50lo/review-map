@@ -1,0 +1,25 @@
+import Foundation
+
+struct RustLanguage: Language {
+    let id = "rust"
+    let displayName = "Rust"
+    func isSource(_ path: String) -> Bool { path.hasSuffix(".rs") }
+    func parse(path: String, source: String) -> ParsedFile { RustExtractor.parse(path: path, source: source) }
+    let generatedPatterns = ["**/target/**", "target/**"]
+    let platformModules: Set<String> = ["std", "core", "alloc", "proc_macro", "test"]
+    func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout) {}
+    func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { [:] }
+    func package(ofModule module: String, pinned: Set<String>) -> String? { pinned.first { $0.replacingOccurrences(of: "-", with: "_") == module } }
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { [:] }
+    func contractFile(_ path: String) -> (key: String, flag: String)? { nil }
+    func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] { [] }
+    func settingFlag(_ key: String) -> String { "settings-changed" }
+    func flagRisk(_ flag: String, isInterface: Bool) -> Double { RiskWeight.medium }
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { false }
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
+        guard decl.access == "public" else { return false }
+        return enclosing.allSatisfy { $0.access == "public" || ($0.kind == .extension && !$0.traits.contains("rust-module")) }
+    }
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool { decl.name == "main" || decl.attributes.contains { $0 == "test" || $0 == "bench" } }
+    func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? { nil }
+}

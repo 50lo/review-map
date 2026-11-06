@@ -151,7 +151,7 @@ enum RiskWeight {
 }
 
 enum Languages {
-    static let all: [Language] = [SwiftLanguage(), TypeScriptLanguage(), GoLanguage()]
+    static let all: [Language] = [SwiftLanguage(), TypeScriptLanguage(), GoLanguage(), RustLanguage()]
 
     /// The language that parses `path`, if any.
     static func of(_ path: String) -> Language? {

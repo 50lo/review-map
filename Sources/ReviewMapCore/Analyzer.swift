@@ -146,6 +146,7 @@ final class ParseCache: @unchecked Sendable {
             result[i.path] = p
         }
         lock.unlock()
+        RustModules.resolve(&result)
         return result
     }
 }
