@@ -46,9 +46,9 @@ not:
     means: A record of an external package being added, removed, or changing version.
 ```
 
-## Change model
+## Change report
 
-The saved description of a change that Review Map produces for review. It brings together the components, dependencies, review items, and supporting information. The analyzer writes it to `change-model.json`, and the viewer reads it to show the change.
+The saved result of analyzing a change. It describes the affected components, their dependencies, the review items, and supporting information. The change analyzer produces it, and the viewer displays it. In code, it remains `ChangeModel`, saved as `change-model.json`.
 
 ```yaml
 agreed: proposed

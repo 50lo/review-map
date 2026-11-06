@@ -4,7 +4,7 @@
   status: proposed
   approved_by: null
   summary: Introduce five foundational terms for discussing Review Map.
-  rationale: Start with a small vocabulary in plain language, with concrete examples and existing code names recorded separately. Use Review item for the concept called Entity in code. Leave rules and more specialized terms for later discussion.
+  rationale: Start with a small vocabulary in plain language, with concrete examples and existing code names recorded separately. Use Review item for the concept called Entity in code and Change report for the analyzer's output called ChangeModel in code. Leave rules and more specialized terms for later discussion.
   establishes: []
   changes: []
   retires: []
@@ -13,4 +13,4 @@
   - Component
   - Review item
   - Dependency
-  - Change model
+  - Change report
