@@ -21,5 +21,8 @@ struct RustLanguage: Language {
         return enclosing.allSatisfy { $0.access == "public" || ($0.kind == .extension && !$0.traits.contains("rust-module")) }
     }
     func isImplicitlyCalled(_ decl: Declaration) -> Bool { decl.name == "main" || decl.attributes.contains { $0 == "test" || $0 == "bench" } }
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder, for use: ConformanceUse) -> [Conformer] {
+        RustConformance(b: builder).conformers(of: interface, requirement: requirement, for: use)
+    }
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? { nil }
 }
