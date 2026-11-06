@@ -63,6 +63,7 @@ use_repo(
     "swiftpkg_tree_sitter",
     "swiftpkg_tree_sitter_go",
     "swiftpkg_tree_sitter_rust",
+    "swiftpkg_tomldecoder",
     "swiftpkg_tree_sitter_typescript",
     "swiftpkg_xcodeproj",
     "swiftpkg_yams",

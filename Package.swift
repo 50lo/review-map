@@ -8,6 +8,7 @@ let package = Package(
         .executable(name: "reviewmap", targets: ["reviewmap"]),
     ],
     dependencies: [
+        .package(url: "https://github.com/dduan/TOMLDecoder.git", exact: "0.4.5"),
         .package(url: "https://github.com/swiftlang/swift-syntax.git", exact: "602.0.0"),
         .package(url: "https://github.com/apple/swift-argument-parser.git", exact: "1.8.2"),
         .package(url: "https://github.com/tuist/XcodeProj.git", exact: "9.17.6"),
@@ -42,6 +43,7 @@ let package = Package(
                 .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
                 .product(name: "TreeSitterGo", package: "tree-sitter-go"),
                 .product(name: "TreeSitterRust", package: "tree-sitter-rust"),
+                .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ]
         ),
         .testTarget(

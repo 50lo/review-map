@@ -31,6 +31,16 @@ struct ComponentLayout {
     var fileComponent: [String: String] = [:]
     /// Module name -> the target-level component that owns it.
     var moduleComponent: [String: String] = [:]
+    /// Import aliases scoped to their component (Cargo dependency renames).
+    var moduleAliases: [String: [String: String]] = [:]
+    func aliases(for component: String) -> [String: String] {
+        var current: String? = component
+        while let id = current {
+            if let aliases = moduleAliases[id] { return aliases }
+            current = components[id]?.parent
+        }
+        return [:]
+    }
     var manifestDeps: [ManifestDep] = []
     /// Component id -> its build settings.
     var targetSettings: [String: TargetSettings] = [:]

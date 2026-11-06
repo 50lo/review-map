@@ -520,16 +520,18 @@ struct ChangeReportBuilder {
                 guard let file = data.files[path], let comp = layout.fileComponent[path] else { continue }
                 let lang = language(of: path)
                 let module = layout.components[comp]?.module
-                var visible = Set(file.imports.map(\.name))
+                let aliases = layout.aliases(for: comp)
+                var visible = Set(file.imports.map { aliases[$0.name] ?? $0.name })
                 if let module { visible.insert(module) }
                 var resolvedTypes = Set<String>() // "component|TypeName"
 
                 for imp in file.imports {
-                    if let target = layout.moduleComponent[imp.name], layout.components[target]?.module != module {
+                    let importName = aliases[imp.name] ?? imp.name
+                    if let target = layout.moduleComponent[importName], layout.components[target]?.module != module {
                         addRef(s, from: comp, to: target, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
                     } else if let ext = externalComponent(for: imp.name, language: lang, layout: layout) {
                         addRef(s, from: comp, to: ext, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
-                    } else if layout.moduleComponent[imp.name] == nil && !lang.isPlatformModule(imp.name) {
+                    } else if layout.moduleComponent[importName] == nil && !lang.isPlatformModule(imp.name) {
                         warnings.insert(Warning(kind: "unresolved-import", message: "import \(imp.name) matches no target or known package product."))
                     }
                 }
@@ -557,7 +559,7 @@ struct ChangeReportBuilder {
                         // A name imported from a module is that module's, or no component's (a third-party package).
                         // An unqualified name is the file's own module's first (a Go test uses its package's names).
                         if let module = ref.module {
-                            cands = cands.filter { layout.components[$0]?.module == module }
+                            cands = cands.filter { layout.components[$0]?.module == (aliases[module] ?? module) }
                         } else if let module {
                             let own = cands.filter { layout.components[$0]?.module == module }
                             if !own.isEmpty { cands = own }
@@ -594,7 +596,7 @@ struct ChangeReportBuilder {
                     message: "\(name) is declared in \(comps.sorted().joined(separator: ", ")); references to it were not resolved (\(s.rawValue))."))
             }
             for dep in layout.manifestDeps {
-                if let target = layout.moduleComponent[dep.module] {
+                if let target = layout.moduleComponent[layout.aliases(for: dep.from)[dep.module] ?? dep.module] {
                     addRef(s, from: dep.from, to: target, ref: Ref(file: dep.file, line: 0, symbol: "dependency \(dep.module)", side: s))
                 } else if let ext = externalComponent(for: dep.module, language: Languages.named(dep.language)!, layout: layout) {
                     addRef(s, from: dep.from, to: ext, ref: Ref(file: dep.file, line: 0, symbol: "dependency \(dep.module)", side: s))
@@ -714,7 +716,7 @@ struct ChangeReportBuilder {
             let data = side(s)
             let comp = data.layout.components[loc.component]
             var tags: [String] = []
-            if comp?.isTest == true || ComponentBuilder.isTestPath(loc.file) { tags.append("test") }
+            if d.traits.contains("test") || comp?.isTest == true || ComponentBuilder.isTestPath(loc.file) { tags.append("test") }
             if data.generated.contains(loc.file) { tags.append("generated") }
             let parentId = parentPair(loc, side: s).map { pairs[$0].id }
             // A use seen at both sides counts once, as a head use. Uses only at base keep side "base".

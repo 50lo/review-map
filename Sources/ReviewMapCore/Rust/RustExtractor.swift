@@ -64,7 +64,7 @@ enum RustExtractor {
                 if n.type == "macro_definition" { d.traits.insert("macro") }
                 if n.type == "impl_item", n.child("type_parameters") != nil { d.traits.insert("generic-impl") }
                 if parentKind == .protocol, body != nil { d.traits.insert("default-implementation") }
-                if attrs.contains("cfg(test)") || (parent.map { decls[$0].traits.contains("test") } ?? false) { d.traits.insert("test") }
+                if attrs.contains("cfg(test)") || attrs.contains("test") || (parent.map { decls[$0].traits.contains("test") } ?? false) { d.traits.insert("test") }
                 let index = decls.count
                 decls.append(d)
                 attrs = []

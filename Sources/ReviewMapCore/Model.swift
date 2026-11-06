@@ -148,7 +148,7 @@ public struct RepoInfo: Codable, Equatable {
 }
 
 public enum ComponentKind: String, Codable {
-    case spmTarget, xcodeTarget, npmPackage, tsconfig, goPackage, folder, external
+    case spmTarget, xcodeTarget, npmPackage, tsconfig, goPackage, cargoCrate, folder, external
 }
 
 public struct Component: Codable, Equatable {

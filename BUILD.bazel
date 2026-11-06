@@ -15,6 +15,7 @@ swift_library(
         "@swiftpkg_tree_sitter//:TreeSitter",
         "@swiftpkg_tree_sitter_go//:TreeSitterGo",
         "@swiftpkg_tree_sitter_rust//:TreeSitterRust",
+        "@swiftpkg_tomldecoder//:TOMLDecoder",
         "@swiftpkg_tree_sitter_typescript//:TreeSitterTypeScript",
         "@swiftpkg_xcodeproj//:XcodeProj",
         "@swiftpkg_yams//:Yams",

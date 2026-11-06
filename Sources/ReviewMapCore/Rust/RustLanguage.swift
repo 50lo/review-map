@@ -7,8 +7,8 @@ struct RustLanguage: Language {
     func parse(path: String, source: String) -> ParsedFile { RustExtractor.parse(path: path, source: source) }
     let generatedPatterns = ["**/target/**", "target/**"]
     let platformModules: Set<String> = ["std", "core", "alloc", "proc_macro", "test"]
-    func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout) {}
-    func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { [:] }
+    func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout) { RustComponents.add(root: root, files: files, layout: &layout) }
+    func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { RustComponents.pinnedPackages(blobs: blobs, dir: dir) }
     func package(ofModule module: String, pinned: Set<String>) -> String? { pinned.first { $0.replacingOccurrences(of: "-", with: "_") == module } }
     func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { RustFlags(builder, pairs: pairs).compute() }
     func contractFile(_ path: String) -> (key: String, flag: String)? { nil }
