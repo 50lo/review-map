@@ -14,3 +14,17 @@
   - Review item
   - Dependency
   - Change report
+- id: D261106-49z62
+  timestamp: 2026-11-06T07:43:18Z
+  actor: user
+  status: proposed
+  approved_by: null
+  summary: Add Finding, Region, and Declaration to the Review Map vocabulary.
+  rationale: Extend the foundational vocabulary with the shorter definitions reviewed by the user. Keep code mappings tied to the existing Finding, Region, and Decl types; Usage describes a reference rather than a declaration. Defer source-code renames.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Finding
+  - Region
+  - Declaration

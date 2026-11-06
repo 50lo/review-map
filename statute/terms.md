@@ -57,3 +57,39 @@ agreed: proposed
 code: [ChangeModel]
 not: []
 ```
+
+## Finding
+
+A possible problem in the change, reported by an automated check or an AI review. It explains the concern, gives supporting evidence, and points to the relevant parts of the change. For example, two components newly depending on each other can produce a finding about a dependency cycle.
+
+```yaml
+agreed: proposed
+code: [Finding]
+not:
+  - name: Region
+    means: Lines shown for review, whether or not they contain a problem.
+```
+
+## Region
+
+A section of code shown to help review an item. It can show changed code, deleted code, or surrounding code that helps explain the change, such as a caller or a definition.
+
+```yaml
+agreed: proposed
+code: [Region]
+not: []
+```
+
+## Declaration
+
+A named piece of code, such as a function, type, or property, whether or not it changed. For example, an unchanged function may help explain a review item because it calls the changed function.
+
+```yaml
+agreed: proposed
+code: [Decl]
+not:
+  - name: Usage
+    means: A reference involving a declaration in another component.
+  - name: Entity
+    means: A review item describing something that changed.
+```
