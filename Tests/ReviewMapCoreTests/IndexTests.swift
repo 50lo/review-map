@@ -8,8 +8,8 @@ import XCTest
 final class IndexTests: XCTestCase {
     static var repo: String?
     static var cache: String?
-    static var indexed: ChangeModel?
-    static var named: ChangeModel?
+    static var indexed: ChangeReport?
+    static var named: ChangeReport?
 
     override class func tearDown() {
         for dir in [repo, cache].compactMap({ $0 }) { try? FileManager.default.removeItem(atPath: dir) }
@@ -28,11 +28,11 @@ final class IndexTests: XCTestCase {
         return repo
     }
 
-    func analyze(index: IndexOptions) throws -> ChangeModel {
+    func analyze(index: IndexOptions) throws -> ChangeReport {
         try Analyzer.run(AnalyzeOptions(repo: try fixtureRepo(), base: "base", head: "main", index: index))
     }
 
-    func indexedModel() throws -> ChangeModel {
+    func indexedModel() throws -> ChangeReport {
         try requireIndexStore()
         if let m = Self.indexed { return m }
         _ = try fixtureRepo()
@@ -41,14 +41,14 @@ final class IndexTests: XCTestCase {
         return m
     }
 
-    func namedModel() throws -> ChangeModel {
+    func namedModel() throws -> ChangeReport {
         if let m = Self.named { return m }
         let m = try analyze(index: IndexOptions())
         Self.named = m
         return m
     }
 
-    func entity(_ m: ChangeModel, _ name: String) throws -> Entity {
+    func entity(_ m: ChangeReport, _ name: String) throws -> ReviewItem {
         try XCTUnwrap(m.entities.first { $0.qualifiedName == name }, "no entity \(name)")
     }
 
@@ -73,7 +73,7 @@ final class IndexTests: XCTestCase {
 
     func testModuleQualifiedReferenceMakesAnEdgeChange() throws {
         // Feed.limit() uses Storage.Config, new at head. Name matching doesn't see it.
-        let edge = { (m: ChangeModel) in m.edges.first { $0.from == "spm:Feed" && $0.to == "spm:Storage" } }
+        let edge = { (m: ChangeReport) in m.edges.first { $0.from == "spm:Feed" && $0.to == "spm:Storage" } }
         XCTAssertEqual(edge(try namedModel())?.status, .unchanged)
         let e = try XCTUnwrap(edge(try indexedModel()))
         XCTAssertEqual(e.status, .changed)

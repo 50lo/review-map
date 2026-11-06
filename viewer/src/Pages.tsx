@@ -22,7 +22,7 @@ import { FindingsSection } from "./FindingsSection";
 import { EdgeList } from "./Sidebar";
 import { canOpenInEditor, editorName, openInEditor } from "./source";
 import { setNote, useReview } from "./review";
-import type { Entity, Region, Usage } from "./types";
+import type { ReviewItem, Region, Usage } from "./types";
 import { ChangeTag, Chips, LLMSummary, ReviewedBox, Signature } from "./ui";
 
 type Go = (f: Focus) => void;
@@ -142,7 +142,7 @@ export function InterfacePage({ index, id, go }: { index: Index; id: string; go:
   );
 }
 
-function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
+function EntityCard({ index, e, go }: { index: Index; e: ReviewItem; go: Go }) {
   return (
     <article className="card">
       <ReviewedBox id={e.id} compact />
@@ -159,7 +159,7 @@ function EntityCard({ index, e, go }: { index: Index; e: Entity; go: Go }) {
   );
 }
 
-const OneLiner = ({ e, id, go }: { e: Entity; id?: string; go: Go }) => (
+const OneLiner = ({ e, id, go }: { e: ReviewItem; id?: string; go: Go }) => (
   <li className="with-check">
     <ReviewedBox id={id ?? e.id} compact />
     <button className="one-liner" onClick={() => go({ type: "entity", id: id ?? e.id })}>
@@ -279,7 +279,7 @@ const RELATION_LABEL: Record<string, string> = {
   state: "state",
 };
 
-function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; e: Entity; region?: string; go: Go }) {
+function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; e: ReviewItem; region?: string; go: Go }) {
   const nb = neighbors(index, e);
   const parent = e.parent ? index.entities.get(e.parent) : undefined;
   const parentName = e.parent?.split("::").slice(1).join("::");
@@ -467,7 +467,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
               ‹
             </button>
             <span className="muted small">
-              Entity {nb.position} of {nb.total}
+              Review item {nb.position} of {nb.total}
             </span>
             <button className="btn" disabled={!nb.next} onClick={() => nb.next && go({ type: "entity", id: nb.next.id })}>
               ›
@@ -569,7 +569,7 @@ function EntityPageInner({ index, e, region: focusRegion, go }: { index: Index; 
 }
 
 /** Unchanged code that explains a region, as a one-line label that expands to the lines that matter. */
-function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Region; go: Go }) {
+function ContextSnippet({ index, e, c, go }: { index: Index; e: ReviewItem; c: Region; go: Go }) {
   const [open, setOpen] = useState(false);
   const where = c.component && c.component !== e.component ? ` in ${compName(index, c.component)}` : "";
   const target = c.component ? findEntity(index, c.component, c.reasons[0]) : undefined;
@@ -603,7 +603,7 @@ function ContextSnippet({ index, e, c, go }: { index: Index; e: Entity; c: Regio
 }
 
 /** Context the LLM left out, folded into a count that opens it. */
-function PrunedContext({ index, e, items, go }: { index: Index; e: Entity; items: Region[]; go: Go }) {
+function PrunedContext({ index, e, items, go }: { index: Index; e: ReviewItem; items: Region[]; go: Go }) {
   const [open, setOpen] = useState(false);
   return (
     <>

@@ -1,6 +1,6 @@
 # Review Map
 
-A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, and Go; Rust and Kotlin are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-model.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
+A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, and Go; Rust and Kotlin are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
 
 ## Run it
 
@@ -33,7 +33,9 @@ Without installing, `.build/release/reviewmap` runs the SwiftPM build too, using
 
 An experimental native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
 
-With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change model to `~/.reviewmap/models/<repo>/<head>/change-model.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change report to `~/.reviewmap/models/<repo>/<head>/change-report.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own model, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
+
+Reports saved under the former filename `change-model.json` can still be opened by passing their path. To use default lookup, rename the report to `change-report.json` and its review notes file, if present, from `change-model.review.json` to `change-report.review.json`.
 
 The subcommands do one step each: `reviewmap analyze` only writes the model (add `--view` to open it), `reviewmap annotate [model]` runs the LLM annotator on an existing model, and `reviewmap view [model]` opens an existing model. Without a path, `annotate` and `view` use the model of the current branch of the repo in the current directory. Options for the default command and `analyze`:
 
@@ -42,7 +44,7 @@ The subcommands do one step each: `reviewmap analyze` only writes the model (add
 | `[repo]` | Path to the repo, or any directory inside it (default: the current directory). |
 | `--base`, `--head` | Any git refs (default: `main` and the current branch). The base is the merge-base of the two, which is what a PR shows. |
 | `--no-merge-base` | Compare against `--base` directly. |
-| `-o <file>` | Output path, or `-` for stdout (default: `~/.reviewmap/models/<repo>/<head>/change-model.json`). |
+| `-o <file>` | Output path, or `-` for stdout (default: `~/.reviewmap/models/<repo>/<head>/change-report.json`). |
 | `--config <file>` | A `reviewmap.yml`. By default it's read from the head of the repo, if one exists there. |
 | `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
 | `--max-refs <n>` | References kept per edge (default 50). |
@@ -164,7 +166,7 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 
 ## Viewer
 
-`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs, Shiki). It has three levels, and a breadcrumb (Map › Component › Entity) with back and forward on top.
+`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs, Shiki). It has three levels, and a breadcrumb (Map › Component › Review item) with back and forward on top.
 
 **Level 1, component map**
 
@@ -204,7 +206,7 @@ The LLM only annotates facts the analyzer already produced. It never adds entiti
 
 - Every entity has a reviewed checkbox at levels 2 and 3 and in the side panel. The overview shows progress and lists notes, with Copy as Markdown and Download for a GitHub review.
 - `j` or `]` moves to the next region in risk order, `k` or `[` to the previous one, from any level. Level 3 also has buttons for this.
-- With the local server, reviewed marks and notes are saved next to the model, as `change-model.review.json` for `change-model.json`, keyed by head commit. The single-file build keeps them in browser storage.
+- With the local server, reviewed marks and notes are saved next to the model, as `change-report.review.json` for `change-report.json`, keyed by head commit. The single-file build keeps them in browser storage.
 
 The focus, including the region, is kept in the URL, so browser back and forward move through it. Escape goes up one level.
 
@@ -213,9 +215,9 @@ To work on the viewer directly:
 ```sh
 cd viewer
 npm ci
-REVIEWMAP_MODEL=/path/to/change-model.json npm run dev   # serves the model, sources, and Open (REVIEWMAP_EDITOR picks the editor)
+REVIEWMAP_MODEL=/path/to/change-report.json npm run dev   # serves the model, sources, and Open (REVIEWMAP_EDITOR picks the editor)
 npm test                                                  # logic tests against the analyzer fixture
-REVIEWMAP_MODEL=/path/to/change-model.json npm run build:single
+REVIEWMAP_MODEL=/path/to/change-report.json npm run build:single
 ```
 
 `build:single` writes `dist/index.html`, one self-contained file with the model and the relevant source files embedded, which opens in any browser without a server. Sources are read from the repo at the model's commits (`REVIEWMAP_REPO` overrides the path recorded in the model, and `REVIEWMAP_EMBED_MAX` the 8 MB cap).
@@ -250,14 +252,14 @@ index:                 # index mode; the CLI flags win
   bazelArgs: ["--config=sim"]     # extra bazel build flags
 ```
 
-## change-model.json
+## change-report.json
 
 The schema is in `Sources/ReviewMapCore/Model.swift`. Fields worth knowing:
 
 - `version` is 3: structural review findings, and region annotations without notes or removal candidates. Version 2 added the language prefix on contract flags. `analyzer` has the version, the resolution mode, and the `languages` in the change; `repo` has `usesMergeBase`.
 - Components: `module`, `parent`, `isTest`, `status` (`added`/`removed`), `changedEntities`, `interfaceChanges`.
 - Edges: `symbolsAdded`, `symbolsRemoved`, `refCount`. `refs` is capped, with differing symbols listed first. A ref with `line: 0` comes from a manifest.
-- Entities: `changes`, `parent` (entity id, which may point to an unchanged declaration that isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Entity kinds also include `file` and `target`.
+- Entities: `changes`, `parent` (entity id, which may point to an unchanged declaration that isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Review item kinds also include `file` and `target`.
 - `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than entity ids, because the referring declaration usually didn't change and so has no entity. A `usedBy` entry has `side: "base"` when the use only exists at base (a caller the change removed), and `isolation` when the declaration around the reference, or a type around it, says (`@MainActor`, `nonisolated`, `actor CartStore`, or a SwiftUI view). Added entities have `similar`: up to five existing declarations with close names, in the same shape.
 - `findings`: `{id, source, kind, severity, message, evidence, suggestion?, anchors, location?}`. `source` is `check` or `llm`; each anchor is `{component}`, `{from, to}`, or `{entity}`, the first being the main one; `location` is the declaration a finding is about.
 - Regions: `anchor` (removed regions), and `component` and `lines` (context regions). Region ids are `<entity id>/r<n>` for review and removed regions and `<entity id>/c<n>` for context. A context region's `reasons` holds the qualified name of the declaration shown.

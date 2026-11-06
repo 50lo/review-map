@@ -82,14 +82,14 @@ struct GoFlags {
     }
 
     /// A capitalized name, with a capitalized type for a method or field.
-    private func isExported(_ d: Decl) -> Bool {
+    private func isExported(_ d: Declaration) -> Bool {
         isExportedName(d.name) && (d.scope.map(isExportedName) ?? true)
     }
 
     private func isExportedName(_ s: String) -> Bool { s.first?.isUppercase == true }
 
     /// The value of `key` in a field's struct tag (`json:"id,omitempty"` -> `id,omitempty`), or nil.
-    static func tag(_ key: String, of d: Decl) -> String? {
+    static func tag(_ key: String, of d: Declaration) -> String? {
         guard let raw = d.traits.first(where: { $0.hasPrefix("tag:") })?.dropFirst(4),
               let r = raw.range(of: #"(^|\s)"# + key + #":"([^"]*)""#, options: .regularExpression) else { return nil }
         let match = raw[r]

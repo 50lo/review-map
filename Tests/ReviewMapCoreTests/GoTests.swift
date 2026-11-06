@@ -4,13 +4,13 @@ import XCTest
 
 /// Go: the parser on its own, and the analyzer on Fixtures/go, a module with a base and a head tree.
 final class GoTests: XCTestCase {
-    func model() throws -> ChangeModel { try Fixture.model("go") }
+    func model() throws -> ChangeReport { try Fixture.model("go") }
 
-    func entity(_ m: ChangeModel, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
+    func entity(_ m: ChangeReport, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
         try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName }, "no entity \(qualifiedName)", file: file, line: line)
     }
 
-    func regions(_ m: ChangeModel, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
+    func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
         let e = try entity(m, qualifiedName)
         return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
     }
@@ -57,7 +57,7 @@ final class GoTests: XCTestCase {
             """
         let file = GoExtractor.parse(path: "shop/cart.go", source: source)
         let byName = Dictionary(grouping: file.decls, by: \.qualifiedName)
-        func decl(_ q: String, line: UInt = #line) -> Decl? {
+        func decl(_ q: String, line: UInt = #line) -> Declaration? {
             let d = byName[q]?.first
             XCTAssertNotNil(d, "no \(q)", line: line)
             return d

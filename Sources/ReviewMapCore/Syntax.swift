@@ -2,7 +2,7 @@ import Foundation
 
 /// A declaration found in one source file at one side of the change. Kinds and fields are shared by
 /// every language; a language leaves the ones it has no equivalent for at their defaults.
-struct Decl {
+struct Declaration {
     var kind: EntityKind
     /// Simple name ("add", "init", "CartService"); for extensions the extended type.
     var name: String
@@ -70,7 +70,7 @@ struct ParsedFile {
     var path: String
     /// Id of the language that parsed the file.
     var language: String
-    var decls: [Decl]
+    var decls: [Declaration]
     var imports: [NameRef]
     /// Free identifiers and type names (candidates for cross-component references).
     var typeRefs: [NameRef]
@@ -82,8 +82,8 @@ struct ParsedFile {
     var isGenerated = false
 
     /// Innermost declaration containing `line`.
-    func enclosingDecl(line: Int) -> Decl? {
-        var best: Decl?
+    func enclosingDecl(line: Int) -> Declaration? {
+        var best: Declaration?
         for d in decls where d.startLine <= line && line <= d.endLine {
             if let b = best {
                 if d.endLine - d.startLine <= b.endLine - b.startLine { best = d }
@@ -95,8 +95,8 @@ struct ParsedFile {
     }
 
     /// Parent declarations, innermost first, excluding the declaration itself.
-    func enclosingDeclarations(of decl: Decl) -> [Decl] {
-        var result: [Decl] = []
+    func enclosingDeclarations(of decl: Declaration) -> [Declaration] {
+        var result: [Declaration] = []
         var current = decl.parentIndex
         while let i = current {
             let parent = decls[i]

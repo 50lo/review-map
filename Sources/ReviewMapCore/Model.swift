@@ -1,7 +1,7 @@
-// The change model: the only contract between the analyzer and the viewer.
+// The change report: the only contract between the analyzer and the viewer.
 // Versioned; consumers must ignore fields they don't know.
 
-public struct ChangeModel: Codable, Equatable {
+public struct ChangeReport: Codable, Equatable {
     /// 2: contract flags carry their language's prefix ("swift:codable-shape").
     /// 3: structural review findings; region annotations no longer carry notes or removal candidates.
     public var version: Int = 3
@@ -10,7 +10,7 @@ public struct ChangeModel: Codable, Equatable {
     public var components: [Component]
     public var edges: [Edge]
     public var externalDeps: [ExternalDepChange]
-    public var entities: [Entity]
+    public var entities: [ReviewItem]
     public var regions: [Region]
     public var warnings: [Warning]
     /// Structural review: the deterministic checks' findings, then the LLM review's.
@@ -23,7 +23,7 @@ public struct ChangeModel: Codable, Equatable {
     }
 
     public init(version: Int = 3, analyzer: AnalyzerInfo, repo: RepoInfo, components: [Component], edges: [Edge],
-                externalDeps: [ExternalDepChange], entities: [Entity], regions: [Region], warnings: [Warning],
+                externalDeps: [ExternalDepChange], entities: [ReviewItem], regions: [Region], warnings: [Warning],
                 findings: [Finding] = [], llm: LLMRun? = nil) {
         self.version = version
         self.analyzer = analyzer
@@ -46,7 +46,7 @@ public struct ChangeModel: Codable, Equatable {
         components = try c.decode([Component].self, forKey: .components)
         edges = try c.decode([Edge].self, forKey: .edges)
         externalDeps = try c.decode([ExternalDepChange].self, forKey: .externalDeps)
-        entities = try c.decode([Entity].self, forKey: .entities)
+        entities = try c.decode([ReviewItem].self, forKey: .entities)
         regions = try c.decode([Region].self, forKey: .regions)
         warnings = try c.decode([Warning].self, forKey: .warnings)
         // Models written before structural review have no findings.
@@ -233,12 +233,12 @@ public struct Usage: Codable, Equatable, Hashable {
     public var side: Side? = nil
 }
 
-public struct Entity: Codable, Equatable {
+public struct ReviewItem: Codable, Equatable {
     public var id: String
     public var component: String
     public var kind: EntityKind
     public var qualifiedName: String
-    /// Entity id of the enclosing declaration, if any (may refer to an unchanged entity that is not listed).
+    /// Review item id of the enclosing declaration, if any (may refer to an unchanged entity that is not listed).
     public var parent: String?
     public var isInterface: Bool
     public var change: ChangeKind

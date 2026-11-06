@@ -1,8 +1,8 @@
-import type { ChangeModel } from "./types";
+import type { ChangeReport } from "./types";
 
 declare global {
   interface Window {
-    __REVIEWMAP_MODEL__?: ChangeModel;
+    __REVIEWMAP_MODEL__?: ChangeReport;
   }
 }
 
@@ -13,10 +13,10 @@ let origin: ModelOrigin = "file";
 /** Where the model came from. Only the local server can read sources from the repo and open files in the editor. */
 export const modelOrigin = () => origin;
 
-export function validate(raw: unknown): ChangeModel {
-  const m = raw as Partial<ChangeModel>;
+export function validate(raw: unknown): ChangeReport {
+  const m = raw as Partial<ChangeReport>;
   if (!m || typeof m !== "object" || !Array.isArray(m.components) || !Array.isArray(m.edges)) {
-    throw new Error("This doesn't look like a change-model.json (no components or edges).");
+    throw new Error("This doesn't look like a change-report.json (no components or edges).");
   }
   return {
     version: m.version ?? 1,
@@ -38,7 +38,7 @@ export function validate(raw: unknown): ChangeModel {
  * a `?model=<url>` parameter, or the local server's /api/model. Null means none was found,
  * and the page asks for a file.
  */
-export async function loadInitialModel(): Promise<ChangeModel | null> {
+export async function loadInitialModel(): Promise<ChangeReport | null> {
   if (window.__REVIEWMAP_MODEL__) {
     origin = "embedded";
     return validate(window.__REVIEWMAP_MODEL__);
@@ -60,7 +60,7 @@ export async function loadInitialModel(): Promise<ChangeModel | null> {
   }
 }
 
-export async function loadFile(file: File): Promise<ChangeModel> {
+export async function loadFile(file: File): Promise<ChangeReport> {
   origin = "file";
   return validate(JSON.parse(await file.text()));
 }

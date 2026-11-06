@@ -184,7 +184,7 @@ enum GoExtractor {
 // MARK: - Declarations
 
 private struct DeclWalker {
-    var decls: [Decl] = []
+    var decls: [Declaration] = []
     /// Index of each type declared in the file, for its methods.
     private var types: [String: Int] = [:]
 
@@ -352,7 +352,7 @@ private struct DeclWalker {
                               parentKind: EntityKind? = nil, modifiers: [String] = [], inherited: [String] = [],
                               rawEnd: Int? = nil, headerEnd: SyntaxNode? = nil, stored: Bool = false,
                               type: SyntaxNode? = nil, traits: Set<String> = [], tag: String? = nil) -> Int {
-        var d = Decl(
+        var d = Declaration(
             kind: kind, name: name, qualifiedName: qualified, scope: scope, parentIndex: parent, labelsKey: labelsKey,
             signatureDisplay: header.display, signatureCanon: header.canon,
             modifiersCanon: (modifiers + (tag.map { [$0] } ?? [])).joined(separator: " "), bodyCanon: body.map { $0.tokens.canon } ?? "",

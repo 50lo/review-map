@@ -29,7 +29,7 @@ struct TypeScriptFlags {
             var flags: [String] = []
 
             if let bd, let hd {
-                func toggled(_ name: String, _ has: (Decl) -> Bool) {
+                func toggled(_ name: String, _ has: (Declaration) -> Bool) {
                     if has(bd) != has(hd) { flags.append("\(name)-\(has(hd) ? "added" : "removed")") }
                 }
                 if d.isTopLevel { toggled("export") { $0.modifiers.contains("export") } }

@@ -6,7 +6,7 @@ import goGrammar from "shiki/langs/go.mjs";
 import swiftIcon from "./icons/swift.svg";
 import typescriptIcon from "./icons/typescript.svg";
 import goIcon from "./icons/go.svg";
-import type { ChangeModel, Entity } from "./types";
+import type { ChangeReport, ReviewItem } from "./types";
 
 interface LanguageDefinition {
   id: string;
@@ -15,7 +15,7 @@ interface LanguageDefinition {
   manifests: readonly RegExp[];
   componentKinds: readonly string[];
   icon: string;
-  kinds: Record<string, string | ((entity: Entity) => string)>;
+  kinds: Record<string, string | ((entity: ReviewItem) => string)>;
 }
 
 /** Viewer language facts, in badge order. Adding a language adds one entry here. */
@@ -43,7 +43,7 @@ export const LANGUAGES = [
     icon: typescriptIcon,
     kinds: {
       protocol: "interface", case: "member", init: "constructor", typealias: "type", func: "function",
-      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "property" : "variable",
+      var: (entity: ReviewItem) => entity.qualifiedName.includes(".") ? "property" : "variable",
     },
   },
   {
@@ -55,8 +55,8 @@ export const LANGUAGES = [
     icon: goIcon,
     kinds: {
       protocol: "interface", typealias: "type",
-      func: (entity: Entity) => entity.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
-      var: (entity: Entity) => entity.qualifiedName.includes(".") ? "field" : "variable",
+      func: (entity: ReviewItem) => entity.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
+      var: (entity: ReviewItem) => entity.qualifiedName.includes(".") ? "field" : "variable",
     },
   },
 ] as const satisfies readonly LanguageDefinition[];
@@ -87,15 +87,15 @@ export function highlightLanguageOf(file: string): string | undefined {
 /** Only load grammars the table's extensions use, once per grammar. */
 export const highlightGrammars = () => [...new Set(definitions.flatMap((language) => Object.values(language.extensions).map(({ grammar }) => grammar)))];
 
-/** Entity kinds as the entity's language names them. Unknown paths keep the model's kind. */
-export function entityKindLabel(entity: Entity): string {
+/** Review item kinds as the entity's language names them. Unknown paths keep the model's kind. */
+export function entityKindLabel(entity: ReviewItem): string {
   const kinds = sourceLanguage(entity.location.file)?.kinds;
   const kind = kinds && Object.hasOwn(kinds, entity.kind) ? kinds[entity.kind] : undefined;
   return typeof kind === "function" ? kind(entity) : kind ?? entity.kind;
 }
 
 /** Works with existing models, including unchanged nodes with no changed entities. */
-export function componentLanguages(model: ChangeModel): Map<string, Language[]> {
+export function componentLanguages(model: ChangeReport): Map<string, Language[]> {
   const components = new Map(model.components.map((c) => [c.id, c]));
   const known = new Map(model.components.map((c) => [c.id, new Set<Language>()]));
   const addPath = (id: string, path: string) => {

@@ -1,7 +1,7 @@
 import Foundation
 
-public enum ChangeModelIO {
-    public static func encode(_ model: ChangeModel) throws -> Data {
+public enum ChangeReportIO {
+    public static func encode(_ model: ChangeReport) throws -> Data {
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         var data = try enc.encode(model)
@@ -9,12 +9,12 @@ public enum ChangeModelIO {
         return data
     }
 
-    public static func decode(_ data: Data) throws -> ChangeModel {
-        try JSONDecoder().decode(ChangeModel.self, from: data)
+    public static func decode(_ data: Data) throws -> ChangeReport {
+        try JSONDecoder().decode(ChangeReport.self, from: data)
     }
 
     /// A few human-readable lines for the terminal.
-    public static func summary(_ m: ChangeModel) -> [String] {
+    public static func summary(_ m: ChangeReport) -> [String] {
         let changed = m.entities.filter { $0.change != .cosmetic }
         let interface = changed.filter(\.isInterface)
         let flagged = changed.filter { !$0.contractFlags.isEmpty }

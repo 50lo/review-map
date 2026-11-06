@@ -61,7 +61,7 @@ private let severityOrder = ["high": 0, "medium": 1, "low": 2]
 
 struct StructuralChecks {
     let b: ModelBuilder
-    let entities: [Entity]
+    let entities: [ReviewItem]
     let edges: [Edge]
     let config: Config
     private let words: [Side: WordIndex]
@@ -70,7 +70,7 @@ struct StructuralChecks {
     private let entityIds: Set<String>
     private var pairId: [DeclKey: String] = [:]
 
-    init(_ b: ModelBuilder, entities: [Entity], edges: [Edge], config: Config) {
+    init(_ b: ModelBuilder, entities: [ReviewItem], edges: [Edge], config: Config) {
         self.b = b
         self.entities = entities
         self.edges = edges
@@ -131,7 +131,7 @@ struct StructuralChecks {
         b.side(s).layout.components[l.component]?.isTest == true || ComponentBuilder.isTestPath(l.file) || b.side(s).generated.contains(l.file)
     }
 
-    private func decl(_ s: Side, _ file: String, _ i: Int?) -> Decl? {
+    private func decl(_ s: Side, _ file: String, _ i: Int?) -> Declaration? {
         guard let i else { return nil }
         return b.side(s).files[file]?.decls[i]
     }
@@ -492,7 +492,7 @@ struct StructuralChecks {
         for (path, comp) in b.head.layout.fileComponent where ComponentBuilder.isTestPath(path) { tested.insert(root(comp, .head)) }
         var pairOfId: [String: Pair] = [:]
         for p in b.pairs { pairOfId[p.id] = p }
-        var byComponent: [String: [Entity]] = [:]
+        var byComponent: [String: [ReviewItem]] = [:]
         for e in entities where e.change != .cosmetic && e.change != .removed && [.func, .`init`, .var].contains(e.kind)
             && !e.tags.contains("test") && !e.tags.contains("generated") && !isTestComponent(e.component) && tested.contains(root(e.component, .head)) {
             guard let p = pairOfId[e.id], let h = p.head else { continue }
@@ -543,7 +543,7 @@ extension ModelBuilder {
 
     /// For each added entity, existing head declarations whose names are close: the same name in another
     /// scope, most of the same words, or a near-identical spelling. Up to 5 each, closest first.
-    func similarDeclarations(_ entities: [Entity]) -> [String: [Usage]] {
+    func similarDeclarations(_ entities: [ReviewItem]) -> [String: [Usage]] {
         struct Candidate { var located: Located; var words: Set<String> }
         var byWord: [String: [Int]] = [:]
         var candidates: [Candidate] = []

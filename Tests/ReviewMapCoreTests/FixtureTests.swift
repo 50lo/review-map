@@ -3,14 +3,14 @@ import XCTest
 @testable import ReviewMapCore
 
 /// Builds a two-commit git repo from Fixtures/<name>/{base,head}, runs the analyzer, and
-/// compares the change model with Fixtures/<name>/expected.json.
+/// compares the change report with Fixtures/<name>/expected.json.
 /// Set UPDATE_SNAPSHOTS=1 to rewrite the snapshot.
 final class FixtureTests: XCTestCase {
-    func model(_ name: String) throws -> ChangeModel {
+    func model(_ name: String) throws -> ChangeReport {
         try Fixture.model(name)
     }
 
-    func entity(_ m: ChangeModel, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
+    func entity(_ m: ChangeReport, _ qualifiedName: String, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
         try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName }, "no entity \(qualifiedName)", file: file, line: line)
     }
 
@@ -106,7 +106,7 @@ final class FixtureTests: XCTestCase {
         XCTAssertFalse(m.entities.contains { $0.location.file == "Package.swift" && $0.kind != .target })
     }
 
-    func regions(_ m: ChangeModel, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
+    func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
         let e = try entity(m, qualifiedName)
         return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
     }
@@ -163,7 +163,7 @@ final class FixtureTests: XCTestCase {
 
 /// Builds a two-commit git repo from Fixtures/<name>/{base,head} and runs the analyzer on it, once per fixture.
 enum Fixture {
-    nonisolated(unsafe) static var cached: [String: ChangeModel] = [:]
+    nonisolated(unsafe) static var cached: [String: ChangeReport] = [:]
 
     static func path(_ name: String) throws -> String {
         try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/\(name)", withExtension: nil)).path
@@ -198,7 +198,7 @@ enum Fixture {
         return repo
     }
 
-    static func model(_ name: String) throws -> ChangeModel {
+    static func model(_ name: String) throws -> ChangeReport {
         if let m = cached[name] { return m }
         let repo = try repo(name)
         defer { try? FileManager.default.removeItem(atPath: repo) }
@@ -212,7 +212,7 @@ enum Fixture {
 
     /// Compares the model with Fixtures/<name>/expected.json; UPDATE_SNAPSHOTS=1 rewrites it.
     static func checkSnapshot(_ name: String, sourceFile: String = #filePath) throws {
-        let actual = try ChangeModelIO.encode(try model(name))
+        let actual = try ChangeReportIO.encode(try model(name))
         // Write to the source tree, not the copied bundle.
         let sourceSnapshot = URL(fileURLWithPath: sourceFile).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/\(name)/expected.json")

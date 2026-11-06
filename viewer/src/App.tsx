@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ChangeModel } from "./types";
+import type { ChangeReport } from "./types";
 import { buildIndex, collapse, defaultCollapsed, edgeKey, isGroupOf, mapFocus, revealFocus, stepRegion, visible, type Index, type MapOptions } from "./graph";
 import { lastName } from "./levels";
 import { loadFile, loadInitialModel } from "./load";
@@ -80,7 +80,7 @@ function readOptions(): MapOptions & { showUnchanged: boolean } {
 }
 
 export function App() {
-  const [model, setModel] = useState<ChangeModel | null>(null);
+  const [model, setModel] = useState<ChangeReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,12 +94,12 @@ export function App() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="empty">Loading change model…</div>;
+  if (loading) return <div className="empty">Loading change report…</div>;
   if (!model) return <Picker error={error} onModel={setModel} onError={setError} />;
   return <Viewer model={model} />;
 }
 
-function Picker({ error, onModel, onError }: { error: string | null; onModel: (m: ChangeModel) => void; onError: (e: string) => void }) {
+function Picker({ error, onModel, onError }: { error: string | null; onModel: (m: ChangeReport) => void; onError: (e: string) => void }) {
   const [over, setOver] = useState(false);
   const take = (f?: File) =>
     f &&
@@ -125,7 +125,7 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
       }}
     >
       <h1>Review Map</h1>
-      <p>Drop a change-model.json here, or choose one.</p>
+      <p>Drop a change-report.json here, or choose one.</p>
       <input type="file" accept=".json,application/json" onChange={(e) => take(e.target.files?.[0])} />
       <p className="muted">
         Or run <code>reviewmap</code> in a repo to review its current branch against main here.
@@ -135,7 +135,7 @@ function Picker({ error, onModel, onError }: { error: string | null; onModel: (m
   );
 }
 
-function Viewer({ model }: { model: ChangeModel }) {
+function Viewer({ model }: { model: ChangeReport }) {
   const [llm, setLLMState] = useState(readLLM);
   const index = useMemo(() => buildIndex(model, { llm }), [model, llm]);
   const [opts, setOpts] = useState(readOptions);

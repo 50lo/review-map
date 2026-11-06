@@ -22,7 +22,7 @@ import {
 import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
 import { FindingsSection } from "./FindingsSection";
 import { notesMarkdown, useReview } from "./review";
-import type { Component, Edge, Entity } from "./types";
+import type { Component, Edge, ReviewItem } from "./types";
 import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
 
 /** What the map shows, and the controls that change it. */
@@ -386,7 +386,7 @@ const componentKindLabel = (k: string) =>
     external: "external package",
   })[k] ?? k;
 
-function EntityRow({ e, setFocus }: { e: Entity; setFocus: Props["setFocus"] }) {
+function EntityRow({ e, setFocus }: { e: ReviewItem; setFocus: Props["setFocus"] }) {
   return (
     <li className={`with-check ${e.isInterface ? "iface" : ""}`}>
       <ReviewedBox id={e.id} compact />

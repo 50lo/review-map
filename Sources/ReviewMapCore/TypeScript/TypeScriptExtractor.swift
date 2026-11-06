@@ -212,7 +212,7 @@ private let modifierKeywords: Set<String> = ["export", "default", "declare", "ab
 private let functionValues: Set<String> = ["arrow_function", "function_expression", "generator_function", "function"]
 
 private struct DeclWalker {
-    var decls: [Decl] = []
+    var decls: [Declaration] = []
 
     private struct Scope {
         var qualified: String?
@@ -444,7 +444,7 @@ private struct DeclWalker {
         // Semicolons are optional, so adding or dropping one is cosmetic.
         let header = header.last?.type == ";" ? Array(header.dropLast()) : header
         func canon(_ tokens: [SyntaxNode]) -> String { tokens.filter { $0.type != ";" }.canon }
-        var d = Decl(
+        var d = Declaration(
             kind: kind, name: name, qualifiedName: qualified ?? qualify(name), scope: current.qualified,
             parentIndex: current.index, labelsKey: labelsKey,
             signatureDisplay: header.display, signatureCanon: canon(header),

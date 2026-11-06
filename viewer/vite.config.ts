@@ -6,8 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { collectSources, editorFrom, gitShow, openInEditor, repoInfo } from "./server/repo";
 
-// The change model to show. Set by `reviewmap --view`, or by hand:
-//   REVIEWMAP_MODEL=/path/to/change-model.json npm run dev
+// The change report to show. Set by `reviewmap --view`, or by hand:
+//   REVIEWMAP_MODEL=/path/to/change-report.json npm run dev
 const modelPath = process.env.REVIEWMAP_MODEL ? path.resolve(process.env.REVIEWMAP_MODEL) : undefined;
 
 const readModel = () => JSON.parse(fs.readFileSync(modelPath!, "utf8"));
@@ -18,7 +18,7 @@ if (process.env.REVIEWMAP_EDITOR && !editor) {
   console.warn(`REVIEWMAP_EDITOR="${process.env.REVIEWMAP_EDITOR}" is neither a known editor nor a command with {file}; Open is off.`);
 }
 
-// Serves the change model at /api/model, file contents at base and head at /api/source, and
+// Serves the change report at /api/model, file contents at base and head at /api/source, and
 // opening a file in the editor at /api/open.
 function modelServer(): Plugin {
   return {

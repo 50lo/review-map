@@ -61,7 +61,7 @@ struct GoConformance {
         return out
     }
 
-    static func arity(_ d: Decl) -> Int { d.labelsKey.filter { $0 == ":" }.count }
+    static func arity(_ d: Declaration) -> Int { d.labelsKey.filter { $0 == ":" }.count }
 
     private func implements(_ type: TypeKey, _ set: [String: Int], _ f: SideFacts) -> Bool {
         let methods = f.methods[type] ?? [:]

@@ -15,7 +15,7 @@ struct SwiftFlags {
     }
 
     /// Types (by component + qualified name) with a given trait on one side, including conformances added in extensions.
-    private func typesWhere(_ s: SideData, _ pred: (Decl) -> Bool) -> Set<String> {
+    private func typesWhere(_ s: SideData, _ pred: (Declaration) -> Bool) -> Set<String> {
         var result = Set<String>()
         for (path, file) in s.files where file.language == "swift" {
             guard let comp = s.layout.fileComponent[path] else { continue }
@@ -46,11 +46,11 @@ struct SwiftFlags {
 
     func compute() -> [Int: [String]] {
         let pairs = b.pairs
-        let isCodable: (Decl) -> Bool = { !codableNames.isDisjoint(with: $0.inherited.map(ModelBuilder.conformanceName)) }
+        let isCodable: (Declaration) -> Bool = { !codableNames.isDisjoint(with: $0.inherited.map(ModelBuilder.conformanceName)) }
         let codable = typesWhere(b.base, isCodable).union(typesWhere(b.head, isCodable))
         let models = typesWhere(b.base, { $0.attributes.contains("Model") }).union(typesWhere(b.head, { $0.attributes.contains("Model") }))
         // With @Observable every stored property is tracked state; with ObservableObject only @Published ones are.
-        let isObs: (Decl) -> Bool = { $0.attributes.contains("Observable") }
+        let isObs: (Declaration) -> Bool = { $0.attributes.contains("Observable") }
         let observable = typesWhere(b.base, isObs).union(typesWhere(b.head, isObs))
 
         let baseConf = conformances(b.base), headConf = conformances(b.head)

@@ -15,7 +15,7 @@ final class ChecksTests: XCTestCase {
     /// A repo with `base` committed on branch `base` and `head` on `main`. A nil file content deletes the file.
     /// `index` stands in for the indexers.
     func analyze(base: [String: String], head: [String: String?],
-                 index: ((Language, String, String) -> [Side: SideIndex]?)? = nil) throws -> ChangeModel {
+                 index: ((Language, String, String) -> [Side: SideIndex]?)? = nil) throws -> ChangeReport {
         let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-checks-\(UUID().uuidString)")
         repos.append(repo)
         let fm = FileManager.default
@@ -45,7 +45,7 @@ final class ChecksTests: XCTestCase {
         return try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main"), index: index)
     }
 
-    func findings(_ m: ChangeModel, _ kind: String) -> [Finding] {
+    func findings(_ m: ChangeReport, _ kind: String) -> [Finding] {
         m.findings.filter { $0.kind == kind }
     }
 

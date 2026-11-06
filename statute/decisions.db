@@ -1,10 +1,13 @@
 - id: D261106-ngpqq
   timestamp: 2026-11-06T00:32:46Z
   actor: agent
-  status: proposed
-  approved_by: null
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-06T08:45:35Z
   summary: Introduce five foundational terms for discussing Review Map.
-  rationale: Start with a small vocabulary in plain language, with concrete examples and existing code names recorded separately. Use Review item for the concept called Entity in code and Change report for the analyzer's output called ChangeModel in code. Leave rules and more specialized terms for later discussion.
+  rationale: Start with a small vocabulary in plain language, with concrete examples and code mappings recorded separately. Align the source types with ReviewItem and ChangeReport, and save reports as change-report.json. Preserve the JSON schema. Leave rules for later discussion.
   establishes: []
   changes: []
   retires: []
@@ -17,10 +20,13 @@
 - id: D261106-49z62
   timestamp: 2026-11-06T07:43:18Z
   actor: user
-  status: proposed
-  approved_by: null
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-06T08:45:35Z
   summary: Add Finding, Region, and Declaration to the Review Map vocabulary.
-  rationale: Extend the foundational vocabulary with the shorter definitions reviewed by the user. Keep code mappings tied to the existing Finding, Region, and Decl types; Usage describes a reference rather than a declaration. Defer source-code renames.
+  rationale: Extend the foundational vocabulary with the shorter definitions reviewed by the user. Map the terms to Finding, Region, and Declaration, renaming Decl to Declaration as requested; Usage describes a reference rather than a declaration.
   establishes: []
   changes: []
   retires: []

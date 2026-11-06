@@ -5,14 +5,14 @@ import XCTest
 /// Runs the LLM annotator on the basic fixture with scripts/fake-llm.sh standing in for the CLI.
 final class AnnotatorTests: XCTestCase {
     static var repo: String?
-    static var plain: ChangeModel?
+    static var plain: ChangeReport?
     var tmp = ""
 
     static let fake = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         .appendingPathComponent("../../scripts/fake-llm.sh").standardizedFileURL.path
 
     /// The fixture as a two-commit repo that lives for the whole class, because the annotator reads sources with git show.
-    func plainModel() throws -> ChangeModel {
+    func plainModel() throws -> ChangeReport {
         if let m = Self.plain { return m }
         let fixture = try XCTUnwrap(Bundle.module.url(forResource: "Fixtures/basic", withExtension: nil)).path
         let repo = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-annotate-\(UUID().uuidString)")
@@ -59,7 +59,7 @@ final class AnnotatorTests: XCTestCase {
         unsetenv("FAKE_LLM_MODE")
     }
 
-    func annotate(_ m: ChangeModel, tool: String = "claude", command: String? = AnnotatorTests.fake) throws -> ChangeModel {
+    func annotate(_ m: ChangeReport, tool: String = "claude", command: String? = AnnotatorTests.fake) throws -> ChangeReport {
         try Annotator.run(m, options: AnnotateOptions(tool: tool, command: command, cacheDir: tmp, jobs: 2))
     }
 
@@ -168,7 +168,7 @@ final class AnnotatorTests: XCTestCase {
         m.repo.root = "<repo>"
         m.repo.baseSha = "<base>"
         m.repo.headSha = "<head>"
-        let actual = try ChangeModelIO.encode(m)
+        let actual = try ChangeReportIO.encode(m)
         let snapshot = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/basic/annotated.json")
         if ProcessInfo.processInfo.environment["UPDATE_SNAPSHOTS"] == "1" {
             try actual.write(to: snapshot)

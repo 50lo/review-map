@@ -130,20 +130,20 @@ struct SwiftLanguage: Language {
     }
 
     /// SwiftUI: a `View` or `ViewModifier` type, or a declaration of `some View`.
-    func isViewCode(_ d: Decl, inherits: Set<String>) -> Bool {
+    func isViewCode(_ d: Declaration, inherits: Set<String>) -> Bool {
         d.signatureDisplay.contains("some View") || (d.typeAnnotation ?? "").contains("View")
             || inherits.contains("View") || inherits.contains("ViewModifier")
     }
 
     // MARK: Structural review
 
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool {
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
         ["public", "open", "package"].contains(decl.access ?? "")
     }
 
     /// Special members, operators, and declarations a runtime or framework calls: `@objc`,
     /// Interface Builder, `@main`, C entry points, and inlinable code that clients compile in.
-    func isImplicitlyCalled(_ decl: Decl) -> Bool {
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool {
         if Self.implicitNames.contains(decl.name) || !(decl.name.first.map { $0.isLetter || $0 == "_" || $0 == "$" } ?? false) { return true }
         return decl.attributes.contains { Self.entryAttributes.contains($0) || $0.hasPrefix("IB") }
     }

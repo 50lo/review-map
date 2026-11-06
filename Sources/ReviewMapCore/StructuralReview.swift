@@ -16,7 +16,7 @@ struct ChangeDescription {
 
     static let maxChars = 8_000
 
-    static func load(model: ChangeModel, file: String?) throws -> ChangeDescription? {
+    static func load(model: ChangeReport, file: String?) throws -> ChangeDescription? {
         if let file {
             let text = file == "-" ? String(decoding: FileHandle.standardInput.readDataToEndOfFile(), as: UTF8.self)
                 : try String(contentsOfFile: file, encoding: .utf8)
@@ -38,7 +38,7 @@ struct ChangeDescription {
 }
 
 struct StructuralReview: @unchecked Sendable {
-    let model: ChangeModel
+    let model: ChangeReport
     let sources: SourceReader
     let reviewNotes: String?
     let description: ChangeDescription?
@@ -73,7 +73,7 @@ struct StructuralReview: @unchecked Sendable {
     private func name(_ id: String) -> String { componentById[id]?.name ?? id }
 
     /// Entities the review looks at: not cosmetic, test, or generated.
-    private var reviewed: [Entity] {
+    private var reviewed: [ReviewItem] {
         let tests = Set(model.components.filter(\.isTest).map(\.id))
         return model.entities.filter { e in
             e.change != .cosmetic && !tests.contains(e.component) && !e.tags.contains("test") && !e.tags.contains("generated")
@@ -191,7 +191,7 @@ struct StructuralReview: @unchecked Sendable {
 
     private func usage() -> String {
         // Callers at head only; uses that exist only at base are callers the change removed.
-        let headUses = { (e: Entity) in e.usedBy.filter { $0.side != .base } }
+        let headUses = { (e: ReviewItem) in e.usedBy.filter { $0.side != .base } }
         let used = reviewed.filter { !headUses($0).isEmpty || !$0.dependsOn.isEmpty }
         let internalOnly = reviewed.filter { headUses($0).isEmpty && !$0.isInterface }
         var out = "\n## Usage of the changed entities\n"

@@ -4,7 +4,7 @@
 
 import { useSyncExternalStore } from "react";
 import { modelOrigin } from "./load";
-import type { ChangeModel, Region, Side } from "./types";
+import type { ChangeReport, Region, Side } from "./types";
 
 export interface Note {
   text: string;
@@ -34,7 +34,7 @@ const listeners = new Set<() => void>();
 const localKey = () => `reviewmap.review.${headSha}`;
 
 /** Loads the saved state for this model. Call once before rendering the viewer. */
-export async function initReview(model: ChangeModel): Promise<void> {
+export async function initReview(model: ChangeReport): Promise<void> {
   headSha = model.repo.headSha || "unknown";
   useServer = modelOrigin() === "server" && !window.__REVIEWMAP_SOURCES__;
   let loaded: Partial<ReviewState> | undefined;

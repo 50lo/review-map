@@ -56,7 +56,7 @@ public enum Annotator {
     /// Bump when the prompt or the reply format changes, so cached results are not reused.
     public static let promptVersion = "2"
 
-    public static func run(_ model: ChangeModel, options: AnnotateOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeModel {
+    public static func run(_ model: ChangeReport, options: AnnotateOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeReport {
         guard ["claude", "codex"].contains(options.tool) else {
             throw AnnotatorError("Unknown LLM tool \(options.tool). Use claude or codex.")
         }
@@ -83,7 +83,7 @@ public enum Annotator {
             let blocks = entities.map { e in (e, builder.entityBlock(e)) }
             let keys = Dictionary(uniqueKeysWithValues: blocks.map { ($0.0.id, Hash.hex(fingerprint + "\u{2}" + $0.1)) })
             let compKey = Hash.hex(fingerprint + "\u{3}" + builder.componentHeader(comp) + blocks.map { keys[$0.0.id]! }.joined())
-            var misses: [(Entity, String)] = []
+            var misses: [(ReviewItem, String)] = []
             for (e, block) in blocks {
                 if let hit = cache.entity(keys[e.id]!), validate(hit, against: e, builder: builder).isEmpty {
                     fromCache[e.id] = hit
@@ -99,9 +99,9 @@ public enum Annotator {
             }
             // Split large components into batches of whole entities. The first batch also asks
             // for the component summary.
-            var chunk: [(Entity, String)] = []
+            var chunk: [(ReviewItem, String)] = []
             var size = 0
-            var chunks: [[(Entity, String)]] = []
+            var chunks: [[(ReviewItem, String)]] = []
             for m in misses {
                 if !chunk.isEmpty && size + m.1.count > options.maxBatchChars {
                     chunks.append(chunk)
@@ -301,7 +301,7 @@ public enum Annotator {
         return errors
     }
 
-    static func validate(_ r: EntityReply, against e: Entity, builder: PromptBuilder) -> [String] {
+    static func validate(_ r: EntityReply, against e: ReviewItem, builder: PromptBuilder) -> [String] {
         var errors = checkText(r.summary, "summary of \(e.id)", max: 200)
         let own = Set(builder.reviewRegions(e.id).map(\.id))
         let ctx = Set(builder.contextRegions(e.id).map(\.id))
@@ -350,7 +350,7 @@ public enum Annotator {
 
     // MARK: - Applying
 
-    static func apply(_ m: inout ChangeModel, entities: [String: EntityReply], components: [String: String]) {
+    static func apply(_ m: inout ChangeReport, entities: [String: EntityReply], components: [String: String]) {
         var regionReply: [String: EntityReply.RegionReply] = [:]
         var contextReply: [String: EntityReply.ContextReply] = [:]
         for e in entities.values {
@@ -414,7 +414,7 @@ struct EntityReply: Codable, Equatable {
 
 struct Batch {
     var component: Component
-    var entities: [Entity]
+    var entities: [ReviewItem]
     var blocks: [String]
     var wantsSummary: Bool
     var part: Int
@@ -448,19 +448,19 @@ private final class ResultBox: @unchecked Sendable {
 /// Builds the prompt for a batch. Each entity's block is also what its cache key hashes, so a
 /// result is reused only when everything the LLM saw about the entity is the same.
 struct PromptBuilder: @unchecked Sendable {
-    let model: ChangeModel
+    let model: ChangeReport
     let sources: SourceReader
     let reviewNotes: String?
     private let regionsByEntity: [String: [Region]]
     private let contextByEntity: [String: [Region]]
     private let componentById: [String: Component]
-    private let entitiesByComponent: [String: [Entity]]
+    private let entitiesByComponent: [String: [ReviewItem]]
 
     /// Whole entity code is included up to this many lines; longer entities show their regions with a margin.
     static let maxWholeLines = 150
     static let margin = 3
 
-    init(model: ChangeModel, sources: SourceReader, reviewNotes: String?) {
+    init(model: ChangeReport, sources: SourceReader, reviewNotes: String?) {
         self.model = model
         self.sources = sources
         self.reviewNotes = reviewNotes
@@ -478,7 +478,7 @@ struct PromptBuilder: @unchecked Sendable {
         }, by: \.component)
     }
 
-    func entities(of component: String) -> [Entity] { entitiesByComponent[component] ?? [] }
+    func entities(of component: String) -> [ReviewItem] { entitiesByComponent[component] ?? [] }
     func reviewRegions(_ entity: String) -> [Region] { regionsByEntity[entity] ?? [] }
     func contextRegions(_ entity: String) -> [Region] { contextByEntity[entity] ?? [] }
 
@@ -504,8 +504,8 @@ struct PromptBuilder: @unchecked Sendable {
         }
     }
 
-    func entityBlock(_ e: Entity) -> String {
-        var out = "### Entity \(e.id)\n"
+    func entityBlock(_ e: ReviewItem) -> String {
+        var out = "### ReviewItem \(e.id)\n"
         out += "\(e.kind.rawValue) \(e.qualifiedName), change: \(e.changes.map(\.rawValue).joined(separator: ", "))"
         out += e.isInterface ? ", interface\n" : ", internal\n"
         if !e.contractFlags.isEmpty { out += "Contract flags: \(e.contractFlags.joined(separator: ", "))\n" }

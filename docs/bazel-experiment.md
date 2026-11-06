@@ -131,7 +131,7 @@ remote-cache reads were disabled. These are local build-system defaults, rather
 than identical compiler invocations or first-install measurements.
 
 The edit scenarios change one executable-code string in
-`Sources/reviewmap/main.swift` or `Sources/ReviewMapCore/ChangeModelIO.swift`.
+`Sources/reviewmap/main.swift` or `Sources/ReviewMapCore/ChangeReportIO.swift`.
 They include compilation and linking, and the original source is restored and
 rebuilt after each scenario. They do not measure API changes, large refactors,
 branch switching, CI, or shared remote caches.

@@ -30,7 +30,7 @@ struct AnalyzeArgs: ParsableArguments {
     @Option(help: "Path to a reviewmap.yml (default: reviewmap.yml at the head of the repo, if present).")
     var config: String?
 
-    @Option(name: .shortAndLong, help: "Output file, or - for stdout (default: ~/.reviewmap/models/<repo>/<head>/change-model.json).")
+    @Option(name: .shortAndLong, help: "Output file, or - for stdout (default: ~/.reviewmap/models/<repo>/<head>/change-report.json).")
     var output: String?
 
     @Option(help: "Maximum references kept per edge.")
@@ -68,7 +68,7 @@ struct AnalyzeArgs: ParsableArguments {
         if !noLLM {
             model = try Annotator.run(model, options: llm.options, log: log)
         }
-        let data = try ChangeModelIO.encode(model)
+        let data = try ChangeReportIO.encode(model)
         if output == "-" {
             FileHandle.standardOutput.write(data)
         } else {
@@ -77,7 +77,7 @@ struct AnalyzeArgs: ParsableArguments {
         let elapsed = String(format: "%.1fs", Date().timeIntervalSince(start))
         var lines = ["Wrote \(output == "-" ? "stdout" : output) in \(elapsed)."]
         if summary {
-            lines += ChangeModelIO.summary(model)
+            lines += ChangeReportIO.summary(model)
         }
         FileHandle.standardError.write(Data((lines.joined(separator: "\n") + "\n").utf8))
         if view {
@@ -88,7 +88,7 @@ struct AnalyzeArgs: ParsableArguments {
 
 struct Review: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Analyze the change, write change-model.json, and open it in the viewer (the default command)."
+        abstract: "Analyze the change, write change-report.json, and open it in the viewer (the default command)."
     )
 
     @OptionGroup var args: AnalyzeArgs
@@ -103,7 +103,7 @@ struct Review: ParsableCommand {
 
 struct Analyze: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Analyze the change between two git refs and write change-model.json."
+        abstract: "Analyze the change between two git refs and write change-report.json."
     )
 
     @OptionGroup var args: AnalyzeArgs
@@ -182,10 +182,10 @@ struct LLMOptions: ParsableArguments {
 
 struct Annotate: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Run the LLM annotator on an existing change model and write it back."
+        abstract: "Run the LLM annotator on an existing change report and write it back."
     )
 
-    @Argument(help: "The change model to annotate (default: the model of the current branch of the repo in the current directory).")
+    @Argument(help: "The change report to annotate (default: the model of the current branch of the repo in the current directory).")
     var model: String?
 
     @Option(name: .shortAndLong, help: "Output file (default: overwrite the input). Use - for stdout.")
@@ -195,9 +195,9 @@ struct Annotate: ParsableCommand {
 
     func run() throws {
         let model = try self.model ?? ModelPath.current()
-        let input = try ChangeModelIO.decode(Data(contentsOf: URL(fileURLWithPath: model)))
+        let input = try ChangeReportIO.decode(Data(contentsOf: URL(fileURLWithPath: model)))
         let annotated = try Annotator.run(input, options: llm.options, log: log)
-        let data = try ChangeModelIO.encode(annotated)
+        let data = try ChangeReportIO.encode(annotated)
         let out = output ?? model
         if out == "-" {
             FileHandle.standardOutput.write(data)
@@ -221,14 +221,14 @@ enum ModelPath {
         let dir = (AnnotateOptions.home as NSString).appendingPathComponent(".reviewmap/models")
             + "/" + Paths.slug((root as NSString).lastPathComponent) + "/" + Paths.slug(head)
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        return dir + "/change-model.json"
+        return dir + "/change-report.json"
     }
 
     /// The default model of the current branch of the repo in the current directory.
     static func current() throws -> String {
         let path = try `default`(repo: ".", head: Analyzer.currentBranch(repo: "."))
         guard FileManager.default.fileExists(atPath: path) else {
-            throw ValidationError("No change model at \(path). Run reviewmap first, or pass a model path.")
+            throw ValidationError("No change report at \(path). Run reviewmap first, or pass a model path.")
         }
         return path
     }

@@ -46,18 +46,18 @@ protocol Language {
     func flagRisk(_ flag: String, isInterface: Bool) -> Double
     /// View code, where control flow is mostly layout. `inherits` holds what the enclosing type and,
     /// for a type, the type itself conform to or inherit from.
-    func isViewCode(_ decl: Decl, inherits: Set<String>) -> Bool
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool
 
     // MARK: Structural review
 
     /// Whether this declaration is public API. `enclosing` is its parent chain, innermost first;
     /// it excludes the declaration itself. This classifies API for unused-code checks, not usage.
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool
     /// Whether a runtime, framework, or language convention may call this declaration without naming
     /// it, by its name or attributes (Swift's `@objc` or `body`, TypeScript's `constructor`). Unused-code
     /// checks skip these, and so do similar-name suggestions. Rules that follow from the shared
     /// declaration shape (initializers, overrides, protocol requirements, possible witnesses) stay in the core.
-    func isImplicitlyCalled(_ decl: Decl) -> Bool
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool
     /// Head declarations that conform to the matched interface. `builder` contains both sides,
     /// all components, and their matched declaration pairs: implicit conformances may need the
     /// base interface's method set even when a type no longer conforms at head.

@@ -8,7 +8,7 @@ import XCTest
 final class TypeScriptIndexTests: XCTestCase {
     static var repo: String?
     static var cache: String?
-    static var indexed: ChangeModel?
+    static var indexed: ChangeReport?
     static var available: Bool?
 
     override class func tearDown() {
@@ -33,11 +33,11 @@ final class TypeScriptIndexTests: XCTestCase {
         return repo
     }
 
-    func analyze(index: IndexOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeModel {
+    func analyze(index: IndexOptions, log: @escaping (String) -> Void = { _ in }) throws -> ChangeReport {
         try Analyzer.run(AnalyzeOptions(repo: try fixtureRepo(), base: "base", head: "main", index: index), log: log)
     }
 
-    func indexedModel() throws -> ChangeModel {
+    func indexedModel() throws -> ChangeReport {
         try requireIndexer()
         if let m = Self.indexed { return m }
         _ = try fixtureRepo()
@@ -46,7 +46,7 @@ final class TypeScriptIndexTests: XCTestCase {
         return m
     }
 
-    func entity(_ m: ChangeModel, _ name: String) throws -> Entity {
+    func entity(_ m: ChangeReport, _ name: String) throws -> ReviewItem {
         try XCTUnwrap(m.entities.first { $0.qualifiedName == name }, "no entity \(name)")
     }
 

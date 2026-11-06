@@ -242,7 +242,7 @@ final class LanguageTests: XCTestCase {
         return try ModelBuilder(base: side(.base, base), head: side(.head, head), languages: [language], options: options)
     }
 
-    private func finish(_ builder: ModelBuilder) -> ChangeModel {
+    private func finish(_ builder: ModelBuilder) -> ChangeReport {
         builder.finish(repo: RepoInfo(root: builder.options.repo, base: "base", head: "head", baseSha: "base", headSha: "head", usesMergeBase: false))
     }
 }
@@ -258,8 +258,8 @@ private final class HookLanguage: Language {
     var conformanceUses: [ConformanceUse] = []
     var sawBaseInterfaceAndConformer = false
 
-    func isPublicAPI(_ decl: Decl, enclosing: [Decl]) -> Bool { ["api", "entry"].contains(decl.name) }
-    func isImplicitlyCalled(_ decl: Decl) -> Bool { decl.name == "entry" }
+    func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool { ["api", "entry"].contains(decl.name) }
+    func isImplicitlyCalled(_ decl: Declaration) -> Bool { decl.name == "entry" }
     func conformers(of interface: Pair, requirement: Pair?, in builder: ModelBuilder, for use: ConformanceUse) -> [Conformer] {
         conformanceUses.append(use)
         if interface.base != nil && builder.pairs.contains(where: { $0.base?.decl.name == "HiddenConformer" && $0.head != nil }) {
@@ -296,6 +296,6 @@ private final class HookLanguage: Language {
     }
     func settingFlag(_ key: String) -> String { swift.settingFlag(key) }
     func flagRisk(_ flag: String, isInterface: Bool) -> Double { swift.flagRisk(flag, isInterface: isInterface) }
-    func isViewCode(_ decl: Decl, inherits: Set<String>) -> Bool { swift.isViewCode(decl, inherits: inherits) }
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { swift.isViewCode(decl, inherits: inherits) }
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? { nil }
 }

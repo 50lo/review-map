@@ -3,7 +3,7 @@
 
 import { componentEntities, entityRank, type Index } from "./graph";
 import type { Focus } from "./nav";
-import type { Entity, Usage } from "./types";
+import type { ReviewItem, Usage } from "./types";
 
 export const KIND_GROUPS: Array<{ title: string; kinds: string[] }> = [
   { title: "Protocols and interfaces", kinds: ["protocol"] },
@@ -16,16 +16,16 @@ export const KIND_GROUPS: Array<{ title: string; kinds: string[] }> = [
 
 export interface InterfaceModel {
   /** Changed interface entities, grouped by kind, most significant first within a group. */
-  groups: Array<{ title: string; entities: Entity[] }>;
+  groups: Array<{ title: string; entities: ReviewItem[] }>;
   /** Changed internal entities, shown collapsed below the interface. */
-  internal: Entity[];
+  internal: ReviewItem[];
   /** Cosmetic, test, and generated changes, reachable through a filter. */
-  hidden: Entity[];
+  hidden: ReviewItem[];
 }
 
 
 export function interfaceModel(index: Index, componentId: string): InterfaceModel {
-  const byScore = (a: Entity, b: Entity) => entityRank(index, b) - entityRank(index, a) || a.qualifiedName.localeCompare(b.qualifiedName);
+  const byScore = (a: ReviewItem, b: ReviewItem) => entityRank(index, b) - entityRank(index, a) || a.qualifiedName.localeCompare(b.qualifiedName);
   const { shown } = componentEntities(index, componentId);
   const shownIds = new Set(shown.map((e) => e.id));
   const hidden = (index.entitiesByComponent.get(componentId) ?? []).filter((e) => !shownIds.has(e.id));
@@ -42,19 +42,19 @@ export function interfaceModel(index: Index, componentId: string): InterfaceMode
 }
 
 /** The order level 3 steps through with previous and next: the interface view's order. */
-export function reviewOrder(index: Index, componentId: string): Entity[] {
+export function reviewOrder(index: Index, componentId: string): ReviewItem[] {
   const m = interfaceModel(index, componentId);
   return [...m.groups.flatMap((g) => g.entities), ...m.internal, ...m.hidden];
 }
 
-export function neighbors(index: Index, e: Entity): { prev?: Entity; next?: Entity; position: number; total: number } {
+export function neighbors(index: Index, e: ReviewItem): { prev?: ReviewItem; next?: ReviewItem; position: number; total: number } {
   const order = reviewOrder(index, e.component);
   const i = order.findIndex((x) => x.id === e.id);
   return { prev: i > 0 ? order[i - 1] : undefined, next: i >= 0 ? order[i + 1] : undefined, position: i + 1, total: order.length };
 }
 
 /** An entity in the model by component and qualified name, if that declaration changed. */
-export function findEntity(index: Index, component: string, qualifiedName: string): Entity | undefined {
+export function findEntity(index: Index, component: string, qualifiedName: string): ReviewItem | undefined {
   const direct = index.entities.get(`${component}::${qualifiedName}`);
   if (direct) return direct;
   return index.entitiesByComponent.get(component)?.find((e) => e.qualifiedName === qualifiedName);
@@ -89,7 +89,7 @@ export function groupUsages(usages: Usage[], index?: Index): Array<{ component: 
 }
 
 /** Changed members of a type, for its level 3 view. */
-export const membersOf = (index: Index, e: Entity) => index.model.entities.filter((x) => x.parent === e.id);
+export const membersOf = (index: Index, e: ReviewItem) => index.model.entities.filter((x) => x.parent === e.id);
 
 /** The last part of a qualified name: "Cart.total()" → "total()". */
 export function lastName(qualifiedName: string): string {
@@ -108,7 +108,7 @@ export function lastName(qualifiedName: string): string {
  * Identifiers in code that lead somewhere in the tool: changed top-level types in the model,
  * and the declarations an entity depends on in other components. Ambiguous names are left out.
  */
-export function symbolTargets(index: Index, e?: Entity): Map<string, Focus> {
+export function symbolTargets(index: Index, e?: ReviewItem): Map<string, Focus> {
   const out = new Map<string, Focus>();
   const ambiguous = new Set<string>();
   const add = (name: string, f: Focus) => {

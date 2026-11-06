@@ -2,7 +2,7 @@
 // Start here ranking. Kept free of React so it can be unit tested against the fixture model.
 
 import type { Focus } from "./nav";
-import type { ChangeModel, Component, Edge, Entity, ExternalDepChange, Region } from "./types";
+import type { ChangeReport, Component, Edge, ReviewItem, ExternalDepChange, Region } from "./types";
 import { entityKindLabel } from "./languages";
 
 export type { Focus } from "./nav";
@@ -18,12 +18,12 @@ export interface MapOptions {
 }
 
 export interface Index {
-  model: ChangeModel;
+  model: ChangeReport;
   components: Map<string, Component>;
   children: Map<string, string[]>;
   externalChange: Map<string, ExternalDepChange>;
-  entitiesByComponent: Map<string, Entity[]>;
-  entities: Map<string, Entity>;
+  entitiesByComponent: Map<string, ReviewItem[]>;
+  entities: Map<string, ReviewItem>;
   /** True once the analyzer scores regions; before that, ranking falls back to contract flags. */
   hasRegions: boolean;
   /** Review and removed regions per entity, in line order. */
@@ -46,7 +46,7 @@ export interface IndexOptions {
 
 export const edgeKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`;
 
-export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
+export function buildIndex(model: ChangeReport, opts: IndexOptions = {}): Index {
   const components = new Map(model.components.map((c) => [c.id, c]));
   const children = new Map<string, string[]>();
   for (const c of model.components) {
@@ -55,7 +55,7 @@ export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
     }
   }
   const externalChange = new Map(model.externalDeps.map((d) => [d.name, d]));
-  const entitiesByComponent = new Map<string, Entity[]>();
+  const entitiesByComponent = new Map<string, ReviewItem[]>();
   for (const e of model.entities) {
     entitiesByComponent.set(e.component, [...(entitiesByComponent.get(e.component) ?? []), e]);
   }
@@ -90,7 +90,7 @@ export function buildIndex(model: ChangeModel, opts: IndexOptions = {}): Index {
 }
 
 /** True when any region, summary, or finding came from the LLM annotator. */
-export const hasLLM = (m: ChangeModel) =>
+export const hasLLM = (m: ChangeReport) =>
   !!m.llm && (m.regions.some((r) => r.llm) || m.entities.some((e) => e.llm) || (m.findings ?? []).some((f) => f.source === "llm"));
 
 /** The risk a region ranks by: the LLM's when the LLM layer is on and it scored the region, else the deterministic one. */
@@ -408,7 +408,7 @@ export interface ComponentEdges {
 
 const emptyByStatus = (): Record<Edge["status"], Edge[]> => ({ added: [], removed: [], changed: [], unchanged: [] });
 
-export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
+export function componentEdges(model: ChangeReport, id: string): ComponentEdges {
   const out = { outgoing: emptyByStatus(), incoming: emptyByStatus() };
   for (const e of model.edges) {
     if (e.from === id) out.outgoing[e.status].push(e);
@@ -420,7 +420,7 @@ export function componentEdges(model: ChangeModel, id: string): ComponentEdges {
 // ---------------------------------------------------------------------------
 // Start here
 
-/** Entity kinds as the entity's language names them. */
+/** Review item kinds as the entity's language names them. */
 export const kindLabel = entityKindLabel;
 
 /** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
@@ -439,7 +439,7 @@ const flagWeight = (prefixed: string): number => {
 
 const changeWeight: Record<string, number> = { removed: 1.5, signature: 1.2, added: 1, modifiers: 1, body: 0.6, cosmetic: 0 };
 
-export function entityScore(e: Entity): number {
+export function entityScore(e: ReviewItem): number {
   if (e.change === "cosmetic") return 0;
   const flags = e.contractFlags.reduce((s, f) => s + flagWeight(f), 0);
   const base = flags + (changeWeight[e.change] ?? 0.5);
@@ -451,13 +451,13 @@ export interface StartItem {
   /** Top region id, or entity id in the interim ranking. */
   id: string;
   /** The entity the row names: the top region's entity, or the type it is a member of. */
-  entity: Entity;
+  entity: ReviewItem;
   /** Where the row leads: the highest-risk region. */
   focus: Focus;
   score: number;
   reasons: string[];
   /** Member entities folded into this item. */
-  members: Entity[];
+  members: ReviewItem[];
   /** Review and removed regions behind the item. */
   regionCount: number;
   source: "regions" | "flags";
@@ -466,13 +466,13 @@ export interface StartItem {
 /** Reasons the analyzer gives a region that has no specific risk signal. */
 const FALLBACK_REASONS = new Set(["changed lines", "new declaration", "removed declaration", "removed lines", "signature changed", "modifiers changed", "changed", "new file", "removed file"]);
 
-export function isLowRisk(index: Index, e: Entity): boolean {
+export function isLowRisk(index: Index, e: ReviewItem): boolean {
   const c = index.components.get(e.component);
   return e.change === "cosmetic" || !!e.tags?.some((t) => t === "test" || t === "generated") || !!c?.isTest;
 }
 
 /** Highest region risk of an entity, or the contract-flag score before regions exist. */
-export function entityRank(index: Index, e: Entity): number {
+export function entityRank(index: Index, e: ReviewItem): number {
   if (!index.hasRegions) return entityScore(e);
   return Math.max(0, ...(index.regionsByEntity.get(e.id) ?? []).map((r) => regionRisk(index, r)));
 }
@@ -490,7 +490,7 @@ export function startHere(index: Index, limit = 10): StartItem[] {
   );
   // Fold members into their listed parent, so one Codable type doesn't fill the whole list.
   const listed = new Set(candidates.map((e) => e.id));
-  const rootOf = (e: Entity): string => {
+  const rootOf = (e: ReviewItem): string => {
     let cur = e;
     while (cur.parent && listed.has(cur.parent)) cur = index.entities.get(cur.parent)!;
     return cur.id;
@@ -563,7 +563,7 @@ export function regionPosition(index: Index, focus: Focus): number {
 }
 
 /** Entities of a component for the side panel: interface changes first, cosmetic counted separately. */
-export function componentEntities(index: Index, id: string): { shown: Entity[]; cosmetic: number; lowRisk: number } {
+export function componentEntities(index: Index, id: string): { shown: ReviewItem[]; cosmetic: number; lowRisk: number } {
   const all = index.entitiesByComponent.get(id) ?? [];
   const cosmetic = all.filter((e) => e.change === "cosmetic").length;
   const lowRisk = all.filter((e) => e.change !== "cosmetic" && isLowRisk(index, e)).length;

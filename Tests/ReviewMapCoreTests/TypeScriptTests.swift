@@ -5,14 +5,14 @@ import XCTest
 /// TypeScript: the parser on its own, and the analyzer on Fixtures/typescript, an npm workspace with a
 /// base and a head tree.
 final class TypeScriptTests: XCTestCase {
-    func model() throws -> ChangeModel { try Fixture.model("typescript") }
+    func model() throws -> ChangeReport { try Fixture.model("typescript") }
 
-    func entity(_ m: ChangeModel, _ qualifiedName: String, component: String? = nil, file: StaticString = #filePath, line: UInt = #line) throws -> Entity {
+    func entity(_ m: ChangeReport, _ qualifiedName: String, component: String? = nil, file: StaticString = #filePath, line: UInt = #line) throws -> ReviewItem {
         try XCTUnwrap(m.entities.first { $0.qualifiedName == qualifiedName && (component == nil || $0.component == component) },
                       "no entity \(qualifiedName)", file: file, line: line)
     }
 
-    func regions(_ m: ChangeModel, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
+    func regions(_ m: ChangeReport, _ qualifiedName: String, kind: String? = nil) throws -> [Region] {
         let e = try entity(m, qualifiedName)
         return m.regions.filter { $0.entity == e.id && (kind == nil || $0.kind == kind) }
     }
@@ -53,7 +53,7 @@ final class TypeScriptTests: XCTestCase {
             """
         let file = TypeScriptExtractor.parse(path: "src/store.ts", source: source)
         let byName = Dictionary(grouping: file.decls, by: \.qualifiedName)
-        func decl(_ q: String, line: UInt = #line) -> Decl? {
+        func decl(_ q: String, line: UInt = #line) -> Declaration? {
             let d = byName[q]?.first
             XCTAssertNotNil(d, "no \(q)", line: line)
             return d

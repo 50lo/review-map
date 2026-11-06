@@ -4,14 +4,14 @@
 export type EdgeStatus = "added" | "removed" | "changed" | "unchanged";
 export type Side = "base" | "head";
 
-export interface ChangeModel {
+export interface ChangeReport {
   version: number;
   analyzer?: { version: string; resolution: string; languages?: string[] };
   repo: { root: string; base: string; head: string; baseSha: string; headSha: string; usesMergeBase?: boolean };
   components: Component[];
   edges: Edge[];
   externalDeps: ExternalDepChange[];
-  entities: Entity[];
+  entities: ReviewItem[];
   regions: Region[];
   warnings: Warning[];
   /** Structural review: the deterministic checks' findings, then the LLM's. Missing before version 3. */
@@ -119,7 +119,7 @@ export interface Usage {
   side?: Side;
 }
 
-export interface Entity {
+export interface ReviewItem {
   id: string;
   component: string;
   kind: string;

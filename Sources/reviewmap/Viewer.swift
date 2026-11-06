@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-/// Starts the browser viewer (viewer/, a Vite app) on a change model and opens it.
+/// Starts the browser viewer (viewer/, a Vite app) on a change report and opens it.
 enum ViewerLauncher {
     /// The viewer directory: $REVIEWMAP_VIEWER, then share/reviewmap/viewer next to the installed
     /// binary (scripts/install.sh), then viewer/ in the checkout this binary was built from.
@@ -31,7 +31,7 @@ enum ViewerLauncher {
         let dir = try directory()
         let modelPath = URL(fileURLWithPath: model).standardizedFileURL.path
         guard FileManager.default.fileExists(atPath: modelPath) else {
-            throw ValidationError("No change model at \(modelPath).")
+            throw ValidationError("No change report at \(modelPath).")
         }
         if !FileManager.default.fileExists(atPath: dir.appendingPathComponent("node_modules").path) {
             log("Installing viewer dependencies (first run)…")
@@ -69,10 +69,10 @@ enum ViewerLauncher {
 struct ViewCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "view",
-        abstract: "Open an existing change-model.json in the browser viewer."
+        abstract: "Open an existing change-report.json in the browser viewer."
     )
 
-    @Argument(help: "Path to the change model (default: the model of the current branch of the repo in the current directory).")
+    @Argument(help: "Path to the change report (default: the model of the current branch of the repo in the current directory).")
     var model: String?
 
     @Option(help: "Port for the local viewer server.")

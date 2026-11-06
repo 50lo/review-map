@@ -26,7 +26,7 @@ private struct Indexed {
     var component: String
     var file: String
     var index: Int
-    var decl: Decl
+    var decl: Declaration
 }
 
 private struct ContextItem {
@@ -41,7 +41,7 @@ private struct ContextItem {
 }
 
 extension ModelBuilder {
-    func buildRegions(_ entities: [Entity]) -> [Region] {
+    func buildRegions(_ entities: [ReviewItem]) -> [Region] {
         let ctx = RegionBuilder(self)
         var pairById: [String: Int] = [:]
         for (i, p) in pairs.enumerated() { pairById[p.id] = i }
@@ -107,7 +107,7 @@ private final class RegionBuilder {
 
     // MARK: Review regions
 
-    func regions(for e: Entity, pair: Pair?) -> [Region] {
+    func regions(for e: ReviewItem, pair: Pair?) -> [Region] {
         let isLow = e.tags.contains("test") || e.tags.contains("generated")
         guard let pair, e.kind != .file, e.kind != .target else {
             // Non-code contracts: one region over the file or setting, scored by its flags.
@@ -119,8 +119,8 @@ private final class RegionBuilder {
             return [r]
         }
         let hd = pair.head, bd = pair.base
-        let range: (Decl) -> ClosedRange<Int> = { d in d.startLine...(d.isContainer ? max(d.startLine, d.headerEndLine) : d.endLine) }
-        let header: (Decl) -> ClosedRange<Int> = { d in d.startLine...max(d.startLine, d.headerEndLine) }
+        let range: (Declaration) -> ClosedRange<Int> = { d in d.startLine...(d.isContainer ? max(d.startLine, d.headerEndLine) : d.endLine) }
+        let header: (Declaration) -> ClosedRange<Int> = { d in d.startLine...max(d.startLine, d.headerEndLine) }
 
         var blocks: [ChangeBlock] = []
         if let hd, let bd {
@@ -180,7 +180,7 @@ private final class RegionBuilder {
     }
 
     /// Each flag weighs what its language says; the reason is the flag itself.
-    private func flagSignals(_ e: Entity) -> [Signal] {
+    private func flagSignals(_ e: ReviewItem) -> [Signal] {
         e.contractFlags.map { f in
             guard let (lang, name) = Languages.split(flag: f) else { return Signal(weight: e.isInterface ? high : medium, reason: f) }
             return Signal(weight: lang.flagRisk(name, isInterface: e.isInterface), reason: f)
@@ -220,7 +220,7 @@ private final class RegionBuilder {
         return signals
     }
 
-    private func isUI(_ e: Entity, _ hd: Located?) -> Bool {
+    private func isUI(_ e: ReviewItem, _ hd: Located?) -> Bool {
         if b.head.layout.components[e.component]?.layer == "ui" { return true }
         guard let hd else { return false }
         let d = hd.decl
@@ -234,7 +234,7 @@ private final class RegionBuilder {
         return ((low ? r * 0.2 : r) * 1000).rounded() / 1000
     }
 
-    private func reasons(_ signals: [Signal], e: Entity, low: Bool) -> [String] {
+    private func reasons(_ signals: [Signal], e: ReviewItem, low: Bool) -> [String] {
         var sorted = signals.enumerated().sorted { ($0.element.weight, -$0.offset) > ($1.element.weight, -$1.offset) }.map(\.element)
         // The fallback only explains a region that has no other reason.
         if sorted.count > 1 { sorted.removeAll { $0.weight == base && ["new declaration", "removed declaration", "removed lines", "signature changed", "modifiers changed", "changed lines", "changed", "new file", "removed file"].contains($0.reason) } }
@@ -303,7 +303,7 @@ private final class RegionBuilder {
 
     // MARK: Context regions
 
-    private func context(for e: Entity, pair: Pair, regions: [Region], headerId: String?) -> [Region] {
+    private func context(for e: ReviewItem, pair: Pair, regions: [Region], headerId: String?) -> [Region] {
         guard let hd = pair.head else { return [] }
         let d = hd.decl
         var items: [ContextItem] = []
@@ -489,7 +489,7 @@ private final class RegionBuilder {
 
     /// Declarations that reference the entity: other components first (from usedBy), then the
     /// entity's own component, tests last. At most five.
-    private func callers(of e: Entity, hd: Located, supports: [String]) -> [ContextItem] {
+    private func callers(of e: ReviewItem, hd: Located, supports: [String]) -> [ContextItem] {
         let d = hd.decl
         var byDecl: [String: (x: Indexed, lines: [Int], rank: Int)] = [:]
         var order: [String] = []

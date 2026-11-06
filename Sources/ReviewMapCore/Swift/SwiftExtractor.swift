@@ -58,7 +58,7 @@ private let accessLevels: Set<String> = ["open", "public", "package", "internal"
 
 private final class DeclVisitor: SyntaxVisitor {
     let converter: SourceLocationConverter
-    var decls: [Decl] = []
+    var decls: [Declaration] = []
 
     private struct Scope {
         var qualified: String?
@@ -111,7 +111,7 @@ private final class DeclVisitor: SyntaxVisitor {
     }
 
     @discardableResult
-    private func add(_ d: Decl) -> Int {
+    private func add(_ d: Declaration) -> Int {
         decls.append(d)
         return decls.count - 1
     }
@@ -137,7 +137,7 @@ private final class DeclVisitor: SyntaxVisitor {
         let raw = String(node.syntaxTextBytes.prefix(rawEnd.utf8Offset - node.position.utf8Offset)
             .dropFirst(rawStart.utf8Offset - node.position.utf8Offset).map { Character(UnicodeScalar($0)) })
         let qualified = qualifiedOverride ?? qualify(name)
-        let d = Decl(
+        let d = Declaration(
             kind: kind, name: name, qualifiedName: qualified, scope: current.qualified,
             parentIndex: current.index, labelsKey: name,
             signatureDisplay: display(headerToks),
@@ -214,11 +214,11 @@ private final class DeclVisitor: SyntaxVisitor {
         attributes: AttributeListSyntax, modifiers: DeclModifierListSyntax,
         headerFrom: AbsolutePosition, headerTo: AbsolutePosition, body: (any SyntaxProtocol)?,
         effects: FunctionEffectSpecifiersSyntax? = nil, extraHeader: String = ""
-    ) -> Decl {
+    ) -> Declaration {
         let am = attrsAndModifiers(attributes, modifiers)
         let headerToks = tokens(node, from: headerFrom, to: headerTo)
         let (s, e) = lines(node)
-        var d = Decl(
+        var d = Declaration(
             kind: kind, name: name, qualifiedName: qualify(labelsKey), scope: current.qualified,
             parentIndex: current.index, labelsKey: labelsKey,
             signatureDisplay: display(headerToks) + extraHeader,
@@ -322,7 +322,7 @@ private final class DeclVisitor: SyntaxVisitor {
             }
             let am = attrsAndModifiers(node.attributes, node.modifiers)
             let (s, e) = lines(node)
-            var d = Decl(
+            var d = Declaration(
                 kind: .var, name: name, qualifiedName: qualify(name), scope: current.qualified,
                 parentIndex: current.index, labelsKey: name,
                 signatureDisplay: display(headerToks) + (inProto ? effectsText : (effectsText.isEmpty ? "" : " {" + effectsText + " }")),
@@ -357,7 +357,7 @@ private final class DeclVisitor: SyntaxVisitor {
             }
             let am = attrsAndModifiers(node.attributes, node.modifiers)
             let (s, e) = lines(el)
-            add(Decl(
+            add(Declaration(
                 kind: .case, name: name, qualifiedName: qualify(name), scope: current.qualified,
                 parentIndex: current.index, labelsKey: name,
                 signatureDisplay: display(toks), signatureCanon: toks.map(\.text).joined(separator: " "),
