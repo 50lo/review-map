@@ -10,7 +10,7 @@ enum RustExtractor {
         walker.walk(tree.root, parent: nil, scope: nil)
         let refs = References(root: tree.root)
         let file = ParsedFile(path: path, language: "rust", decls: walker.decls, imports: refs.imports,
-                              typeRefs: refs.refs, memberRefs: refs.members)
+                              typeRefs: refs.refs, memberRefs: refs.members, marks: RustRisk.marks(tree.root))
         return file
     }
 

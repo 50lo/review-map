@@ -430,6 +430,8 @@ export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, ""
 const flagWeight = (prefixed: string): number => {
   const flag = flagName(prefixed);
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
+  if (/^(serde-shape|send-bound|sync-bound)/.test(flag)) return 3;
+  if (/^(trait-item|enum-variant|non-exhaustive|visibility-narrowed)/.test(flag)) return 2;
   if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
   if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;
   if (/^(interface-member|enum-member|abstract-member|supertype-|export-removed|package-exports)/.test(flag)) return 2;
