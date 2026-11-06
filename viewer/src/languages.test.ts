@@ -21,6 +21,16 @@ describe("componentLanguages", () => {
     expect(languages.get(external)).toEqual([language]);
   });
 
+  it("marks Cargo crates and their external dependencies as Rust", () => {
+    const report = validate({
+      components: [component("crate", "cargoCrate"), component("dependency", "external")],
+      edges: [{ from: "crate", to: "dependency", refs: [{ file: "Cargo.toml" }] }],
+    });
+    const languages = componentLanguages(report);
+    expect(languages.get("crate")).toEqual(["rust"]);
+    expect(languages.get("dependency")).toEqual(["rust"]);
+  });
+
   it("uses all retained references, including removed edges, without changing the callee's language", () => {
     const report = validate({
       components: [component("swift", "spmTarget"), component("ts", "npmPackage"), component("ext", "external")],

@@ -3,9 +3,11 @@ import swiftGrammar from "shiki/langs/swift.mjs";
 import typescriptGrammar from "shiki/langs/typescript.mjs";
 import tsxGrammar from "shiki/langs/tsx.mjs";
 import goGrammar from "shiki/langs/go.mjs";
+import rustGrammar from "shiki/langs/rust.mjs";
 import swiftIcon from "./icons/swift.svg";
 import typescriptIcon from "./icons/typescript.svg";
 import goIcon from "./icons/go.svg";
+import rustIcon from "./icons/rust.svg";
 import type { ChangeReport, ReviewItem } from "./types";
 
 interface LanguageDefinition {
@@ -57,6 +59,21 @@ export const LANGUAGES = [
       protocol: "interface", typealias: "type",
       func: (reviewItem: ReviewItem) => reviewItem.qualifiedName.slice(0, -2).includes(".") ? "method" : "function",
       var: (reviewItem: ReviewItem) => reviewItem.qualifiedName.includes(".") ? "field" : "variable",
+    },
+  },
+  {
+    id: "rust",
+    name: "Rust",
+    extensions: { rs: { language: "rust", grammar: rustGrammar } },
+    manifests: [/(?:^|\/)Cargo\.(?:toml|lock)$/],
+    componentKinds: ["cargoCrate"],
+    icon: rustIcon,
+    kinds: {
+      protocol: "trait", extension: "impl", case: "variant", func: "fn", typealias: "type",
+      var: (reviewItem: ReviewItem) => {
+        const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
+        return /(?:^|\s)const\s/.test(signature) ? "const" : /(?:^|\s)static\s/.test(signature) ? "static" : "field";
+      },
     },
   },
 ] as const satisfies readonly LanguageDefinition[];
