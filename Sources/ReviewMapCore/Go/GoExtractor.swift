@@ -163,11 +163,17 @@ enum GoExtractor {
                             memberRefs.append(NameRef(name: member.text, line: member.startLine))
                         }
                     } else if let id = match.first("id") {
+                        // Kept for definition and caller context in the file's own package. The empty module keeps
+                        // them out of cross-component resolution, except in tests and through dot imports.
+                        let module: String?
                         if isTest {
-                            typeRefs.append(NameRef(name: id.text, line: id.startLine))
+                            module = nil
                         } else if !dotImports.isEmpty, id.text.first?.isUppercase == true {
-                            typeRefs.append(NameRef(name: id.text, line: id.startLine, module: dotModule))
+                            module = dotModule
+                        } else {
+                            module = ""
                         }
+                        typeRefs.append(NameRef(name: id.text, line: id.startLine, module: module))
                     }
                 }
             }
@@ -215,8 +221,11 @@ private struct DeclWalker {
             case ("type_spec", "interface_type"?):
                 let body = type!.children.first { $0.type == "{" }
                 let elements = type!.namedChildren
-                let embedded = elements.filter { $0.type == "type_elem" }.flatMap { $0.namedChildren.map(Self.typeName) }
-                let index = container(outer: outer, kind: .protocol, name: name, headerStart: headerStart, body: body, inherited: embedded)
+                let typeElements = elements.filter { $0.type == "type_elem" }
+                // Embedded interfaces and type constraints are part of the method set, so they are compared with the header.
+                let index = container(outer: outer, kind: .protocol, name: name, headerStart: headerStart, body: body,
+                                      inherited: typeElements.flatMap { $0.namedChildren.map(Self.typeName) },
+                                      elements: typeElements.flatMap(\.tokens))
                 for m in elements where m.type == "method_elem" { interfaceMethod(m, parent: index, scope: name) }
             default:
                 let tokens = n.tokens.filter { $0.startByte >= headerStart && $0.endByte <= outer.endByte }
@@ -226,9 +235,9 @@ private struct DeclWalker {
     }
 
     private mutating func container(outer: SyntaxNode, kind: EntityKind, name: String, headerStart: Int,
-                                    body: SyntaxNode?, inherited: [String]) -> Int {
+                                    body: SyntaxNode?, inherited: [String], elements: [SyntaxNode] = []) -> Int {
         let end = body?.startByte ?? outer.endByte
-        let header = outer.tokens.filter { $0.startByte >= headerStart && $0.startByte < end }
+        let header = outer.tokens.filter { $0.startByte >= headerStart && $0.startByte < end } + elements
         let index = add(outer, kind: kind, name: name, labelsKey: name, qualified: name, header: header, body: nil,
                         inherited: inherited, rawEnd: end, headerEnd: body)
         types[name] = index

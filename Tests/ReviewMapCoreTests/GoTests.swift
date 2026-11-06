@@ -95,7 +95,7 @@ final class GoTests: XCTestCase {
         XCTAssertEqual(reader?.kind, .protocol)
         XCTAssertEqual(reader?.inherited, ["Closer"])
         XCTAssertEqual(reader?.startLine, 14, "a grouped type spans its own lines")
-        XCTAssertEqual(reader?.signatureDisplay, "Reader interface")
+        XCTAssertEqual(reader?.signatureDisplay, "Reader interface io.Closer", "embedded interfaces are compared with the header")
         let read = decl("Reader.Read()")
         XCTAssertEqual(read?.inProtocol, true)
         XCTAssertEqual(read?.labelsKey, "Read(p:)")
@@ -123,6 +123,13 @@ final class GoTests: XCTestCase {
         XCTAssertEqual(a.bodyCanon, b.bodyCanon)
         XCTAssertNotEqual(a.rawText, b.rawText)
         XCTAssertTrue(GoExtractor.parse(path: "empty.go", source: "").decls.isEmpty)
+    }
+
+    func testEmbeddedInterfaceChangesTheSignature() {
+        let base = GoExtractor.parse(path: "a.go", source: "package a\n\ntype R interface {\n\tio.Reader\n}\n").decls[0]
+        let head = GoExtractor.parse(path: "a.go", source: "package a\n\ntype R interface {\n\tio.ReadCloser\n}\n").decls[0]
+        XCTAssertNotEqual(base.signatureCanon, head.signatureCanon)
+        XCTAssertEqual(head.inherited, ["ReadCloser"])
     }
 
     func testGeneratedHeader() {
@@ -159,18 +166,19 @@ final class GoTests: XCTestCase {
         let file = GoExtractor.parse(path: "api/show.go", source: source)
         XCTAssertEqual(file.imports.map(\.name), ["fmt", "example.com/shop/money", "example.com/shop/cart", "example.com/shop/plugins",
                                                    "gopkg.in/yaml.v3", "example.com/shop/v2"])
-        let refs = Set(file.typeRefs.map { "\($0.name)@\($0.line)<\($0.module ?? "-")" })
+        let refs = Set(file.typeRefs.filter { $0.module != "" }.map { "\($0.name)@\($0.line)<\($0.module ?? "-")" })
         XCTAssertEqual(refs, [
             "Cart@12<example.com/shop/cart", "Total@13<example.com/shop/cart", "Marshal@15<gopkg.in/yaml.v3",
             "Version@16<example.com/shop/v2", "Sprint@17<fmt", "Format@17<example.com/shop/money",
         ], "unqualified names are the package's own")
+        XCTAssertTrue(file.typeRefs.contains(NameRef(name: "Helper", line: 14, module: "")), "kept for context, with no other module")
         XCTAssertTrue(file.memberRefs.contains(NameRef(name: "Sum", line: 17)))
         XCTAssertFalse(file.memberRefs.contains { $0.name == "Format" }, "a package's names aren't members")
 
         let test = GoExtractor.parse(path: "api/show_test.go", source: "package api\n\nfunc TestShow(t *testing.T) { Show(nil) }\n")
         XCTAssertTrue(test.typeRefs.contains { $0.name == "Show" && $0.module == nil }, "a test may use its package's names")
         let dot = GoExtractor.parse(path: "a.go", source: "package a\n\nimport . \"example.com/x\"\n\nvar v = Thing(local)\n")
-        XCTAssertEqual(dot.typeRefs.map { "\($0.name)<\($0.module ?? "-")" }, ["Thing<example.com/x"], "exported names through a dot import")
+        XCTAssertEqual(dot.typeRefs.map { "\($0.name)<\($0.module ?? "-")" }, ["v<", "Thing<example.com/x", "local<"], "exported names through a dot import")
     }
 
     func testRiskMarks() {
@@ -367,6 +375,8 @@ final class GoTests: XCTestCase {
         XCTAssertGreaterThan(add.risk, total.filter { $0.reasons == ["changed lines"] }.map(\.risk).max() ?? 1,
                              "a new goroutine and an ignored error rank above a body-only change")
         XCTAssertEqual(try regions(m, "Summary()", kind: "review").first?.reasons, ["go:api-added", "new type assertion"])
+        XCTAssertTrue(try regions(m, "Cart.check()", kind: "context").contains { $0.relation == "definition" && $0.reasons == ["Cart.Items"] },
+                      "same-package names give definition context")
         XCTAssertTrue(try regions(m, "Store.Clear()", kind: "context").contains { $0.relation == "conformer" && $0.reasons == ["Memory.Clear()"] })
     }
 

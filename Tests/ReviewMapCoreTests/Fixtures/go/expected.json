@@ -1516,10 +1516,28 @@
     },
     {
       "component" : "go:example.com/shop/cart",
-      "endLine" : 24,
+      "endLine" : 25,
       "entity" : "go:example.com/shop/cart::Cart.Total()",
       "file" : "cart/cart.go",
       "id" : "go:example.com/shop/cart::Cart.Total()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 21,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.Total()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.Total()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.Total()/c2",
       "kind" : "context",
       "lines" : [
         22,
@@ -1568,10 +1586,82 @@
     },
     {
       "component" : "go:example.com/shop/cart",
-      "endLine" : 24,
+      "endLine" : 25,
       "entity" : "go:example.com/shop/cart::Cart.check()",
       "file" : "cart/cart.go",
       "id" : "go:example.com/shop/cart::Cart.check()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 21,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.check()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 23,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/c2",
+      "kind" : "context",
+      "reasons" : [
+        "Cart.Items"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 23,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.check()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 30,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/c3",
+      "kind" : "context",
+      "reasons" : [
+        "MaxItems"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 30,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.check()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 28,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/c4",
+      "kind" : "context",
+      "reasons" : [
+        "ErrEmpty"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 28,
+      "supports" : [
+        "go:example.com/shop/cart::Cart.check()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 24,
+      "entity" : "go:example.com/shop/cart::Cart.check()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::Cart.check()/c5",
       "kind" : "context",
       "lines" : [
         22,
@@ -1603,6 +1693,24 @@
       "startLine" : 61
     },
     {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 25,
+      "entity" : "go:example.com/shop/cart::notify()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::notify()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 21,
+      "supports" : [
+        "go:example.com/shop/cart::notify()/r1"
+      ]
+    },
+    {
       "endLine" : 65,
       "entity" : "go:example.com/shop/cart::describe()",
       "file" : "cart/cart.go",
@@ -1614,6 +1722,42 @@
       "risk" : 0.1,
       "side" : "head",
       "startLine" : 63
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 25,
+      "entity" : "go:example.com/shop/cart::describe()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::describe()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Cart"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 21,
+      "supports" : [
+        "go:example.com/shop/cart::describe()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/cart",
+      "endLine" : 22,
+      "entity" : "go:example.com/shop/cart::describe()",
+      "file" : "cart/cart.go",
+      "id" : "go:example.com/shop/cart::describe()/c2",
+      "kind" : "context",
+      "reasons" : [
+        "Cart.ID"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 22,
+      "supports" : [
+        "go:example.com/shop/cart::describe()/r1"
+      ]
     },
     {
       "endLine" : 5,
@@ -1727,10 +1871,64 @@
     },
     {
       "component" : "go:example.com/shop/store",
-      "endLine" : 12,
+      "endLine" : 13,
       "entity" : "go:example.com/shop/store::Memory.Clear()",
       "file" : "store/memory.go",
       "id" : "go:example.com/shop/store::Memory.Clear()/c1",
+      "kind" : "context",
+      "reasons" : [
+        "Memory"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 10,
+      "supports" : [
+        "go:example.com/shop/store::Memory.Clear()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 11,
+      "entity" : "go:example.com/shop/store::Memory.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/store::Memory.Clear()/c2",
+      "kind" : "context",
+      "reasons" : [
+        "Memory.mu"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 11,
+      "supports" : [
+        "go:example.com/shop/store::Memory.Clear()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/store::Memory.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/store::Memory.Clear()/c3",
+      "kind" : "context",
+      "reasons" : [
+        "Memory.carts"
+      ],
+      "relation" : "definition",
+      "risk" : 0,
+      "side" : "head",
+      "startLine" : 12,
+      "supports" : [
+        "go:example.com/shop/store::Memory.Clear()/r1"
+      ]
+    },
+    {
+      "component" : "go:example.com/shop/store",
+      "endLine" : 12,
+      "entity" : "go:example.com/shop/store::Memory.Clear()",
+      "file" : "store/memory.go",
+      "id" : "go:example.com/shop/store::Memory.Clear()/c4",
       "kind" : "context",
       "lines" : [
         11,

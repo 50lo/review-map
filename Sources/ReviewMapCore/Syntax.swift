@@ -62,6 +62,7 @@ struct NameRef: Hashable {
     var source: String? = nil
     /// The module the name was imported from, when the language says ("@shop/core" for
     /// `import { Cart } from "@shop/core/cart"`).
+    /// Empty for a name of the file's own module, which never resolves to another component (Go's unqualified names).
     var module: String? = nil
 }
 
