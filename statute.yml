@@ -1,0 +1,2 @@
+version: 1
+summary_max: 600      # decision summary cap, in characters

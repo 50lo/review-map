@@ -1,0 +1,16 @@
+- id: D261106-ngpqq
+  timestamp: 2026-11-06T00:32:46Z
+  actor: agent
+  status: proposed
+  approved_by: null
+  summary: Introduce five foundational terms for discussing Review Map.
+  rationale: Start with a small vocabulary in plain language, with concrete examples and existing code names recorded separately. Use Review item for the concept called Entity in code. Leave rules and more specialized terms for later discussion.
+  establishes: []
+  changes: []
+  retires: []
+  terms:
+  - Change
+  - Component
+  - Review item
+  - Dependency
+  - Change model
