@@ -433,6 +433,7 @@ const flagWeight = (prefixed: string): number => {
   if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
   if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;
   if (/^(interface-member|enum-member|abstract-member|supertype-|export-removed|package-exports)/.test(flag)) return 2;
+  if (/^(interface-method|field-tag-changed|field-added|field-removed|unexported|api-removed|api-signature-changed)/.test(flag)) return 2;
   return 1;
 };
 

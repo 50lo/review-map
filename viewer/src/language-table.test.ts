@@ -26,6 +26,7 @@ describe("viewer language table", () => {
     ["tsconfig.json", "typescript"], ["viewer/tsconfig.base.json", "typescript"],
     ["pnpm-lock.yaml", "typescript"], ["yarn.lock", "typescript"],
     ["bun.lock", "typescript"], ["bun.lockb", "typescript"],
+    ["go.mod", "go"], ["tools/go.sum", "go"], ["go.work", "go"],
     ["not-package.json", undefined], ["not-tsconfig.json", undefined],
     ["src/file.js", undefined], ["src/file.TS", undefined], ["README.md", undefined],
   ])("keeps ecosystem detection for %s", (file, expected) => {
@@ -41,5 +42,15 @@ describe("viewer language table", () => {
     expect(kindLabel({ ...entity, kind: "var", qualifiedName: "Store.value" })).toBe("property");
     expect(kindLabel({ ...entity, location: { ...entity.location, file: "src/api.swift" } })).toBe("protocol");
     expect(kindLabel({ ...entity, location: { ...entity.location, file: "src/api.unknown" } })).toBe("protocol");
+  });
+
+  it("names Go kinds, telling methods from functions and fields from variables", () => {
+    const entity = validate({ components: [], edges: [], entities: [{ kind: "func", qualifiedName: "New()", location: { file: "cart/cart.go" } }] }).entities[0];
+    expect(kindLabel(entity)).toBe("function");
+    expect(kindLabel({ ...entity, qualifiedName: "Cart.Add()" })).toBe("method");
+    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "Cart.Note" })).toBe("field");
+    expect(kindLabel({ ...entity, kind: "var", qualifiedName: "ErrEmpty" })).toBe("variable");
+    expect(kindLabel({ ...entity, kind: "protocol", qualifiedName: "Store" })).toBe("interface");
+    expect(kindLabel({ ...entity, kind: "typealias", qualifiedName: "ID" })).toBe("type");
   });
 });

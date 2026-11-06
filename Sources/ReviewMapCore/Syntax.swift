@@ -62,6 +62,7 @@ struct NameRef: Hashable {
     var source: String? = nil
     /// The module the name was imported from, when the language says ("@shop/core" for
     /// `import { Cart } from "@shop/core/cart"`).
+    /// Empty for a name of the file's own module, which never resolves to another component (Go's unqualified names).
     var module: String? = nil
 }
 
@@ -77,6 +78,8 @@ struct ParsedFile {
     var memberRefs: [NameRef]
     /// Risk-relevant constructs per line (crash points, checks, branches, concurrency).
     var marks: [Int: [LineMark]] = [:]
+    /// The file says it is generated (Go's `// Code generated ... DO NOT EDIT.`), on top of the generated patterns.
+    var isGenerated = false
 
     /// Innermost declaration containing `line`.
     func enclosingDecl(line: Int) -> Decl? {

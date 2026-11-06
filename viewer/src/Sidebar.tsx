@@ -381,6 +381,7 @@ const componentKindLabel = (k: string) =>
     xcodeTarget: "Xcode target",
     npmPackage: "npm package",
     tsconfig: "tsconfig project",
+    goPackage: "Go package",
     folder: "folder",
     external: "external package",
   })[k] ?? k;

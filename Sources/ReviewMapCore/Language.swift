@@ -24,6 +24,8 @@ protocol Language {
     func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout)
     /// Modules that come with the platform: importing one is neither an edge nor a warning.
     var platformModules: Set<String> { get }
+    /// Whether importing `module` is importing the platform. The default looks it up in `platformModules`.
+    func isPlatformModule(_ module: String) -> Bool
     /// Versions of third-party packages pinned by the language's lockfiles, by package identity.
     func pinnedPackages(blobs: [String: String], dir: String) -> [String: String]
     /// The pinned package a module belongs to, for modules the manifests list by name only.
@@ -119,6 +121,8 @@ extension Language {
     }
 
     func isolation(in file: ParsedFile, line: Int) -> String? { nil }
+
+    func isPlatformModule(_ module: String) -> Bool { platformModules.contains(module) }
 }
 
 /// The two existing consumers use different visibility and member matching rules.
@@ -147,7 +151,7 @@ enum RiskWeight {
 }
 
 enum Languages {
-    static let all: [Language] = [SwiftLanguage(), TypeScriptLanguage()]
+    static let all: [Language] = [SwiftLanguage(), TypeScriptLanguage(), GoLanguage()]
 
     /// The language that parses `path`, if any.
     static func of(_ path: String) -> Language? {

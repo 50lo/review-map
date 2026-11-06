@@ -40,7 +40,10 @@ private struct ProtoWriter {
 /// An occurrence: 0-based line, symbol, and roles (1 is a definition).
 private typealias Occ = (line: Int, symbol: String, roles: Int)
 
-private func scip(root: String?, documents: [(path: String, occurrences: [Occ])], packed: Bool = true) -> Data {
+/// Ranges are packed, unpacked, or typed (scip-go 0.2 writes a message whose start line is left out when 0).
+private enum RangeStyle { case packed, unpacked, typed }
+
+private func scip(root: String?, documents: [(path: String, occurrences: [Occ])], range style: RangeStyle = .packed) -> Data {
     var w = ProtoWriter()
     if let root {
         w.message(1) { m in
@@ -55,12 +58,19 @@ private func scip(root: String?, documents: [(path: String, occurrences: [Occ])]
             for o in doc.occurrences {
                 d.message(2) { occ in
                     let range = [o.line, 4, 10]
-                    if packed {
+                    switch style {
+                    case .packed:
                         var p = ProtoWriter()
                         for v in range { p.varint(UInt64(v)) }
                         occ.bytes(1, p.bytes)
-                    } else {
+                    case .unpacked:
                         for v in range { occ.int(1, v) }
+                    case .typed:
+                        occ.message(8) { r in
+                            if o.line != 0 { r.int(1, o.line) }
+                            r.int(2, 4)
+                            r.int(3, 10)
+                        }
                     }
                     occ.string(2, o.symbol)
                     if o.roles != 0 { occ.int(3, o.roles) }
@@ -90,8 +100,10 @@ final class SCIPTests: XCTestCase {
             SCIP.Occurrence(line: 5, symbol: load, roles: 0),
             SCIP.Occurrence(line: 6, symbol: "local 0", roles: 1),
         ])
-        let unpacked = try SCIP.decode(scip(root: nil, documents: [("a.ts", [(9, store, 1)])], packed: false))
+        let unpacked = try SCIP.decode(scip(root: nil, documents: [("a.ts", [(9, store, 1)])], range: .unpacked))
         XCTAssertEqual(unpacked.documents[0].occurrences.first?.line, 10)
+        let typed = try SCIP.decode(scip(root: nil, documents: [("a.go", [(0, store, 1), (9, load, 0)])], range: .typed))
+        XCTAssertEqual(typed.documents[0].occurrences.map(\.line), [1, 10])
     }
 
     func testTruncatedIndexThrows() {

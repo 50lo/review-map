@@ -1,11 +1,11 @@
 ---
 # rm-06yi
 title: Add Go contract flags and risk marks
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T01:30:00Z
 parent: rm-a4b7
 ---
 
@@ -17,5 +17,5 @@ parent: rm-a4b7
 - Add the new flags to the viewer's `flagWeight` in viewer/src/graph.ts.
 
 ## Acceptance criteria
-- [ ] Fixture changes produce the expected flags and risk marks, each covered by a test.
-- [ ] Region risk on the fixture ranks a new goroutine and an ignored error above a body-only change.
+- [x] Fixture changes produce the expected flags and risk marks, each covered by a test.
+- [x] Region risk on the fixture ranks a new goroutine and an ignored error above a body-only change.

@@ -1,11 +1,11 @@
 ---
 # rm-nec5
 title: Parse Go declarations and references
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-06T01:30:00Z
 parent: rm-a4b7
 ---
 
@@ -19,9 +19,9 @@ Add tree-sitter-go and a `GoLanguage` with its extractor, so Go files produce de
 - Register the language in `Languages.all`.
 
 ## Acceptance criteria
-- [ ] A Go fixture pair under Tests/ReviewMapCoreTests/Fixtures/go parses into the expected declarations, kinds, scopes, and access.
-- [ ] Changes are classified (added, removed, signature, body, modifiers, cosmetic) as for the other languages.
-- [ ] Swift and TypeScript fixture results are unchanged.
+- [x] A Go fixture pair under Tests/ReviewMapCoreTests/Fixtures/go parses into the expected declarations, kinds, scopes, and access.
+- [x] Changes are classified (added, removed, signature, body, modifiers, cosmetic) as for the other languages.
+- [x] Swift and TypeScript fixture results are unchanged.
 
 ## Constraints
 Follow the TypeScript implementation in Sources/ReviewMapCore/TypeScript/ and its tests as the pattern.

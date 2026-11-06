@@ -178,7 +178,7 @@ struct SideData {
             }
         }
         let gen = config.generatedMatchers + languages.flatMap(\.generatedPatterns).map(Glob.init)
-        let generated = Set(paths.filter { p in gen.contains { $0.matches(p) } })
+        let generated = Set(paths.filter { p in gen.contains { $0.matches(p) } || files[p]?.isGenerated == true })
         var modulePaths: [String: String] = [:]
         for path in paths {
             var key = (path as NSString).deletingPathExtension
@@ -528,7 +528,7 @@ struct ModelBuilder {
                         addRef(s, from: comp, to: target, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
                     } else if let ext = externalComponent(for: imp.name, language: lang, layout: layout) {
                         addRef(s, from: comp, to: ext, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
-                    } else if layout.moduleComponent[imp.name] == nil && !lang.platformModules.contains(imp.name) {
+                    } else if layout.moduleComponent[imp.name] == nil && !lang.isPlatformModule(imp.name) {
                         warnings.insert(Warning(kind: "unresolved-import", message: "import \(imp.name) matches no target or known package product."))
                     }
                 }
@@ -553,9 +553,13 @@ struct ModelBuilder {
                             guard let m = layout.components[c]?.module else { return true }
                             return visible.contains(m)
                         }
+                        // A name imported from a module is that module's, or no component's (a third-party package).
+                        // An unqualified name is the file's own module's first (a Go test uses its package's names).
                         if let module = ref.module {
-                            let named = cands.filter { layout.components[$0]?.module == module }
-                            if !named.isEmpty { cands = named }
+                            cands = cands.filter { layout.components[$0]?.module == module }
+                        } else if let module {
+                            let own = cands.filter { layout.components[$0]?.module == module }
+                            if !own.isEmpty { cands = own }
                         }
                         if cands.count > 1 {
                             ambiguous[ref.name, default: []].formUnion(cands)
