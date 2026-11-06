@@ -7,7 +7,7 @@ agreed: proposed
 code: [RepoInfo, baseSha, headSha]
 not:
   - name: ChangeKind
-    means: The kind of difference reported for one review item, such as added or removed.
+    means: How one review item changed, such as added, removed, or a changed signature or body.
 ```
 
 ## Component
@@ -22,7 +22,7 @@ not: []
 
 ## Review item
 
-An individual part of a component that Review Map describes as changed. Usually it is a function, type, or property; it can also be a configuration file or a set of build settings. For example, a changed `signIn()` function is a review item inside the app component.
+An individual part of a component that changed and that Review Map asks you to review. Usually it is a function, type, or property; it can also be a configuration file or a set of build settings. For example, a changed `signIn()` function is a review item inside the app component.
 
 ```yaml
 agreed: proposed
@@ -36,7 +36,7 @@ not:
 
 ## Dependency
 
-A connection from one component to another that it uses or declares it needs. For example, an app that calls a networking library depends on that library. Review Map represents this connection as an arrow from the app to the library.
+A connection from one component to another that it uses or declares it needs. For example, an app that calls a networking library depends on that library. On the map, a dependency is drawn as an arrow from the app to the library.
 
 ```yaml
 agreed: proposed
@@ -44,6 +44,8 @@ code: [Edge]
 not:
   - name: ExternalDepChange
     means: A record of an external package being added, removed, or changing version.
+  - name: dependsOn
+    means: The declarations in other components that one review item references.
 ```
 
 ## Change report
