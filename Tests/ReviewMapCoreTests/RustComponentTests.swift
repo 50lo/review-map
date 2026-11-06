@@ -92,6 +92,32 @@ final class RustComponentTests: XCTestCase {
         XCTAssertEqual(layout.fileComponent["bus.rs"], "cargo:benchmarks:bin:bus")
     }
 
+    func testTargetOwnershipAndReferencesFollowTheSameModuleFiles() throws {
+        let sources = [
+            "src/main.rs": #"mod outer; mod inline { mod child; #[path="actual.rs"] mod renamed; use self::renamed::Custom; } use outer::nested::Item;"#,
+            "src/outer.rs": #"mod nested; #[path="special.rs"] mod chosen; use self::chosen::Other;"#,
+            "src/outer/nested.rs": "pub struct Item;",
+            "src/special.rs": "pub struct Other;",
+            "src/inline/child/mod.rs": "pub struct Child;",
+            "src/inline/actual.rs": "pub struct Custom;"
+        ]
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for (path, source) in sources {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try source.write(to: url, atomically: true, encoding: .utf8)
+        }
+        var parsed: [String: ParsedFile] = [:]
+        let owned = RustComponents.sourceFiles(target: .init(name: "app", path: "src/main.rs", library: false),
+                                               root: root.path, files: Set(sources.keys), parsed: &parsed)
+        XCTAssertEqual(owned, Set(sources.keys))
+        RustModules.resolve(&parsed)
+        XCTAssertTrue(parsed["src/main.rs"]!.typeRefs.contains { $0.name == "Custom" && $0.source == "/src/inline/actual" })
+        XCTAssertTrue(parsed["src/main.rs"]!.typeRefs.contains { $0.name == "Item" && $0.source == "/src/outer/nested" })
+        XCTAssertTrue(parsed["src/outer.rs"]!.typeRefs.contains { $0.name == "Other" && $0.source == "/src/special" })
+    }
+
     private func TOMLValue(_ source: String) throws -> RustComponents.Value {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try source.write(to: dir, atomically: true, encoding: .utf8)

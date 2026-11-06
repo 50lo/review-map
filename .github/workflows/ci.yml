@@ -22,6 +22,8 @@ jobs:
         with:
           go-version: "1.24"
           cache: false
+      - name: Install Rust bootstrap dependencies
+        run: apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rust-analyzer, rust-src

@@ -126,21 +126,16 @@ enum RustComponents {
         return out
     }
     /// Follow declared modules from a target root, so a binary's `mod cli;` belongs to the binary.
-    static func sourceFiles(target: Target, root: String, files: Set<String>) -> Set<String> {
+    static func sourceFiles(target: Target, root: String, files: Set<String>, parsed: inout [String: ParsedFile]) -> Set<String> {
         var visited = Set<String>()
         func visit(_ path: String, directory: String) {
-            guard files.contains(path), visited.insert(path).inserted,
-                  let source = try? String(contentsOfFile: join(root, path), encoding: .utf8) else { return }
-            let parsed = RustExtractor.parse(path: path, source: source)
-            for decl in parsed.decls where decl.traits.contains("rust-file-module") {
-                let inline = decl.scope?.replacingOccurrences(of: ".", with: "/") ?? ""
-                let dir = join(directory, inline)
-                let custom = decl.attributes.first { $0.hasPrefix("path") }.flatMap { $0.split(separator: "\"").dropFirst().first.map(String.init) }
-                let candidates: [String]
-                if let custom { candidates = [Paths.resolve(custom, from: join(join((path as NSString).deletingLastPathComponent, inline), "_")) ?? ""] }
-                else { candidates = [join(dir, decl.name + ".rs"), join(join(dir, decl.name), "mod.rs")] }
-                if let child = candidates.first(where: files.contains) {
-                    visit(child, directory: child.hasSuffix("/mod.rs") ? (child as NSString).deletingLastPathComponent : (child as NSString).deletingPathExtension)
+            guard files.contains(path), visited.insert(path).inserted else { return }
+            if parsed[path] == nil, let source = try? String(contentsOfFile: join(root, path), encoding: .utf8) {
+                parsed[path] = RustExtractor.parse(path: path, source: source)
+            }
+            for decl in parsed[path]?.decls ?? [] where decl.traits.contains("rust-file-module") {
+                if let child = RustModules.file(for: decl, in: path, directory: directory, files: files) {
+                    visit(child.path, directory: child.directory)
                 }
             }
         }
@@ -150,6 +145,7 @@ enum RustComponents {
     static func add(root: String, files: [String], layout: inout ComponentLayout) {
         let crates = crates(root: root).sorted { $0.dir.count > $1.dir.count }
         let fileSet = Set(files)
+        var parsed: [String: ParsedFile] = [:]
         let manifestDirs = ComponentBuilder.findFiles(root: root, where: { $0 == "Cargo.toml" }).map { ($0 as NSString).deletingLastPathComponent }.sorted { $0.count > $1.count }
         for crate in crates {
             let targets = Self.targets(crate, files: fileSet)
@@ -157,7 +153,7 @@ enum RustComponents {
             func id(_ t: Target) -> String { "cargo:\(crate.name)" + (targets.count == 1 ? "" : ":\(t.library ? "lib" : "bin"):\(t.name)") }
             let primary = targets.first(where: \.library) ?? targets[0]
             let primaryID = id(primary)
-            let owned = Dictionary(uniqueKeysWithValues: targets.map { (id($0), sourceFiles(target: $0, root: root, files: fileSet)) })
+            let owned = Dictionary(uniqueKeysWithValues: targets.map { (id($0), sourceFiles(target: $0, root: root, files: fileSet, parsed: &parsed)) })
             for target in targets {
                 let targetID = id(target)
                 layout.components[targetID] = ComponentInfo(id: targetID, name: target.name, kind: .cargoCrate,

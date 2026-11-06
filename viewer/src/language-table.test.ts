@@ -64,6 +64,11 @@ describe("viewer language table", () => {
     expect(kindLabel({ ...item, kind: "var", signature: { head: "pub static mut COUNT: usize = 0" } })).toBe("static");
     expect(kindLabel({ ...item, kind: "var", signature: { base: "const LIMIT: usize = 10" } })).toBe("const");
     expect(kindLabel({ ...item, kind: "var", signature: { head: "value: &'static str" } })).toBe("field");
+    for (const signature of ["mod tests", "pub mod api", "pub ( crate ) mod internal", "pub(super) mod parent"]) {
+      expect(kindLabel({ ...item, kind: "extension", signature: { head: signature } })).toBe("mod");
+      expect(kindLabel({ ...item, kind: "extension", signature: { base: signature } })).toBe("mod");
+    }
+    expect(kindLabel({ ...item, kind: "extension", signature: { head: "impl Service for Store" } })).toBe("impl");
   });
 
 });

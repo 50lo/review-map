@@ -69,7 +69,11 @@ export const LANGUAGES = [
     componentKinds: ["cargoCrate"],
     icon: rustIcon,
     kinds: {
-      protocol: "trait", extension: "impl", case: "variant", func: "fn", typealias: "type",
+      protocol: "trait", case: "variant", func: "fn", typealias: "type",
+      extension: (reviewItem: ReviewItem) => {
+        const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
+        return /^(?:pub(?:\s*\([^)]*\))?\s+)?mod\s/.test(signature.trim()) ? "mod" : "impl";
+      },
       var: (reviewItem: ReviewItem) => {
         const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
         return /(?:^|\s)const\s/.test(signature) ? "const" : /(?:^|\s)static\s/.test(signature) ? "static" : "field";

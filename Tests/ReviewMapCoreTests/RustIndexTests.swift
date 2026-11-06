@@ -94,6 +94,36 @@ final class RustIndexTests: XCTestCase {
         XCTAssertTrue(RustIndex.hasPartialDiagnostics("WARN proc-macro loading for /tmp/macros.dylib failed: incompatible version"))
         XCTAssertTrue(RustIndex.hasPartialDiagnostics("INFO Failed to start proc-macro server"))
         XCTAssertFalse(RustIndex.hasPartialDiagnostics("INFO Proc-macro server started\nGenerating SCIP finished 1s"))
+        XCTAssertTrue(RustIndex.hasPartialDiagnostics("ERROR Encountered duplicate SCIP symbols"))
+        XCTAssertTrue(RustIndex.hasPartialDiagnostics("ERROR Encountered enclosing definition with no name def=Module(...)"))
+        XCTAssertFalse(RustIndex.hasPartialDiagnostics("INFO error handling enabled for error messages"))
+        XCTAssertFalse(RustIndex.hasPartialDiagnostics("DEBUG proc-macro loading for macros.dylib succeeded\nINFO no failed requests"))
+    }
+
+    func testWorkspaceDiscoveryFindsIndependentNestedProjects() throws {
+        guard Shell.exists("cargo") else { throw XCTSkip("Cargo is required") }
+        let root = NSTemporaryDirectory() + "rm-rust-projects-\(UUID().uuidString)"
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        for (directory, name) in [("services/server", "server"), ("tools/worker", "worker"), ("services/server/fixtures/sample", "sample")] {
+            try FileManager.default.createDirectory(atPath: root + "/" + directory + "/src", withIntermediateDirectories: true)
+            try "[package]\nname = \"\(name)\"\nversion = \"0.1.0\"\nedition = \"2021\"\n".write(toFile: root + "/" + directory + "/Cargo.toml", atomically: true, encoding: .utf8)
+            try "pub fn value() {}\n".write(toFile: root + "/" + directory + "/src/lib.rs", atomically: true, encoding: .utf8)
+        }
+        XCTAssertEqual(try RustIndex.workspaceDirs(root), ["services/server", "tools/worker"])
+    }
+
+    func testWorkspaceDiscoveryRejectsWorkspaceOutsideExport() throws {
+        guard Shell.exists("cargo") else { throw XCTSkip("Cargo is required") }
+        let parent = NSTemporaryDirectory() + "rm-rust-outside-\(UUID().uuidString)"
+        let root = parent + "/export"
+        defer { try? FileManager.default.removeItem(atPath: parent) }
+        try FileManager.default.createDirectory(atPath: root + "/crate/src", withIntermediateDirectories: true)
+        try "[workspace]\nmembers = [\"export/crate\"]\nresolver = \"2\"\n".write(toFile: parent + "/Cargo.toml", atomically: true, encoding: .utf8)
+        try "[package]\nname = \"outside\"\nversion = \"0.1.0\"\nedition = \"2021\"\n".write(toFile: root + "/crate/Cargo.toml", atomically: true, encoding: .utf8)
+        try "pub fn value() {}\n".write(toFile: root + "/crate/src/lib.rs", atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try RustIndex.workspaceDirs(root)) { error in
+            XCTAssertTrue(String(describing: error).contains("outside the exported commit"))
+        }
     }
 
     func testFailedBuildScriptRetainsPartialIndexAndWarningOnCacheHit() throws {

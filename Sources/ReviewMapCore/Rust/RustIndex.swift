@@ -86,12 +86,14 @@ enum RustIndex {
     }
 
     static func hasPartialDiagnostics(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        return lower.contains("errors occurred while running build scripts")
-            || lower.contains("failed to start proc-macro server")
-            || (lower.contains("proc-macro loading for") && lower.contains("failed"))
-            || lower.contains("proc-macro server failed") || lower.contains("failed to load proc-macro")
-            || lower.contains("failed to load proc macro") || lower.contains("cargo metadata` failed")
-            || lower.contains("encountered duplicate scip symbols") || lower.contains(" error ")
+        text.lowercased().split(separator: "\n").contains { line in
+            line.contains("errors occurred while running build scripts")
+                || line.contains("failed to start proc-macro server")
+                || (line.contains("proc-macro loading for") && line.contains("failed"))
+                || line.contains("proc-macro server failed") || line.contains("failed to load proc-macro")
+                || line.contains("failed to load proc macro") || line.contains("cargo metadata` failed")
+                || line.contains("encountered duplicate scip symbols")
+                || line.contains("encountered enclosing definition with no name")
+        }
     }
 }
