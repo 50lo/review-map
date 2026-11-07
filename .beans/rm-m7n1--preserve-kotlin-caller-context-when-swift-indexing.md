@@ -1,11 +1,11 @@
 ---
 # rm-m7n1
 title: Preserve Kotlin caller context when Swift indexing is enabled
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T11:53:57Z
+updated_at: 2026-11-07T12:05:30Z
 ---
 
 ## Problem
@@ -45,7 +45,21 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: change-rep
 
 ## Acceptance criteria
 
-- [ ] Kotlin caller context is preserved when Swift indexing is active.
-- [ ] Indexed Swift caller lookup remains exact and does not regain false-positive name matches.
-- [ ] Add a mixed-language regression covering indexed and unindexed files in one report, including same-component callers.
-- [ ] Verify appropriate fallback for uncovered files in a partially indexed language.
+- [x] Kotlin caller context is preserved when Swift indexing is active.
+- [x] Indexed Swift caller lookup remains exact and does not regain false-positive name matches.
+- [x] Add a mixed-language regression covering indexed and unindexed files in one report, including same-component callers.
+- [x] Verify appropriate fallback for uncovered files in a partially indexed language.
+
+## Summary of Changes
+
+- Caller context now combines exact indexed references with name-based references only from caller files missing head index coverage. An index for Swift no longer suppresses Kotlin callers, and a partial Swift index retains callers from uncovered files in the same or other components.
+- Covered files, including files with an empty reference list, retain exact lookup. Coverage of the declaration's own file does not decide whether caller files need fallback.
+- Added dedicated CallerContextTests with mixed Swift/Kotlin callers, partial Swift coverage with an indexed same-name decoy, covered and uncovered target files, and differing base/head coverage. All three regressions failed before the implementation change and pass afterward.
+- Verified 39 tests with `swift test --scratch-path /private/tmp/reviewmap-kotlin-context-build --filter 'CallerContextTests|^ReviewMapCoreTests.IndexTests|ChecksTests|FixtureTests|KotlinTests'`: 0 failures. This includes existing compiler-backed Swift exact-caller checks and the unchanged basic snapshot.
+- Statute change review: no affected rules or terms; check reports 0 errors and 0 warnings.
+
+## Validation boundary and existing behavior
+
+The regression tests inject index data; existing IndexTests also exercise a real Swift compiler index. The coordinator will independently validate the combined changes against the shared Bazel synthetic monorepo. This session did not modify or rerun that fixture.
+
+Name-based caller fallback already consumes base-only `usedBy` entries and interprets their lines in the head file; the basic snapshot contains resulting stale caller context. This separate behavior is preserved here. Filtering those entries would change no-index output and is outside rm-m7n1's coverage fix.
