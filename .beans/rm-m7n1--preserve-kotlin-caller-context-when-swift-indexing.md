@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:11:09Z
+updated_at: 2026-11-07T12:19:58Z
 ---
 
 ## Problem
@@ -75,3 +75,15 @@ Review found that the restored fallback could also interpret base-only `usedBy` 
 - Deliberately updated the basic snapshot: removed false `CheckoutViewModel` caller regions for `Cart.total()` (old line 11) and `CartStore.items()` (old line 15); false `CheckoutViewModel.pay(with:)` context for `Cart.price(for:)` (old line 16); and false `CheckoutViewModel.refresh()` context for `PaymentMethod` (old line 14). These base line numbers pointed at unrelated head code. Genuine head caller regions remain. Other snapshot changes only renumber subsequent region IDs; all non-region report data is unchanged.
 - Re-ran the focused command above with snapshot updating disabled: 40 tests, 0 failures, including the new regression, exact compiler-index caller tests, structural checks, Kotlin tests, and saved snapshot verification.
 - Re-ran the Statute change skill: 0 errors, 0 warnings, no affected rules or terms.
+
+## Annotated snapshot follow-up
+
+- [x] Audit and regenerate the annotated snapshot after removing base-only caller context, verify annotation semantics and run AnnotatorTests plus the focused suites.
+
+### Annotated snapshot audit and validation
+
+- Regenerated only `Fixtures/basic/annotated.json` through `UPDATE_SNAPSHOTS=1 swift test --scratch-path /private/tmp/reviewmap-kotlin-context-build --filter AnnotatorTests.testAnnotatedSnapshot`.
+- Local output matches the coordinator's `annotated-actual.json`. It removes the same four stale caller regions listed above. No non-region report data changes, including annotation text, findings, review-item summaries, and component summaries.
+- Retained regions change only IDs and six sets of synthetic context `keep`/`rank` metadata. `scripts/fake-llm.sh` hashes region IDs to choose `keep`, then assigns consecutive ranks. Renumbering therefore changes these canned values; the mock script and annotation implementation are unchanged.
+- Verified with snapshot updating disabled: `swift test --scratch-path /private/tmp/reviewmap-kotlin-context-build --filter 'AnnotatorTests|CallerContextTests|^ReviewMapCoreTests.IndexTests|ChecksTests|FixtureTests|KotlinTests'` — 57 tests, 0 failures.
+- Statute change checks: no affected rules or terms, 0 errors, 0 warnings.
