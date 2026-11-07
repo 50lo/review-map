@@ -114,6 +114,8 @@ final class KotlinTests: XCTestCase {
         let second = try XCTUnwrap(report.reviewItems.first { $0.qualifiedName == "Widget.run()" && $0.location.file.contains("second/") })
         XCTAssertTrue(first.usedBy.contains { $0.file.hasSuffix("Main.kt") })
         XCTAssertFalse(second.usedBy.contains { $0.file.hasSuffix("Main.kt") })
+        XCTAssertFalse([first, second].flatMap(\.usedBy).contains { $0.file.hasSuffix("Ambiguous.kt") })
+        XCTAssertEqual(report.warnings.filter { $0.kind == "ambiguous-name" }.count, 2, "one deliberate ambiguity at each side")
         let markers = report.reviewItems.filter { $0.qualifiedName == "Widget.marker()" }
         XCTAssertEqual(markers.count, 2, "swapping bodies across packages changes both declarations, not their identities")
         XCTAssertTrue(markers.allSatisfy { $0.changes.contains(.body) && $0.baseLocation?.file == $0.location.file })
