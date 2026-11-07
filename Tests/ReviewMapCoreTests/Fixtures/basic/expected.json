@@ -644,31 +644,9 @@
     },
     {
       "component" : "spm:Features/Checkout",
-      "endLine" : 19,
-      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "cfg:Core::Cart.total()/c2",
-      "kind" : "context",
-      "lines" : [
-        5,
-        11
-      ],
-      "reasons" : [
-        "CheckoutViewModel"
-      ],
-      "relation" : "caller",
-      "reviewItem" : "cfg:Core::Cart.total()",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 5,
-      "supports" : [
-        "cfg:Core::Cart.total()/r1"
-      ]
-    },
-    {
-      "component" : "spm:Features/Checkout",
       "endLine" : 14,
       "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "cfg:Core::Cart.total()/c3",
+      "id" : "cfg:Core::Cart.total()/c2",
       "kind" : "context",
       "lines" : [
         12,
@@ -690,7 +668,7 @@
       "component" : "cfg:Core",
       "endLine" : 3,
       "file" : "Sources/Core/Cart.swift",
-      "id" : "cfg:Core::Cart.total()/c4",
+      "id" : "cfg:Core::Cart.total()/c3",
       "kind" : "context",
       "lines" : [
         2,
@@ -800,31 +778,10 @@
       ]
     },
     {
-      "component" : "spm:Features/Checkout",
-      "endLine" : 18,
-      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "cfg:Core::Cart.price(for:)/c2",
-      "kind" : "context",
-      "lines" : [
-        16
-      ],
-      "reasons" : [
-        "CheckoutViewModel.pay(with:)"
-      ],
-      "relation" : "caller",
-      "reviewItem" : "cfg:Core::Cart.price(for:)",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 16,
-      "supports" : [
-        "cfg:Core::Cart.price(for:)/r1"
-      ]
-    },
-    {
       "component" : "cfg:Core",
       "endLine" : 13,
       "file" : "Sources/Core/Cart.swift",
-      "id" : "cfg:Core::Cart.price(for:)/c3",
+      "id" : "cfg:Core::Cart.price(for:)/c2",
       "kind" : "context",
       "lines" : [
         11,
@@ -846,7 +803,7 @@
       "component" : "cfg:Core",
       "endLine" : 20,
       "file" : "Sources/Core/Cart.swift",
-      "id" : "cfg:Core::Cart.price(for:)/c4",
+      "id" : "cfg:Core::Cart.price(for:)/c3",
       "kind" : "context",
       "lines" : [
         20
@@ -1272,31 +1229,9 @@
     },
     {
       "component" : "spm:Features/Checkout",
-      "endLine" : 14,
-      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "cfg:Core::PaymentMethod/c1",
-      "kind" : "context",
-      "lines" : [
-        12,
-        14
-      ],
-      "reasons" : [
-        "CheckoutViewModel.refresh()"
-      ],
-      "relation" : "caller",
-      "reviewItem" : "cfg:Core::PaymentMethod",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 12,
-      "supports" : [
-        "cfg:Core::PaymentMethod/r1"
-      ]
-    },
-    {
-      "component" : "spm:Features/Checkout",
       "endLine" : 18,
       "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "cfg:Core::PaymentMethod/c2",
+      "id" : "cfg:Core::PaymentMethod/c1",
       "kind" : "context",
       "lines" : [
         16
@@ -1317,7 +1252,7 @@
       "component" : "spm:Networking",
       "endLine" : 11,
       "file" : "Sources/Networking/PaymentClient.swift",
-      "id" : "cfg:Core::PaymentMethod/c3",
+      "id" : "cfg:Core::PaymentMethod/c2",
       "kind" : "context",
       "lines" : [
         9
@@ -1880,28 +1815,6 @@
       "risk" : 0,
       "side" : "head",
       "startLine" : 3,
-      "supports" : [
-        "spm:Persistence::CartStore.items()/r1"
-      ]
-    },
-    {
-      "component" : "spm:Features/Checkout",
-      "endLine" : 19,
-      "file" : "Sources/Features/Checkout/CheckoutViewModel.swift",
-      "id" : "spm:Persistence::CartStore.items()/c2",
-      "kind" : "context",
-      "lines" : [
-        5,
-        15
-      ],
-      "reasons" : [
-        "CheckoutViewModel"
-      ],
-      "relation" : "caller",
-      "reviewItem" : "spm:Persistence::CartStore.items()",
-      "risk" : 0,
-      "side" : "head",
-      "startLine" : 5,
       "supports" : [
         "spm:Persistence::CartStore.items()/r1"
       ]

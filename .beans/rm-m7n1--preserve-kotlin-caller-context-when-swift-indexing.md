@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:05:30Z
+updated_at: 2026-11-07T12:11:09Z
 ---
 
 ## Problem
@@ -62,4 +62,16 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: change-rep
 
 The regression tests inject index data; existing IndexTests also exercise a real Swift compiler index. The coordinator will independently validate the combined changes against the shared Bazel synthetic monorepo. This session did not modify or rerun that fixture.
 
-Name-based caller fallback already consumes base-only `usedBy` entries and interprets their lines in the head file; the basic snapshot contains resulting stale caller context. This separate behavior is preserved here. Filtering those entries would change no-index output and is outside rm-m7n1's coverage fix.
+Review found that the restored fallback could also interpret base-only `usedBy` lines as head context. The follow-up now excludes `.base` usages from head caller context while retaining them in `ReviewItem.usedBy`. The same guard deliberately repairs the pre-existing no-index stale context.
+
+## Review follow-up
+
+- [x] Exclude base-only usages from head caller context in mixed and partially indexed reports; verify genuine head callers remain.
+- [x] Inspect and update the basic snapshot for stale caller context, then rerun focused suites and Statute checks.
+
+### Review follow-up changes and validation
+
+- Added a regression that proves both Kotlin and partially indexed Swift exclude removed calls from head context while retaining genuine head callers and historical base usages. The Swift case has indexed caller references at base and no caller-file index coverage at head. The test also checks no-index mode. It failed in all four language/mode cases before the guard and passes with it.
+- Deliberately updated the basic snapshot: removed false `CheckoutViewModel` caller regions for `Cart.total()` (old line 11) and `CartStore.items()` (old line 15); false `CheckoutViewModel.pay(with:)` context for `Cart.price(for:)` (old line 16); and false `CheckoutViewModel.refresh()` context for `PaymentMethod` (old line 14). These base line numbers pointed at unrelated head code. Genuine head caller regions remain. Other snapshot changes only renumber subsequent region IDs; all non-region report data is unchanged.
+- Re-ran the focused command above with snapshot updating disabled: 40 tests, 0 failures, including the new regression, exact compiler-index caller tests, structural checks, Kotlin tests, and saved snapshot verification.
+- Re-ran the Statute change skill: 0 errors, 0 warnings, no affected rules or terms.

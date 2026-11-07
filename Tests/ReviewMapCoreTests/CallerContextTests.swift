@@ -108,4 +108,39 @@ final class CallerContextTests: XCTestCase {
         ], swiftIndex: [.base: baseIndex, .head: headIndex])
         XCTAssertEqual(try callers(result, file: "Lib/Greeting.swift", name: "greeting(_:_:)").map(\.file), ["App/New.swift"])
     }
+
+    func testFallbackDoesNotInterpretBaseOnlyCallsAsHeadContext() throws {
+        let base = [
+            "Other/Indexed.swift": "struct Indexed {}\n",
+            "Lib/Greeting.swift": "public func swiftGreeting(_ name: String) -> String { name }\n",
+            "App/Screen.swift": "func removedSwift() -> String { swiftGreeting(\"Taylor\") }\nfunc retainedSwift() -> String { swiftGreeting(\"Taylor\") }\n",
+            "android/Greeting.kt": "package com.example.mobile\nfun greeting(name: String): String = name\n",
+            "widget/Screen.kt": "package com.example.mobile\nfun removedKotlin(): String = greeting(\"Taylor\")\nfun retainedKotlin(): String = greeting(\"Taylor\")\n",
+        ]
+        let head = [
+            "Lib/Greeting.swift": "public func swiftGreeting(_ name: String, _ prefix: String = \"Hello\") -> String { prefix + name }\n",
+            "App/Screen.swift": "func unrelatedSwift() -> String { \"Taylor\" }\nfunc retainedSwift() -> String { swiftGreeting(\"Taylor\") }\n",
+            "android/Greeting.kt": "package com.example.mobile\nfun greeting(name: String, prefix: String = \"Hello\"): String = prefix + name\n",
+            "widget/Screen.kt": "package com.example.mobile\nfun unrelatedKotlin(): String = \"Taylor\"\nfun retainedKotlin(): String = greeting(\"Taylor\")\n",
+        ]
+        // Swift callers are uncovered by a partial Swift index; Kotlin has no index at all.
+        let headIndex = SideIndex(refs: ["Other/Indexed.swift": []])
+        var baseIndex = headIndex
+        baseIndex.refs["App/Screen.swift"] = [1, 2].map {
+            IndexedRef(line: $0, targetFile: "Lib/Greeting.swift", targetLine: 1, name: "swiftGreeting(_:)")
+        }
+        for indexed in [false, true] {
+            let result = try report(base: base, head: head, swiftIndex: indexed ? [.base: baseIndex, .head: headIndex] : nil)
+            for (file, name, removed, retained) in [
+                ("Lib/Greeting.swift", "swiftGreeting(_:_:)", "removedSwift()", "retainedSwift()"),
+                ("android/Greeting.kt", "greeting()", "removedKotlin()", "retainedKotlin()"),
+            ] {
+                let item = try XCTUnwrap(result.reviewItems.first { $0.location.file == file && $0.qualifiedName == name })
+                XCTAssertTrue(item.usedBy.contains { $0.symbol == removed && $0.side == .base },
+                              "Keep the base usage as historical evidence; indexed: \(indexed)")
+                XCTAssertEqual(try callers(result, file: file, name: name).map(\.reasons), [[retained]],
+                               "Only genuine head callers belong in head context; indexed: \(indexed)")
+            }
+        }
+    }
 }

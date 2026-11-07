@@ -511,7 +511,8 @@ private final class RegionBuilder {
         if let pi = b.pairOf[DeclKey(side: .head, file: hd.file, index: hd.index)] {
             for u in b.indexCallers[pi] ?? [] { note(u.component, u.file, u.line) }
         }
-        for u in e.usedBy where covered[u.file] == nil {
+        // usedBy also retains base-only usages. Their line numbers cannot locate head callers.
+        for u in e.usedBy where u.side != .base && covered[u.file] == nil {
             note(u.component, u.file, u.line)
         }
         // Same-component references by name; members only count in files that mention their type.
