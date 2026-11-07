@@ -1,0 +1,51 @@
+---
+# rm-s3g6
+title: Keep Bazel indexes available after disk-cache rebuilds
+status: todo
+type: bug
+priority: high
+created_at: 2026-11-07T11:53:57Z
+updated_at: 2026-11-07T11:53:57Z
+---
+
+## Problem
+
+A Bazel rebuild served from its disk cache succeeds but leaves Review Map with no usable index store. Review Map then emits index-unavailable and falls back to name matching, even though indexing was explicitly requested and the build succeeded.
+
+## Reproduction
+
+Observed with Review Map 0.1.0 built from main b51a9ef, Bazel 9.3.1, rules_swift 3.6.1, and full Xcode on macOS.
+
+The synthetic Git monorepo has root MODULE.bazel and BUILD.bazel, ios/Greeting.swift and ios/Screen.swift, and android/Greeting.kt and android/Screen.kt. BUILD.bazel defines a Swift library //:ios_app (module MobileApp, srcs ios/**/*.swift) and a Kotlin library //:android_app. Both base and head contain these build definitions. The feature changes each platform's greeting signature and body, displayName body, caller renderGreeting, removes legacyLabel, and adds normalizedName; stableLabel is unchanged. There are five expected declaration changes per platform.
+
+Local fixture: /private/tmp/reviewmap-mobile-monorepo-ngl0vlne/repo, branch feature/indexed-personalized-greetings. Base main: e5650c171d75eb3c8295b5b72e5295114d5891fc; head: b3eb6fdd2bd049c56b92f646263a81af66ce88b0. Temporary artifacts may be cleaned; the setup and observed behavior below should be preserved in a regression test.
+
+Use this configuration to isolate the cache issue from the separate relative-path crash:
+
+```yaml
+index:
+  builder: bazel
+  targets: ["//:ios_app"]
+  bazelArgs: ["--features=-swift.file_prefix_map"]
+```
+
+1. From the monorepo root, run reviewmap analyze . --index --no-llm with this config, an explicit --index-cache outside the repo, and an output report path. Start with a fresh cache. Both commit indexes build successfully, warming Review Map's .bazel-disk-cache.
+2. From android/, run the same comparison with the same config and cache, adding --rebuild-index and writing a separate report.
+3. Repeat from android/ with `--disk_cache=` added to bazelArgs to force compiler execution.
+
+Actual in step 2: Bazel reports a successful build with 25 disk cache hits and 23 internal processes. Review Map logs `The head build produced no index store (bazel build //:ios_app)` and writes a name-based report with one index-unavailable warning. Step 3 builds both commits and produces an indexed report with no warnings.
+
+## Investigation and evidence
+
+Sources/ReviewMapCore/Swift/SwiftIndex.swift builds with swift.index_while_building and swift.use_global_index_store, locates the global store, and otherwise merges per-target .indexstore directories. Investigate how index artifacts/global-store side effects are restored on action-cache hits and whether the fallback locates the output format produced by rules_swift. The precise missing-output/import cause is not yet established.
+
+Disabling the disk cache is an experiment workaround. Keeping it disabled globally should not be the assumed fix.
+
+Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: analyze-absolute-android.log, bazel-disk-cache-no-index.log, analyze-fresh-android.log, and change-report-fresh-android.json. The failed rebuild preserved previously cached stores, but the current run still fell back to names.
+
+## Acceptance criteria
+
+- [ ] A warm Bazel disk-cache rebuild yields usable indexes for both commits, or performs a targeted rebuild when required index artifacts are unavailable.
+- [ ] Preserve exact references and indexed resolution across cold builds, cached-store reuse, and --rebuild-index with disk-cache hits.
+- [ ] Preserve previously valid cached stores when a rebuild fails.
+- [ ] Add a regression exercising real or faithfully reproduced Bazel cache outputs, including invocation from a platform subdirectory.
