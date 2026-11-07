@@ -95,7 +95,7 @@ Go, Rust, and Kotlin each go through the same stages, in this order:
 4. **Structural review**: how the language declares conformance, and isolation where it has one.
 5. **Index mode**: the language's SCIP indexer, cached per commit.
 6. **Viewer**: icon, highlighting, review item kind names, and flag weights.
-7. **Real use**: a fixture pair, and a run on the last 40 commits of a real repo.
+7. **Validation**: a fixture pair, and a run on the last 40 commits of a real repo. Kotlin uses a small synthetic project instead, to limit disk use.
 
 Two pieces of shared work come before Go:
 
@@ -135,7 +135,8 @@ Go comes first: a package is a directory, so components map directly, and scip-g
 - **Contracts and risk**: public API, nullability of parameters and results, `suspend`, data class properties, serialized and persisted shapes (`@Serializable`, Room `@Entity`), sealed subclasses and enum entries, `open`, `final`, and `abstract`; `minSdk`, `targetSdk`, `compileSdk`, `jvmTarget`, and the Kotlin version. `AndroidManifest.xml` is a contract file (permissions, exported components). Risk marks: `!!`, `lateinit`, unchecked `as`, `runBlocking`, `GlobalScope`, `TODO()`, and `error()`.
 - **View code**: `@Composable` functions and subclasses of `View`, `Fragment`, and `Activity`.
 - **Structural review**: conformers from supertype lists; isolation from `@MainThread`, `@UiThread`, and Android UI classes, where the innermost `Dispatchers` block overrides it.
-- **Index mode**: not at first. scip-java with the Kotlin compiler plugin needs a Gradle build, which has Swift's cost, so it is measured on a real project before it is built.
+- **Validation**: a small synthetic multi-module Gradle project covers imports, test source sets, Android contracts, Compose, and ambiguity handling. Record its results and timings; do not clone or build a real Android project. Keep CI checks minimal, run the full tests locally, and remove temporary validation artifacts afterward.
+- **Index mode**: deferred beyond this implementation, including scip-java measurements. Kotlin ships with name matching; no Gradle execution is needed for validation.
 
 ### 8. Faster Swift indexing
 
