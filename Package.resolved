@@ -1,5 +1,5 @@
 {
-  "originHash" : "8f97bd242a422dbafff7056e2c29f5a7c652d81646c18a912f7f1d4c81f4d10e",
+  "originHash" : "07bca8e2862efd07294978e097b555fb17ab70f25639d540372cb0b141a83e69",
   "pins" : [
     {
       "identity" : "aexml",
@@ -88,6 +88,14 @@
       "state" : {
         "revision" : "1547678a9da59885853f5f5cc8a99cc203fa2e2c",
         "version" : "0.25.0"
+      }
+    },
+    {
+      "identity" : "tree-sitter-kotlin",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/fwcd/tree-sitter-kotlin.git",
+      "state" : {
+        "revision" : "d6af96d2e23ef0a8ff5ab512864378cf08fba311"
       }
     },
     {

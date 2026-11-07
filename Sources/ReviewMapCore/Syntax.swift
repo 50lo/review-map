@@ -81,6 +81,11 @@ struct ParsedFile {
     /// The file says it is generated (Go's `// Code generated ... DO NOT EDIT.`), on top of the generated patterns.
     var isGenerated = false
 
+    /// Source package, distinct from a build-system module (Kotlin). Empty means the default package.
+    var packageName: String? = nil
+    /// Packages whose names can be used without an explicit import binding.
+    var wildcardImports: [String] = []
+
     /// Innermost declaration containing `line`.
     func enclosingDecl(line: Int) -> Declaration? {
         var best: Declaration?

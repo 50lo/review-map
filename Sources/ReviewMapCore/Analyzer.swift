@@ -501,12 +501,12 @@ struct ChangeReportBuilder {
             let data = side(s)
             let layout = data.layout
             // Changed member review items by name, for member-level usage.
-            var membersByName: [String: [(component: String, rootType: String, pair: Int)]] = [:]
+            var membersByName: [String: [(component: String, rootType: String, pair: Int, package: String?)]] = [:]
             for (i, p) in pairs.enumerated() {
                 guard let loc = s == .head ? p.head : p.base, let scope = loc.decl.scope, !loc.decl.isContainer,
                       !p.changes.isEmpty, p.changes != [.cosmetic] else { continue }
                 let root = String(scope.split(separator: ".").first ?? Substring(scope))
-                membersByName[loc.decl.name, default: []].append((loc.component, root, i))
+                membersByName[loc.decl.name, default: []].append((loc.component, root, i, data.files[loc.file]?.packageName))
             }
             // Top-level declarations by (component, name) -> pair index, for type-level usage.
             var topLevel: [String: Int] = [:]
@@ -515,6 +515,29 @@ struct ChangeReportBuilder {
                 topLevel["\(loc.component)|\(loc.decl.name)"] = i
             }
 
+            // Source packages can span build-system modules, and a module can contain many packages.
+            // Index by package AND declared name so unrelated packages never become visible together.
+            var packageDeclarations: [String: [String: Set<String>]] = [:]
+            var packageComponents: [String: Set<String>] = [:]
+            var packageTopLevel: [String: Int] = [:]
+            for (path, file) in data.files {
+                guard let package = file.packageName, let component = layout.fileComponent[path] else { continue }
+                packageComponents[package, default: []].insert(component)
+                for decl in file.decls where decl.isTopLevel {
+                    packageDeclarations[package, default: [:]][decl.name, default: []].insert(component)
+                }
+            }
+            for (i, pair) in pairs.enumerated() {
+                guard let loc = s == .head ? pair.head : pair.base, loc.decl.isTopLevel,
+                      let package = data.files[loc.file]?.packageName else { continue }
+                packageTopLevel["\(package)|\(loc.component)|\(loc.decl.name)"] = i
+            }
+            func packageBinding(_ qualified: String) -> (package: String, name: String)? {
+                guard let package = packageComponents.keys.filter({ !$0.isEmpty && qualified.hasPrefix($0 + ".") })
+                    .max(by: { $0.count < $1.count }) else { return nil }
+                let name = qualified.dropFirst(package.count + 1).split(separator: ".").first.map(String.init) ?? ""
+                return (package, name)
+            }
             var ambiguous: [String: Set<String>] = [:]
             for path in data.files.keys.sorted() {
                 guard let file = data.files[path], let comp = layout.fileComponent[path] else { continue }
@@ -526,6 +549,26 @@ struct ChangeReportBuilder {
                 var resolvedTypes = Set<String>() // "component|TypeName"
 
                 for imp in file.imports {
+                    if file.packageName != nil {
+                        let targets: Set<String>
+                        if file.wildcardImports.contains(imp.name) {
+                            targets = packageComponents[imp.name] ?? []
+                        } else if let binding = packageBinding(imp.name) {
+                            targets = packageDeclarations[binding.package]?[binding.name] ?? []
+                        } else { targets = [] }
+                        if !targets.isEmpty {
+                            for target in targets where target != comp {
+                                addRef(s, from: comp, to: target, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
+                            }
+                        } else if !lang.isPlatformModule(imp.name) {
+                            if let ext = externalComponent(for: imp.name, language: lang, layout: layout) {
+                                addRef(s, from: comp, to: ext, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
+                            } else {
+                                warnings.insert(Warning(kind: "unresolved-import", message: "import \(imp.name) matches no target or known package product."))
+                            }
+                        }
+                        continue
+                    }
                     let importName = aliases[imp.name] ?? imp.name
                     if let target = layout.moduleComponent[importName], layout.components[target]?.module != module {
                         addRef(s, from: comp, to: target, ref: Ref(file: path, line: imp.line, symbol: "import \(imp.name)", side: s))
@@ -545,7 +588,35 @@ struct ChangeReportBuilder {
                 for ref in file.typeRefs where !seenRef.contains(ref) {
                     seenRef.insert(ref)
                     let target: String
-                    if let source = ref.source.flatMap({ Paths.resolve($0, from: path) }), let sourceFile = data.modulePaths[source],
+                    var resolvedName = ref.name
+                    var resolvedPackage: String?
+                    if let ownPackage = file.packageName {
+                        var choices: [(package: String, component: String, name: String)] = []
+                        func addChoices(_ package: String, _ name: String) {
+                            for component in packageDeclarations[package]?[name] ?? [] {
+                                choices.append((package, component, name))
+                            }
+                        }
+                        if let module = ref.module {
+                            if let binding = packageBinding(module.isEmpty ? ref.name : module + "." + ref.name) {
+                                addChoices(binding.package, binding.name)
+                            }
+                        } else {
+                            addChoices(ownPackage, ref.name)
+                            if choices.isEmpty {
+                                for package in Set(file.wildcardImports) { addChoices(package, ref.name) }
+                            }
+                        }
+                        guard !choices.contains(where: { $0.component == comp }) else { continue }
+                        if choices.count > 1 {
+                            ambiguous[ref.name, default: []].formUnion(choices.map { $0.component })
+                            continue
+                        }
+                        guard let choice = choices.first else { continue }
+                        target = choice.component
+                        resolvedName = choice.name
+                        resolvedPackage = choice.package
+                    } else if let source = ref.source.flatMap({ Paths.resolve($0, from: path) }), let sourceFile = data.modulePaths[source],
                        let c = layout.fileComponent[sourceFile] {
                         // The language says which file the name comes from.
                         guard c != comp else { continue }
@@ -572,9 +643,10 @@ struct ChangeReportBuilder {
                         target = only
                     }
                     addRef(s, from: comp, to: target, ref: Ref(file: path, line: ref.line, symbol: ref.name, side: s))
-                    resolvedTypes.insert("\(target)|\(ref.name)")
+                    resolvedTypes.insert((resolvedPackage.map { $0 + "|" } ?? "") + "\(target)|\(resolvedName)")
                     let encl = file.enclosingDecl(line: ref.line)
-                    if let ti = topLevel["\(target)|\(ref.name)"] {
+                    let referencedPair = resolvedPackage.flatMap { packageTopLevel["\($0)|\(target)|\(resolvedName)"] } ?? topLevel["\(target)|\(resolvedName)"]
+                    if let ti = referencedPair {
                         usedBy[ti, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
                                                              isolation: lang.isolation(in: file, line: ref.line), side: s))
                     }
@@ -584,7 +656,7 @@ struct ChangeReportBuilder {
                     }
                 }
                 for ref in Set(file.memberRefs) {
-                    for m in membersByName[ref.name] ?? [] where m.component != comp && resolvedTypes.contains("\(m.component)|\(m.rootType)") {
+                    for m in membersByName[ref.name] ?? [] where m.component != comp && resolvedTypes.contains((m.package.map { $0 + "|" } ?? "") + "\(m.component)|\(m.rootType)") {
                         let encl = file.enclosingDecl(line: ref.line)
                         usedBy[m.pair, default: []].insert(Usage(component: comp, symbol: encl?.qualifiedName ?? "(top level)", file: path, line: ref.line,
                                                                  isolation: lang.isolation(in: file, line: ref.line), side: s))
