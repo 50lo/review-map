@@ -18,6 +18,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Mark workspace as safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      # The Kotlin grammar repository is large; cache SwiftPM's clones so only dependency changes refetch it.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/org.swift.swiftpm
+          key: swiftpm-${{ hashFiles('Package.resolved') }}
       # IndexStoreDB's C++ needs the toolchain's dispatch and Block headers, which aren't on the default include path on Linux.
       # These synthetic fixtures need only Swift and git. Run the full suite locally with `swift test`.
       - name: Build and smoke test
