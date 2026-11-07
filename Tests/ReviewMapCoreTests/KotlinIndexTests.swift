@@ -117,4 +117,41 @@ final class KotlinIndexTests: XCTestCase {
         try FileManager.default.removeItem(atPath: join(root, "settings.gradle.kts"))
         XCTAssertEqual(KotlinIndex.gradleBuilds(root), ["app", "included", "tools/plugin"])
     }
+
+    func testCacheNamesDontCollide() {
+        let names = ["", "root", "_root", "tools/android", "tools-android", "tools_android"].map(KotlinIndex.cacheName)
+        XCTAssertEqual(Set(names).count, names.count, "\(names)")
+    }
+
+    /// Two leaf modules declaring the same top-level function get the same uncoordinated symbol from scip-java;
+    /// each module's call must reach its own declaration, while a shared module's symbol still links across.
+    func testUnqualifiedSymbolsAreScopedToTheirModule() throws {
+        let root = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-kotlin-scope-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: root) }
+        for file in ["build/settings.gradle.kts", "build/app/build.gradle.kts", "build/tool/build.gradle.kts", "build/core/build.gradle.kts"] {
+            let path = join(root, file)
+            try FileManager.default.createDirectory(atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+            FileManager.default.createFile(atPath: path, contents: Data())
+        }
+        let start = "scip-java maven . . demo/start()."
+        let load = "scip-java maven maven/demo/core unspecified demo/Store#load()."
+        func occurrence(_ line: Int, _ symbol: String, definition: Bool = false) -> SCIP.Occurrence {
+            SCIP.Occurrence(line: line, symbol: symbol, roles: definition ? 1 : 0)
+        }
+        var index = SCIP.Index(projectRoot: nil, documents: [
+            SCIP.Document(path: "app/src/main/kotlin/Main.kt", occurrences: [occurrence(1, start, definition: true), occurrence(5, start), occurrence(6, load)]),
+            SCIP.Document(path: "tool/src/main/kotlin/Main.kt", occurrences: [occurrence(1, start, definition: true), occurrence(5, start), occurrence(6, load)]),
+            SCIP.Document(path: "core/src/main/kotlin/Store.kt", occurrences: [occurrence(3, load, definition: true)]),
+        ])
+        KotlinIndex.scopeUnqualifiedSymbols(&index, root: root, build: "build")
+        index.projectRoot = URL(fileURLWithPath: join(root, "build")).absoluteString
+        let files = ["app", "tool", "core"].map { "build/\($0)/src/main/kotlin/\($0 == "core" ? "Store" : "Main").kt" }
+        let side = SCIP.sideIndex([index], sourceRoot: root, known: Set(files))
+        for module in ["app", "tool"] {
+            let refs = try XCTUnwrap(side.refs["build/\(module)/src/main/kotlin/Main.kt"])
+            XCTAssertEqual(refs.first { $0.line == 5 }?.targetFile, "build/\(module)/src/main/kotlin/Main.kt", "start() stays in \(module)")
+            XCTAssertEqual(refs.first { $0.line == 5 }?.name, "start()")
+            XCTAssertEqual(refs.first { $0.line == 6 }?.targetFile, "build/core/src/main/kotlin/Store.kt", "load() links across modules")
+        }
+    }
 }

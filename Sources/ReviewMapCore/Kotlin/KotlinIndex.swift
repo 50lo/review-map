@@ -28,13 +28,14 @@ enum KotlinIndex {
             }
             var indexes: [SCIP.Index] = []
             for build in builds {
-                let indexPath = cache + "/\(Paths.slug(build.isEmpty ? "root" : build)).scip"
+                let indexPath = cache + "/\(cacheName(build)).scip"
                 if options.rebuild || !FileManager.default.fileExists(atPath: indexPath) {
                     try gradle(side: s, build: build, indexPath: indexPath, options: options, log: log)
                 } else {
                     log("Kotlin index for \(s.side.rawValue) \(s.sha.prefix(8))\(build.isEmpty ? "" : " \(build)"): cached.")
                 }
                 var index = try SCIP.decode(try Data(contentsOf: URL(fileURLWithPath: indexPath)))
+                scopeUnqualifiedSymbols(&index, root: s.dir, build: build)
                 // The cached index was written in another export of the tree; its paths are relative to the build.
                 index.projectRoot = URL(fileURLWithPath: join(s.dir, build)).absoluteString
                 indexes.append(index)
@@ -59,6 +60,49 @@ enum KotlinIndex {
         let builds = outermost(ComponentBuilder.findFiles(root: root, where: buildFiles.contains))
             .filter { d in !settings.contains { $0.isEmpty || d == $0 || d.hasPrefix($0 + "/") } }
         return (settings + builds).sorted()
+    }
+
+    /// A file name for a build's index that no other build path maps to: "" is "_root", and everything outside
+    /// letters and digits is percent-encoded ("tools/android" and "tools-android" stay apart).
+    static func cacheName(_ build: String) -> String {
+        build.isEmpty ? "_root" : (build.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? Paths.slug(build))
+    }
+
+    /// The prefix scip-java gives a symbol without Maven coordinates.
+    static let unqualifiedPrefix = "scip-java maven . . "
+
+    /// scip-java gives a module's own declarations no coordinates when no other module depends on it
+    /// ("scip-java maven . . demo/main()."), so two such modules, or two Gradle builds, can declare the same
+    /// symbol, and `SCIP.sideIndex` would link one to the other. Those symbols are scoped to the Gradle project
+    /// that holds the document: the nearest directory with a build file, up to the build's root. Symbols with
+    /// coordinates stay as they are, so references across modules still link.
+    static func scopeUnqualifiedSymbols(_ index: inout SCIP.Index, root: String, build: String) {
+        let fm = FileManager.default
+        var projects: [String: String] = [:]
+        func project(ofDir dir: String) -> String {
+            if let p = projects[dir] { return p }
+            let p: String
+            if dir == build || dir.isEmpty || !(build.isEmpty || dir.hasPrefix(build + "/")) {
+                p = build
+            } else if buildFiles.contains(where: { fm.fileExists(atPath: join(join(root, dir), $0)) }) {
+                p = dir
+            } else {
+                p = project(ofDir: (dir as NSString).deletingLastPathComponent)
+            }
+            projects[dir] = p
+            return p
+        }
+        for d in index.documents.indices {
+            let file = join(build, index.documents[d].path)
+            let owner = project(ofDir: (file as NSString).deletingLastPathComponent)
+            // A package name in a SCIP symbol escapes a space by doubling it.
+            let package = "reviewmap:" + (owner.isEmpty ? "." : owner).replacingOccurrences(of: " ", with: "  ")
+            for o in index.documents[d].occurrences.indices {
+                let symbol = index.documents[d].occurrences[o].symbol
+                guard symbol.hasPrefix(unqualifiedPrefix) else { continue }
+                index.documents[d].occurrences[o].symbol = "scip-java maven \(package) . " + symbol.dropFirst(unqualifiedPrefix.count)
+            }
+        }
     }
 
     private static func hasBazelWorkspace(_ root: String) -> Bool {
