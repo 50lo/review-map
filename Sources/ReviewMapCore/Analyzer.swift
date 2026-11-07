@@ -299,7 +299,8 @@ struct ChangeReportBuilder {
             guard let comp = s.layout.fileComponent[path], let file = s.files[path] else { continue }
             for (i, d) in file.decls.enumerated() {
                 let name = d.kind == .extension ? d.qualifiedName : d.name
-                let key = "\(comp)|\(Self.kindGroup(d.kind))|\(d.scope ?? "")|\(name)"
+                let package = file.packageName.map { "package:\($0)|" } ?? ""
+                let key = "\(comp)|\(package)\(Self.kindGroup(d.kind))|\(d.scope ?? "")|\(name)"
                 groups[key, default: []].append(Located(decl: d, file: path, index: i, component: comp))
             }
         }
