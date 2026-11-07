@@ -1,11 +1,11 @@
 ---
 # rm-31f9
 title: Add Gradle components and pins
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-07T00:57:39Z
 parent: rm-aks4
 ---
 
@@ -19,8 +19,10 @@ parent: rm-aks4
 - Settings: `minSdk`, `targetSdk`, `compileSdk`, `jvmTarget`/`jvmToolchain`, and the Kotlin plugin version, read from build files and the version catalog.
 
 ## Acceptance criteria
-- [ ] A Gradle fixture with an app module, a library module, and tests produces the expected components, test components, and edges, in both DSLs.
-- [ ] Catalog libraries that a build file uses are external dependencies with their requested versions; an unused catalog alias adds none.
+- [x] A Gradle fixture with an app module, a library module, and tests produces the expected components, test components, and edges, in both DSLs.
+- [x] Catalog libraries that a build file uses are external dependencies with their requested versions; an unused catalog alias adds none.
 
 ## Constraints
 No Gradle execution in name matching mode.
+
+Implemented literal Gradle parsing in both DSLs, projectDir overrides and nested modules, KMP/test components and dependencies, project accessors, used catalog aliases/bundles, requested versions, SDK/JVM/Kotlin settings, and conservative package-prefix attribution. Validation: seven KotlinComponentsTests plus KotlinTests/testFixture pass locally (8 tests), including the root projectDir regression found in independent review; no Java, Gradle execution, or additional tooling required. Synthetic temporary trees are removed by each test.

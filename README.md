@@ -1,6 +1,6 @@
 # Review Map
 
-A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, Go, and Rust; Kotlin is planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
+A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, Go, and Rust, plus Kotlin with name matching. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
 
 ## Run it
 
@@ -123,6 +123,13 @@ Name matching is fast and needs no build, but it guesses: a common member name (
 - **Name matching**: Cargo manifests and lockfiles are read directly; Cargo is not required. Workspace crates, library and binary targets, test components, dependency pins, and build settings appear in the map. Rust contracts include public API, trait requirements, enum variants, serde shapes, async and Send/Sync bounds, and visibility changes.
 - **Indexing**: install the components with `rustup component add rust-analyzer rust-src`. Each side runs `cargo metadata` and `rust-analyzer scip` on its outermost Cargo workspaces. rust-analyzer runs build scripts and loads proc macros in the exported commit tree. `REVIEWMAP_RUST_ANALYZER` names another executable. Missing tools or an indexer failure fall back to name matching at both sides; recoverable dependency, build-script, macro, and symbol failures retain available references with an `index-partial` warning.
 - **Cache**: indexes and logs are kept per repo, commit, and workspace under `~/.reviewmap/index/<repo>/<sha>/rust/`. `--rebuild-index` indexes again. Syntax-only analysis does not expand macros or trace file-module visibility; index mode supplies compiler-resolved references where available.
+
+### Kotlin
+
+- **Name matching only**: `.kt` and `.kts` sources are parsed with tree-sitter. Gradle scripts are read as text; Java, Gradle, and an Android SDK are not required. Java source files are not parsed, and Kotlin index mode is deferred.
+- **Components and references**: literal Gradle module includes, project-directory overrides, JVM/Android/Multiplatform source sets, and declared dependencies form the map. Version catalog aliases contribute dependencies only when a build script uses them; versions are requested versions, not resolved pins. Kotlin packages stay separate from Gradle modules. Explicit, aliased, star, and same-package references are matched within their packages; ambiguous names are reported without choosing a target.
+- **Contracts and review**: public API, nullability, suspend, data-class and serialized/persisted shapes, sealed subclasses, enum entries, visibility, and inheritance modifiers have contract flags. Android manifest permissions, exported components, intent filters, SDK levels, JVM targets, and Kotlin versions are contracts too. Interface and abstract-class requirements feed conformance checks. Android main-thread annotations and UI classes supply isolation, overridden by the innermost explicit dispatcher block; Compose functions and Android UI classes receive view-code risk treatment.
+- **Validation**: small synthetic Gradle fixtures cover the supported behavior, including deliberate ambiguity and duplicate names across packages. They do not establish performance or reference accuracy on large Android projects. See [Step 7 notes](docs/progress.md#step-7-notes).
 
 ### All languages
 

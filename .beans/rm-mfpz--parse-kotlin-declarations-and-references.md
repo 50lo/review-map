@@ -1,11 +1,11 @@
 ---
 # rm-mfpz
 title: Parse Kotlin declarations and references
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-07T00:55:37Z
 parent: rm-aks4
 ---
 
@@ -20,10 +20,18 @@ Add tree-sitter-kotlin and a `KotlinLanguage` with its extractor.
 - References: imports (single, star, aliased), resolved through the package table, and names from the same package, which need no import.
 
 ## Acceptance criteria
-- [ ] A Kotlin fixture pair under Tests/ReviewMapCoreTests/Fixtures/kotlin parses into the expected declarations, kinds, scopes, and access.
-- [ ] A fixture with two packages in a `:core` module and references to both from an `:app` module resolves each reference to `:core`, with no unresolved-import warnings.
-- [ ] Changes are classified as for the other languages; a nullability change (`String` -> `String?`) is a signature change.
-- [ ] Other languages' fixture results are unchanged.
+- [x] A Kotlin fixture pair under Tests/ReviewMapCoreTests/Fixtures/kotlin parses into the expected declarations, kinds, scopes, and access.
+- [x] A fixture with two packages in a `:core` module and references to both from an `:app` module resolves each reference to `:core`, with no unresolved-import warnings.
+- [x] Changes are classified as for the other languages; a nullability change (`String` -> `String?`) is a signature change.
+- [x] Other languages' fixture results are unchanged.
 
 ## Constraints
 Follow the TypeScript implementation in Sources/ReviewMapCore/TypeScript/ and its tests as the pattern. Java files are not parsed.
+
+## Summary of Changes
+
+Added Kotlin declarations, package-aware single/star/aliased imports and same-package references, default-public API classification, and conservative runtime entry-point exclusions. Package and declaration identity are retained for member usage when multiple packages in one component declare the same type name. The small fixture includes two modules, several packages, nullable signatures, and duplicate type names.
+
+The preferred tree-sitter-grammars v1.1.0 loads under tree-sitter 0.25.10 but loses declarations around context parameters and multi-dollar strings. Used the documented fwcd fallback, pinned to exact revision `d6af96d2e23ef0a8ff5ab512864378cf08fba311`; ABI 14 loads and the modern-syntax test has no parse errors. SwiftPM and Bazel dependency declarations are updated. Gradle component hooks are connected in rm-31f9.
+
+Validation: five Kotlin tests and the existing Swift, TypeScript, and Go complete-model snapshots pass (8 tests total). Independent implementation review found and verified the package-qualified member-usage fix. Statute, Beans, and diff checks pass. No Java, Gradle, or real-project checkout was needed.

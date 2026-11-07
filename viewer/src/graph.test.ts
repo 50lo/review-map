@@ -15,6 +15,7 @@ import {
   llmOf,
   regionPosition,
   related,
+  reviewItemScore,
   revealFocus,
   rollup,
   startHere,
@@ -31,6 +32,16 @@ import { validate } from "./load";
 const fixture = path.resolve(__dirname, "../../Tests/ReviewMapCoreTests/Fixtures/basic/expected.json");
 const report = validate(JSON.parse(fs.readFileSync(fixture, "utf8")));
 const index = buildIndex(report);
+
+it("prioritizes Kotlin serialization and concurrency contracts over ordinary changes", () => {
+  const item = validate({ components: [], edges: [], reviewItems: [{ kind: "func", change: "signature", contractFlags: [], location: { file: "API.kt" } }] }).reviewItems[0];
+  const score = (flag: string) => reviewItemScore({ ...item, contractFlags: ["kotlin:" + flag] });
+  expect(score("serialized-shape-changed")).toBeGreaterThan(score("api-added"));
+  expect(score("persisted-shape-changed")).toBeGreaterThan(score("api-added"));
+  expect(score("suspend-added")).toBeGreaterThan(score("api-added"));
+  expect(score("permission-added")).toBeGreaterThan(score("compile-sdk-changed"));
+  expect(score("nullability-changed")).toBeGreaterThan(score("api-added"));
+});
 
 describe("visible", () => {
   it("shows changed components and the ends of changed edges, without tests", () => {

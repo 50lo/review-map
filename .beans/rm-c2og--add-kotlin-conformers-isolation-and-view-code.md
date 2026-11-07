@@ -1,11 +1,11 @@
 ---
 # rm-c2og
 title: Add Kotlin conformers, isolation, and view code
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-07T01:09:54Z
 parent: rm-aks4
 ---
 
@@ -15,7 +15,11 @@ parent: rm-aks4
 - `isViewCode`: `@Composable` functions and members of `View`, `Activity`, and `Fragment` subclasses.
 
 ## Acceptance criteria
-- [ ] A fixture interface that gains an abstract member produces a `conformers` finding for the class without it.
-- [ ] `usedBy` entries in a `@MainThread` caller carry main-thread isolation, and the structural review prompt shows it.
-- [ ] A reference inside `withContext(Dispatchers.IO)` in an `Activity` carries no isolation.
-- [ ] Composable functions are excluded from region control-flow risk, as SwiftUI views are.
+- [x] A fixture interface that gains an abstract member produces a `conformers` finding for the class without it.
+- [x] `usedBy` entries in a `@MainThread` caller carry main-thread isolation, and the structural review prompt shows it.
+- [x] A reference inside `withContext(Dispatchers.IO)` in an `Activity` carries no isolation.
+- [x] Composable functions are excluded from region control-flow risk, as SwiftUI views are.
+
+Implemented lexical dispatcher regions with innermost-block precedence, Android main-thread declaration conventions, and Compose view-risk handling. Kotlin conformer lookup uses package/import and enclosing-type identity; only actual class members satisfy requirements. Six focused structural tests plus the Kotlin fixture pass locally (7 tests), covering interface defaults, abstract class requirements, import aliases, same-name types in different packages, nested interfaces, dispatcher overrides, usage/prompt isolation, and Compose region risk. Independent review findings were fixed and covered by regressions; temporary fixture repositories are removed by tests.
+
+Final review also reproduced removal of an existing interface default body being missed as a new requirement. The conformer check now handles default/concrete-to-abstract transitions; interface default members are not inferred final. Regression validation: 22 ChecksTests, KotlinFlagTests, and KotlinStructureTests pass locally; independently reviewed.

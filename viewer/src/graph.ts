@@ -431,6 +431,8 @@ const flagWeight = (prefixed: string): number => {
   const flag = flagName(prefixed);
   if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
   if (/^(serde-shape|send-bound|sync-bound)/.test(flag)) return 3;
+  if (/^(suspend-|serialized-shape|persisted-shape|permission-|exported-components)/.test(flag)) return 3;
+  if (/^(nullability-|data-class-shape|sealed-subclass|enum-entry|open-|final-|abstract-|intent-filters|min-sdk|target-sdk)/.test(flag)) return 2;
   if (/^(trait-item|enum-variant|non-exhaustive|visibility-narrowed)/.test(flag)) return 2;
   if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
   if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;

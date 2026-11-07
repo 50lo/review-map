@@ -21,6 +21,7 @@ let package = Package(
         .package(url: "https://github.com/tree-sitter/tree-sitter-typescript.git", exact: "0.23.2"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-go.git", exact: "0.25.0"),
         .package(url: "https://github.com/tree-sitter/tree-sitter-rust.git", exact: "0.24.2"),
+        .package(url: "https://github.com/fwcd/tree-sitter-kotlin.git", revision: "d6af96d2e23ef0a8ff5ab512864378cf08fba311"),
     ],
     targets: [
         .executableTarget(
@@ -43,6 +44,7 @@ let package = Package(
                 .product(name: "TreeSitterTypeScript", package: "tree-sitter-typescript"),
                 .product(name: "TreeSitterGo", package: "tree-sitter-go"),
                 .product(name: "TreeSitterRust", package: "tree-sitter-rust"),
+                .product(name: "TreeSitterKotlin", package: "tree-sitter-kotlin"),
                 .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ]
         ),

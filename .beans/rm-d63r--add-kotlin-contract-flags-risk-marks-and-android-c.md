@@ -1,11 +1,11 @@
 ---
 # rm-d63r
 title: Add Kotlin contract flags, risk marks, and Android contracts
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-07T00:59:12Z
 parent: rm-aks4
 ---
 
@@ -17,4 +17,6 @@ parent: rm-aks4
 - Add the new flags to the viewer's `flagWeight`.
 
 ## Acceptance criteria
-- [ ] Fixture changes produce the expected flags and risk marks, each covered by a test, including an AndroidManifest permission change.
+- [x] Fixture changes produce the expected flags and risk marks, each covered by a test, including an AndroidManifest permission change.
+
+Implemented Kotlin API, nullability, suspend, data/serialized/persisted shape, sealed/enum, modality and visibility flags; Android XML contracts; SDK/JVM/Kotlin settings; syntax risk queries and viewer weights. Independent review added data-constructor reorder/data-toggle coverage and internal/protected visibility transitions. All four KotlinFlagTests and five KotlinTests pass locally; all 109 viewer tests pass. Fixtures are small, synthetic, and execute no Gradle or Java.

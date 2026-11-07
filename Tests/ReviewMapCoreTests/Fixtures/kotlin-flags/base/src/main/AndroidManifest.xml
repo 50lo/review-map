@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <uses-permission android:name="android.permission.CAMERA" />
+  <application>
+    <activity android:name=".MainActivity" android:exported="false">
+      <intent-filter><action android:name="example.OLD" /></intent-filter>
+    </activity>
+  </application>
+</manifest>

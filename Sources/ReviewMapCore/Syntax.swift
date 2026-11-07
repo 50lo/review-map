@@ -66,6 +66,15 @@ struct NameRef: Hashable {
     var module: String? = nil
 }
 
+/// A lexical block that establishes or explicitly clears known reference isolation.
+struct IsolationRegion {
+    var startLine: Int
+    var endLine: Int
+    var startByte: Int
+    var endByte: Int
+    var isolation: String?
+}
+
 struct ParsedFile {
     var path: String
     /// Id of the language that parsed the file.
@@ -80,6 +89,12 @@ struct ParsedFile {
     var marks: [Int: [LineMark]] = [:]
     /// The file says it is generated (Go's `// Code generated ... DO NOT EDIT.`), on top of the generated patterns.
     var isGenerated = false
+
+    /// Source package, distinct from a build-system module (Kotlin). Empty means the default package.
+    var packageName: String? = nil
+    /// Packages whose names can be used without an explicit import binding.
+    var wildcardImports: [String] = []
+    var isolationRegions: [IsolationRegion] = []
 
     /// Innermost declaration containing `line`.
     func enclosingDecl(line: Int) -> Declaration? {
