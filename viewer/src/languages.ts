@@ -96,7 +96,7 @@ export const LANGUAGES = [
       protocol: "interface", func: "fun", var: "property", case: "entry", typealias: "typealias",
       class: (reviewItem: ReviewItem) => {
         const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
-        return /\bobject(?:\s|$)/.test(signature) ? "object" : "class";
+        return /^(?:(?:public|private|protected|internal|data|companion)\s+)*object\b/.test(signature.trim()) ? "object" : "class";
       },
     },
   },

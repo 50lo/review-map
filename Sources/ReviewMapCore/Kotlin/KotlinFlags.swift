@@ -7,6 +7,19 @@ struct KotlinFlags {
 
     func compute() -> [Int: [String]] {
         var out: [Int: Set<String>] = [:]
+        var knownTypes: [Side: Set<String>] = [:]
+        for side in [Side.base, .head] {
+            for file in b.side(side).files.values where file.language == "kotlin" {
+                knownTypes[side, default: []].formUnion(file.decls.filter(\.isContainer).map { KotlinStructure.qualified(file.packageName, $0.qualifiedName) })
+            }
+        }
+        func supertypes(_ location: Located?, side: Side) -> Set<String> {
+            guard let location, let file = b.side(side).files[location.file] else { return [] }
+            return Set(location.decl.traits.filter { $0.hasPrefix("supertype:") }.compactMap {
+                KotlinStructure.resolveType(String($0.dropFirst("supertype:".count)), in: file,
+                                            scope: location.decl.scope, knownTypes: knownTypes[side] ?? [])
+            })
+        }
         for i in indices {
             let p = b.pairs[i], d = p.any.decl
             let base = p.base?.decl, head = p.head?.decl
@@ -64,12 +77,13 @@ struct KotlinFlags {
             // Sealed subclasses need not be nested in their sealed parent.
             for (side, location, other) in [(Side.base, p.base, p.head), (.head, p.head, p.base)] {
                 guard let location else { continue }
-                let changedParents = Set(location.decl.inherited).subtracting(other?.decl.inherited ?? [])
+                let changedParents = supertypes(location, side: side).subtracting(supertypes(other, side: side == .base ? .head : .base))
                 for ancestor in indices {
                     let type = b.pairs[ancestor]
                     guard type.base != nil, type.head != nil,
                           let owner = side == .base ? type.base : type.head,
-                          owner.decl.modifiers.contains("sealed"), changedParents.contains(owner.decl.name),
+                          owner.decl.modifiers.contains("sealed"),
+                          changedParents.contains(KotlinStructure.qualified(b.side(side).files[owner.file]?.packageName, owner.decl.qualifiedName)),
                           owner.component == location.component,
                           b.side(side).files[owner.file]?.packageName == b.side(side).files[location.file]?.packageName else { continue }
                     let name = "sealed-subclass-\(side == .head ? "added" : "removed")"

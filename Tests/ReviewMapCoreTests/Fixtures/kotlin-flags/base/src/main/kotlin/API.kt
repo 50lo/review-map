@@ -1,4 +1,5 @@
 package example
+import example.Right.State as RightState
 
 fun removed(): String = "old"
 fun signature(value: String): String = value
@@ -30,3 +31,6 @@ class Visibility {
     protected fun becomesInternal() {}
 }
 fun defaultText(value: String = "?"): String = value
+class Left { sealed class State }
+class Right { sealed class State }
+class RemovedLeft : Left.State()

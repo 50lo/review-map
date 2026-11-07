@@ -60,29 +60,10 @@ enum KotlinStructure {
     static func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder, for use: ConformanceUse) -> [Conformer] {
         let side = interface.head == nil ? builder.base : builder.head
         guard let interfaceFile = side.files[interface.any.file] else { return [] }
-        func qualified(_ package: String?, _ name: String) -> String {
-            [package ?? "", name].filter { !$0.isEmpty }.joined(separator: ".")
-        }
         let wanted = qualified(interfaceFile.packageName, interface.any.decl.qualifiedName)
         var knownTypes = Set<String>()
         for file in builder.head.files.values where file.language == "kotlin" {
             knownTypes.formUnion(file.decls.filter(\.isContainer).map { qualified(file.packageName, $0.qualifiedName) })
-        }
-        func resolves(_ type: String, in file: ParsedFile, scope: String?) -> Bool {
-            // Explicit imports (including aliases normalized by the extractor) and qualified supertypes.
-            if type.contains("."), knownTypes.contains(type) { return type == wanted }
-            var scopes = (scope ?? "").split(separator: ".").map(String.init)
-            while !scopes.isEmpty {
-                let nested = qualified(file.packageName, (scopes + [type]).joined(separator: "."))
-                if knownTypes.contains(nested) { return nested == wanted }
-                scopes.removeLast()
-            }
-            let imports = file.imports.filter { !file.wildcardImports.contains($0.name) && $0.name.split(separator: ".").last.map(String.init) == type }
-            if !imports.isEmpty { return imports.count == 1 && imports[0].name == wanted }
-            let local = qualified(file.packageName, type)
-            if knownTypes.contains(local) { return local == wanted }
-            let stars = file.wildcardImports.map { qualified($0, type) }.filter { knownTypes.contains($0) }
-            return stars.count == 1 && stars[0] == wanted
         }
         var result: [Conformer] = []
         for path in builder.head.files.keys.sorted() {
@@ -90,7 +71,7 @@ enum KotlinStructure {
             if use == .check, component != interface.any.component, builder.edgeRefs[.head]?[component]?[interface.any.component] == nil { continue }
             for (index, declaration) in file.decls.enumerated() where declaration.isContainer {
                 let supertypes = declaration.traits.filter { $0.hasPrefix("supertype:") }.map { String($0.dropFirst("supertype:".count)) }
-                guard supertypes.contains(where: { resolves($0, in: file, scope: declaration.scope) }) else { continue }
+                guard supertypes.contains(where: { resolveType($0, in: file, scope: declaration.scope, knownTypes: knownTypes) == wanted }) else { continue }
                 let located = Located(decl: declaration, file: path, index: index, component: component)
                 var implementations: [Located] = []
                 if let member = requirement?.head?.decl {
@@ -104,6 +85,28 @@ enum KotlinStructure {
             }
         }
         return result
+    }
+
+    static func qualified(_ package: String?, _ name: String) -> String {
+        [package ?? "", name].filter { !$0.isEmpty }.joined(separator: ".")
+    }
+
+    /// Resolves only explicit source names, keeping unrelated packages and nested types distinct.
+    static func resolveType(_ type: String, in file: ParsedFile, scope: String?, knownTypes: Set<String>) -> String? {
+        // Import aliases are normalized in the extractor's supertype traits.
+        if type.contains("."), knownTypes.contains(type) { return type }
+        var scopes = (scope ?? "").split(separator: ".").map(String.init)
+        while !scopes.isEmpty {
+            let nested = qualified(file.packageName, (scopes + [type]).joined(separator: "."))
+            if knownTypes.contains(nested) { return nested }
+            scopes.removeLast()
+        }
+        // Explicit bindings were already expanded, including aliases. The raw import list cannot
+        // distinguish `import p.State` from `import p.State as Other`, so do not rebind simple names here.
+        let local = qualified(file.packageName, type)
+        if knownTypes.contains(local) { return local }
+        let stars = file.wildcardImports.map { qualified($0, type) }.filter { knownTypes.contains($0) }
+        return stars.count == 1 ? stars[0] : nil
     }
 
     static func isViewCode(_ declaration: Declaration, inherits: Set<String>) -> Bool {

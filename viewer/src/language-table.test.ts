@@ -86,6 +86,7 @@ describe("viewer language table", () => {
       expect(kindLabel({ ...item, kind: "class", signature: { base: signature } })).toBe("object");
     }
     expect(kindLabel({ ...item, kind: "class", signature: { head: "data class Cart(val count: Int)" } })).toBe("class");
+    expect(kindLabel({ ...item, kind: "class", signature: { head: "class Holder(val factory: Factory = object : Factory {})" } })).toBe("class");
   });
 
 });

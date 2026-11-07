@@ -31,6 +31,11 @@ final class KotlinFlagTests: XCTestCase {
         }
         XCTAssertFalse(try flags("Hidden.secret()").contains("kotlin:api-signature-changed"))
         XCTAssertFalse(try flags("defaultText()").contains("kotlin:nullability-changed"), "question marks in default strings are not type nullability")
+        XCTAssertTrue(try flags("Left.State").contains("kotlin:sealed-subclass-removed"))
+        XCTAssertFalse(try flags("Left.State").contains("kotlin:sealed-subclass-added"), "the added classes inherit Right.State")
+        XCTAssertTrue(try flags("Right.State").contains("kotlin:sealed-subclass-added"))
+        XCTAssertFalse(try flags("Right.State").contains("kotlin:sealed-subclass-removed"), "the removed class inherited Left.State")
+        XCTAssertTrue(try flags("AddedViaAlias").contains("kotlin:sealed-subclass-added"))
         let settings = try XCTUnwrap(report.reviewItems.first { $0.kind == .target })
         XCTAssertEqual(Set(settings.contractFlags), ["kotlin:min-sdk-changed", "kotlin:target-sdk-changed", "kotlin:compile-sdk-changed", "kotlin:jvm-target-changed", "kotlin:kotlin-version-changed"])
     }

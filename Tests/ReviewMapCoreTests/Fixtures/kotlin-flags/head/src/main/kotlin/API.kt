@@ -1,4 +1,5 @@
 package example
+import example.Right.State as RightState
 
 fun added(): String = "new"
 fun signature(value: Int): String = value.toString()
@@ -30,3 +31,7 @@ class Visibility {
     internal fun becomesInternal() {}
 }
 fun defaultText(value: String = "!"): String = value
+class Left { sealed class State }
+class Right { sealed class State }
+class AddedRight : Right.State()
+class AddedViaAlias : RightState()
