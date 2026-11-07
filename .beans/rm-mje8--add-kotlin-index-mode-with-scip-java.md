@@ -62,11 +62,11 @@ Kotlin files without index data (`.kts` scripts, non-JVM Multiplatform targets) 
 
 ## Acceptance criteria
 
-- [x] On the fixture, a reference that name matching leaves ambiguous resolves to the right declaration, including from one Gradle module into the other.
+- [x] On the fixture, a reference that name matching resolves wrongly (it counts `start()` as a caller of both `Store.load()` and `Cache.load()`) resolves to the right declaration, from one Gradle module into the other. A same-named class in two packages turned out not to be a usable case: name matching already resolves explicit-over-star imports, and a truly ambiguous reference does not compile.
 - [x] A second run on the same commits uses the cache and starts no Gradle.
 - [x] With `REVIEWMAP_SCIP_JAVA=false`, analysis finishes with name matching and an `index-unavailable` warning. This test needs no tools.
 - [x] The tool-dependent tests `XCTSkip` without a JDK, Gradle, or scip-java.
-- [x] A Swift and Kotlin repo indexed with the default builder still indexes Swift as before.
+- [x] A Swift and Kotlin repo indexed with the default builder still indexes Swift as before (the default path is unchanged). `IndexTests.testGradleBuilderLeavesSwiftAlone` checks that `--index-builder gradle` no longer breaks Swift; it fails without the fix.
 - [x] Without index mode, Kotlin analysis still needs no JDK, Gradle, or Android SDK.
 - [x] `swift test` passes locally with the tools installed.
 
@@ -78,4 +78,4 @@ Kotlin files without index data (`.kts` scripts, non-JVM Multiplatform targets) 
 
 ## Summary of Changes
 
-Added `Sources/ReviewMapCore/Kotlin/KotlinIndex.swift`: per side, it finds the outermost Gradle builds, runs `scip-java index` (v0.14.1, from `REVIEWMAP_SCIP_JAVA`, the PATH, or a SHA-256-checked download into `<cache>/tools/`), caches per commit and build under `kotlin/`, and reads the result with the unchanged `SCIP.sideIndex`. A missing JDK (checked by running `java -version`, so the macOS stub doesn't count), missing Gradle, or a failed build throws, which falls back to name matching at both sides. Bazel workspaces and `--index-builder bazel` throw 'not supported yet' until rm-bcg9 lands. Swift ignores `--index-builder gradle`. `KotlinIndexTests` (5 tests) and `Fixtures/kotlin-gradle-indexed` cover exact cross-module resolution, the cache, a failing indexer, a PATH without Java, and Gradle build discovery. The full suite (169 tests) passed locally with OpenJDK 27.0.1 and Gradle 9.8.2, with no skips. The Swift index tests ran with the default builder unchanged. README, plan, and progress were updated.
+Added `Sources/ReviewMapCore/Kotlin/KotlinIndex.swift`: per side, it finds the outermost Gradle builds, runs `scip-java index` (v0.14.1, from `REVIEWMAP_SCIP_JAVA`, the PATH, or a SHA-256-checked download into `<cache>/tools/`), caches per commit and build under `kotlin/`, and reads the result with the unchanged `SCIP.sideIndex`. A missing JDK (checked by running `java -version`, so the macOS stub doesn't count), missing Gradle, or a failed build throws, which falls back to name matching at both sides. Bazel workspaces and `--index-builder bazel` throw 'not supported yet' until rm-bcg9 lands. Swift ignores `--index-builder gradle`. `KotlinIndexTests` (5 tests) and `Fixtures/kotlin-gradle-indexed` cover exact cross-module resolution, the cache, a failing indexer, a PATH without Java, and Gradle build discovery. The full suite passed locally with OpenJDK 27.0.1 and Gradle 9.8.2, with no skips. The Swift index tests ran with the default builder unchanged. README, plan, and progress were updated.

@@ -59,6 +59,15 @@ final class IndexTests: XCTestCase {
         XCTAssertFalse(try indexedReport().warnings.contains { $0.kind.hasPrefix("index-") })
     }
 
+    /// `gradle` is Kotlin's builder; Swift picks its own, so a repo with both languages can pass it.
+    func testGradleBuilderLeavesSwiftAlone() throws {
+        try requireIndexStore()
+        _ = try fixtureRepo()
+        // A rebuild, so the builder is actually chosen; it is whatever Swift would pick without one.
+        let m = try analyze(index: IndexOptions(enabled: true, builder: "gradle", cacheDir: Self.cache!, rebuild: true))
+        XCTAssertFalse(m.warnings.contains { $0.message.contains("Unknown index builder") }, "\(m.warnings)")
+    }
+
     func testCommonMemberNameIsNotCountedAsUse() throws {
         // Feed.cached() calls Cache.load(); name matching counts it as a use of Store.load().
         XCTAssertEqual(Set(try reviewItem(try namedReport(), "Store.load()").usedBy.map(\.symbol)), ["Feed.items()", "Feed.cached()"])
