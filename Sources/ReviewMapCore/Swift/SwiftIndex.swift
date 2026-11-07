@@ -240,8 +240,10 @@ enum IndexBuilder {
                 guard let out = values["output_path"] else { return (nil, []) }
                 // The execution root mirrors the Bazel workspace, which may be a subdirectory of the repo.
                 let roots = values["execution_root"].map { ["\($0)\t\(workspace == "." ? "" : workspace)"] } ?? []
-                if let global = IndexBuilder.findStore(out + "/_global_index_store") { return (global, roots) }
-                return (IndexBuilder.mergeStores(under: out, into: scratch + "/merged-store"), roots)
+                // A mixed cache-hit build populates the global store only for actions that ran.
+                // Merge it with declared artifacts so cached dependencies remain indexed too.
+                let global = IndexBuilder.findStore(out + "/_global_index_store")
+                return (IndexBuilder.mergeStores(under: out, into: scratch + "/merged-store", including: global) ?? global, roots)
             }
             let cleanup = { _ = try? Shell.run(startup + ["clean", "--expunge"], cwd: dir) }
             let summary = "\(exe) build \(targets.joined(separator: " "))\(workspace == "." ? "" : " in \(workspace)")"
@@ -341,9 +343,9 @@ enum IndexBuilder {
         return nil
     }
 
-    /// Per-target `.indexstore` directories (rules_swift without a global store) copied into one store.
+    /// Per-target `.indexstore` directories plus any global compiler store, copied into one store.
     /// Unit and record file names are content hashes, so stores merge by copying.
-    static func mergeStores(under root: String, into dest: String) -> String? {
+    static func mergeStores(under root: String, into dest: String, including global: String? = nil) -> String? {
         let fm = FileManager.default
         guard let e = fm.enumerator(atPath: root) else { return nil }
         var stores: [String] = []
@@ -353,6 +355,7 @@ enum IndexBuilder {
                 e.skipDescendants()
             }
         }
+        if let global { stores.append(global) }
         var merged = false
         for store in stores {
             for version in ["v5", "v6"] {

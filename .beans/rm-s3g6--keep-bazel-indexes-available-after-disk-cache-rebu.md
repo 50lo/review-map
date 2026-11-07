@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:15:07Z
+updated_at: 2026-11-07T12:22:14Z
 ---
 
 ## Problem
@@ -50,6 +50,8 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: analyze-ab
 - [x] Preserve previously valid cached stores when a rebuild fails.
 - [x] Add a regression exercising real or faithfully reproduced Bazel cache outputs, including invocation from a platform subdirectory.
 
+- [x] Mixed cache-hit/compiler-execution builds retain indexed references from every compiled module.
+
 ## Summary of Changes
 
 - Reproduced the real cached build with 25 disk-cache hits: the global store was absent and `ios_app.indexstore` existed without materialized units/records. The existing merge logic recognized the layout correctly; no usable files had been downloaded.
@@ -58,3 +60,10 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: analyze-ab
 - Reworked the fake Bazel integration fixture to compile real remapped units per module and model selective cached-output materialization. Regression coverage compares exact references for both commits, review items, and regions across cold builds, cached-store reuse, forced disk-cache rebuilds, failed builds, and successful builds with missing index artifacts. Cleanup assertions now inspect only the test's own output bases.
 - Validation: 14 Swift index regression tests passed. The real synthetic monorepo cold root build, ios/ cache reuse, and android/ and root forced rebuilds preserve index resolution, all ten declaration changes, Swift caller context, and zero warnings. Both commits in each forced rebuild recorded 25 disk-cache hits. Reports and build logs are in `/private/tmp/reviewmap-indexing-final-evidence/`.
 - The original synthetic fixture and its existing caches/artifacts remain unchanged. The separately assigned Kotlin caller-context fix is not part of this commit.
+
+### Mixed-cache review follow-up
+
+- Reproduced the partial-global-store case with a warm two-module Bazel fixture, an app-only source edit, and a fresh output base. The build recorded 24 disk-cache hits and one Swift compiler execution; its global store contained only `Screen.swift`, while the downloaded dependency store contained `Greeting.swift`. The previous global-first return ignored the dependency.
+- Merge declared stores and the global store together, retaining support for global-only output. Declared units take precedence when both sources contain the same unit filename.
+- The integration fixture now caches modules independently and populates its global store only for compiler executions. It verifies all compiled files on both sides, explicitly forces mixed app/dependency cache results, compares exact references and caller/definition regions, and checks global-only output and retained caches after failures. The new coverage failed against the old selector, then all 14 index tests passed after the fix.
+- Real analyzer verification: the new app commit had 24 disk-cache hits plus one Swift compiler execution, and the base had 26 disk-cache hits. Both saved stores contain both source units, resolution remains `index`, and the app receives definition context for the cached dependency's `greeting(name:prefix:)`. No index warnings occurred. The fixture still has its unrelated `unresolved-import` warning because module `Greetings` is not represented by a discovered component. Evidence: `/private/tmp/reviewmap-indexing-mixed-validation.json`, `/private/tmp/reviewmap-indexing-mixed-analysis.json`, and `/private/tmp/reviewmap-indexing-mixed-after.log`.

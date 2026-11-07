@@ -265,7 +265,7 @@ final class IndexBazelTests: XCTestCase {
     #!/bin/sh
     # Model rules_swift's declared outputs and Bazel's selective cache materialization.
     # Cache actual remapped compiler units, so a new export can restore them without compiling.
-    ob=""; cmd=""; cache=""; indexes=no; transitive=no; missing=no; fail=no
+    ob=""; cmd=""; cache=""; indexes=no; transitive=no; missing=no; fail=no; globalOnly=no
     for a in "$@"; do
       case "$a" in
         --output_base=*) ob="${a#--output_base=}" ;;
@@ -274,6 +274,7 @@ final class IndexBazelTests: XCTestCase {
         --remote_download_regex=*) transitive=yes ;;
         --fake-missing-index) missing=yes ;;
         --fake-fail) fail=yes ;;
+        --fake-global-only) globalOnly=yes ;;
         build|info|clean) [ -z "$cmd" ] && cmd="$a" ;;
       esac
     done
@@ -284,28 +285,36 @@ final class IndexBazelTests: XCTestCase {
         target="$ob/out/config/bin/Feed.indexstore"
         mkdir -p "$target"
         [ "$missing" = yes ] && exit 0
-        key=$(find Sources -name '*.swift' -exec cat {} + | shasum | cut -d ' ' -f 1)
-        cached="$cache/$key"
-        if [ -d "$cached" ]; then
-          echo 'disk cache hit' >&2
-          # A cache hit does not recreate the global store, and unrequested outputs
-          # are not materialized by Bazel's default toplevel download policy.
-        else
-          mkdir -p "$ob/modules" "$cache"
-          for module in Storage Cache Settings Feed; do
+        mkdir -p "$ob/modules" "$cache"
+        for module in Storage Cache Settings Feed; do
+          inputs="Sources/$module"
+          [ "$module" = Feed ] && inputs=Sources
+          key=$(find "$inputs" -name '*.swift' -exec cat {} + | shasum | cut -d ' ' -f 1)
+          cached="$cache/$module-$key"
+          if [ -d "$cached" ]; then
+            echo "disk cache hit: $module" >&2
+          else
+            echo "compiling: $module" >&2
             swiftc -emit-module -module-name "$module" -I "$ob/modules" \
               -emit-module-path "$ob/modules/$module.swiftmodule" \
               -index-store-path "$ob/compiler-index/$module.indexstore" -file-prefix-map "$(pwd -P)=." \
               Sources/"$module"/*.swift >&2 || exit 1
-          done
-          cp -R "$ob/compiler-index" "$cached"
-        fi
-        if [ "$indexes" = yes ]; then cp -R "$cached/Feed.indexstore/." "$target/"; fi
-        if [ "$transitive" = yes ]; then
-          for module in Storage Cache Settings; do
-            cp -R "$cached/$module.indexstore" "$ob/out/config/bin/$module.indexstore"
-          done
-        fi ;;
+            mkdir -p "$cached" "$ob/out/_global_index_store"
+            cp "$ob/modules/$module.swiftmodule" "$cached/"
+            cp -R "$ob/compiler-index/$module.indexstore" "$cached/store"
+            # Only compiler executions populate the global side effect.
+            cp -R "$cached/store/." "$ob/out/_global_index_store/"
+          fi
+          cp "$cached/$module.swiftmodule" "$ob/modules/"
+          if [ "$globalOnly" = yes ]; then
+            mkdir -p "$ob/out/_global_index_store"
+            cp -R "$cached/store/." "$ob/out/_global_index_store/"
+          elif [ "$module" = Feed ] && [ "$indexes" = yes ]; then
+            cp -R "$cached/store/." "$target/"
+          elif [ "$module" != Feed ] && [ "$transitive" = yes ]; then
+            cp -R "$cached/store" "$ob/out/config/bin/$module.indexstore"
+          fi
+        done ;;
       info) echo "output_path: $ob/out"; echo "execution_root: $PWD" ;;
       clean) rm -rf "$ob" ;;
     esac
@@ -398,6 +407,7 @@ final class IndexBazelTests: XCTestCase {
         let originalRefs = try references()
         XCTAssertEqual(originalRefs.count, 2)
         for refs in originalRefs.values {
+            XCTAssertEqual(Set(refs.keys), Set(files), "Both sides must cover every compiled module")
             let feed = (subdir.isEmpty ? "" : subdir + "/") + "Sources/Feed/Feed.swift"
             XCTAssertTrue(try XCTUnwrap(refs[feed]).contains { $0.name == "load()" && $0.targetFile.hasSuffix("Sources/Storage/Store.swift") })
         }
@@ -414,6 +424,26 @@ final class IndexBazelTests: XCTestCase {
         for path in logs {
             XCTAssertTrue(try String(contentsOfFile: cache + "/" + path, encoding: .utf8).contains("disk cache hit"))
         }
+        // Evict only the app's action results: dependency stores come from cache, while the
+        // freshly compiled app creates a partial global store. Both sides must remain complete.
+        for entry in try fm.contentsOfDirectory(atPath: cache + "/.bazel-disk-cache") where entry.hasPrefix("Feed-") {
+            try fm.removeItem(atPath: cache + "/.bazel-disk-cache/" + entry)
+        }
+        let mixed = try analyze(rebuild: true)
+        XCTAssertEqual(mixed.analyzer.resolution, "index", "\(mixed.warnings)")
+        XCTAssertEqual(mixed.reviewItems, m.reviewItems)
+        XCTAssertEqual(mixed.regions, m.regions)
+        XCTAssertEqual(try references(), originalRefs)
+        for path in logs {
+            let text = try String(contentsOfFile: cache + "/" + path, encoding: .utf8)
+            XCTAssertTrue(text.contains("compiling: Feed"))
+            XCTAssertTrue(text.contains("disk cache hit: Storage"))
+        }
+        // Older/custom builds may expose only the global store.
+        let globalOnly = try analyze(rebuild: true, args: ["--fake-global-only"])
+        XCTAssertEqual(globalOnly.analyzer.resolution, "index", "\(globalOnly.warnings)")
+        XCTAssertEqual(globalOnly.reviewItems, m.reviewItems)
+        XCTAssertEqual(try references(), originalRefs)
         // Neither an unsuccessful action nor a successful action with empty index outputs
         // may replace the previously usable stores (including their source-root mappings).
         for args in [["--fake-fail"], ["--fake-missing-index"]] {
