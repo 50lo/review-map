@@ -1,11 +1,11 @@
 ---
 # rm-lnvs
 title: Parse Rust declarations and references
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:50:00Z
+updated_at: 2026-11-06T21:13:40Z
 parent: rm-wa33
 ---
 
@@ -18,9 +18,15 @@ Add tree-sitter-rust and a `RustLanguage` with its extractor.
 - References: `use` trees (`crate::`, `super::`, `self::`, external crates, globs, renames) resolved to a file through the module tree (`mod foo;` -> `foo.rs` or `foo/mod.rs`, and `#[path]`), plus qualified paths in code. `NameRef.source` and `NameRef.module` are filled as for TypeScript.
 
 ## Acceptance criteria
-- [ ] A Rust fixture pair under Tests/ReviewMapCoreTests/Fixtures/rust parses into the expected declarations, kinds, scopes, and access.
-- [ ] Changes are classified as for the other languages.
-- [ ] Other languages' fixture results are unchanged.
+- [x] A Rust fixture pair under Tests/ReviewMapCoreTests/Fixtures/rust parses into the expected declarations, kinds, scopes, and access.
+- [x] Changes are classified as for the other languages.
+- [x] Other languages' fixture results are unchanged.
 
 ## Constraints
 Follow the TypeScript implementation in Sources/ReviewMapCore/TypeScript/ and its tests as the pattern.
+
+## Summary of Changes
+
+Added tree-sitter-rust 0.24.2, Rust declarations and references, per-side module-tree resolution, generated path patterns, and language registration. Covers visibility and inline module privacy, scoped aliases and globs, explicit module paths, distinct trait implementation identities, tuple payload signatures, and OUT_DIR includes without hiding handwritten code.
+
+Validation: six Rust tests passed, including fixture change classification; Swift, TypeScript, and Go snapshots unchanged. Independent review fixes verified. Statute check and git diff --check passed; no linked rules or terms affected.

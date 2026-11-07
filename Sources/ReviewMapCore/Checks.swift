@@ -19,14 +19,15 @@ private struct Occurrence {
 /// Identifier occurrences per side, built on first use.
 private final class WordIndex {
     private var words: [String: [(file: Int, line: Int32)]] = [:]
-    private var files: [(path: String, isTest: Bool)] = []
+    private var files: [(path: String, isTest: Bool, testLines: [ClosedRange<Int>])] = []
 
     init(_ data: SideData) {
         for path in data.files.keys.sorted() where !data.generated.contains(path) {
             guard let text = try? String(contentsOfFile: data.dir + "/" + path, encoding: .utf8) else { continue }
             let comp = data.layout.fileComponent[path].flatMap { data.layout.components[$0] }
             let fi = files.count
-            files.append((path, comp?.isTest == true || ComponentBuilder.isTestPath(path)))
+            files.append((path, comp?.isTest == true || ComponentBuilder.isTestPath(path),
+                          data.files[path]?.decls.filter { $0.traits.contains("test") }.map { $0.startLine...$0.endLine } ?? []))
             var line: Int32 = 1
             var word: [UInt8] = []
             func flush() {
@@ -52,7 +53,10 @@ private final class WordIndex {
     }
 
     func occurrences(_ name: String) -> [Occurrence] {
-        (words[name] ?? []).map { Occurrence(file: files[$0.file].path, line: Int($0.line), isTest: files[$0.file].isTest) }
+        (words[name] ?? []).map { occurrence in
+            let file = files[occurrence.file]
+            return Occurrence(file: file.path, line: Int(occurrence.line), isTest: file.isTest || file.testLines.contains { $0.contains(Int(occurrence.line)) })
+        }
     }
 }
 
@@ -86,7 +90,7 @@ struct StructuralChecks {
                 let isTest = comp?.isTest == true || ComponentBuilder.isTestPath(path)
                 for r in list {
                     guard let t = b.declAt(s, file: r.targetFile, line: r.targetLine, name: r.name) else { continue }
-                    map[DeclKey(side: s, file: r.targetFile, index: t.index), default: []].append(Occurrence(file: path, line: r.line, isTest: isTest))
+                    map[DeclKey(side: s, file: r.targetFile, index: t.index), default: []].append(Occurrence(file: path, line: r.line, isTest: isTest || data.files[path]?.enclosingDecl(line: r.line)?.traits.contains("test") == true))
                 }
             }
             idx[s] = map
@@ -128,7 +132,7 @@ struct StructuralChecks {
     }
 
     private func isLow(_ l: Located, _ s: Side) -> Bool {
-        b.side(s).layout.components[l.component]?.isTest == true || ComponentBuilder.isTestPath(l.file) || b.side(s).generated.contains(l.file)
+        l.decl.traits.contains("test") || b.side(s).layout.components[l.component]?.isTest == true || ComponentBuilder.isTestPath(l.file) || b.side(s).generated.contains(l.file)
     }
 
     private func decl(_ s: Side, _ file: String, _ i: Int?) -> Declaration? {

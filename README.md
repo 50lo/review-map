@@ -1,10 +1,10 @@
 # Review Map
 
-A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, and Go; Rust and Kotlin are planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
+A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, Go, and Rust; Kotlin is planned. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
 
 ## Run it
 
-Requires the Swift 6.2 toolchain (Xcode 26) on macOS, Node 20 or later for the viewer and for TypeScript index mode, Go 1.22 or later for Go index mode, and git. The analyzer also builds and runs on Linux.
+Requires the Swift 6.2 toolchain (Xcode 26) on macOS, Node 20 or later for the viewer and for TypeScript index mode, Go 1.22 or later for Go index mode, a Rust toolchain with rust-analyzer and rust-src for Rust index mode, and git. The analyzer also builds and runs on Linux.
 
 ```sh
 git clone https://github.com/50lo/review-map.git
@@ -117,6 +117,12 @@ Name matching is fast and needs no build, but it guesses: a common member name (
 - **Dependencies**: `go mod download` in each module of each side's exported tree. If it fails, indexing goes on without third-party types, with an `index-partial` warning.
 - **Indexing**: scip-go type-checks each module (`./...`) and writes a SCIP index. Nothing is built. scip-go runs from the `PATH`, or is installed once with `go install github.com/scip-code/scip-go/cmd/scip-go@v0.2.9` into `~/.reviewmap/index/tools/`. `REVIEWMAP_SCIP_GO` names another command to run in its place. Without the Go toolchain, Go is matched by name, with an `index-unavailable` warning.
 - **Cache**: the indexes are kept per repo, commit, and module in `~/.reviewmap/index/<repo>/<sha>/go/`, each with its log. `--rebuild-index` indexes again.
+
+### Rust
+
+- **Name matching**: Cargo manifests and lockfiles are read directly; Cargo is not required. Workspace crates, library and binary targets, test components, dependency pins, and build settings appear in the map. Rust contracts include public API, trait requirements, enum variants, serde shapes, async and Send/Sync bounds, and visibility changes.
+- **Indexing**: install the components with `rustup component add rust-analyzer rust-src`. Each side runs `cargo metadata` and `rust-analyzer scip` on its outermost Cargo workspaces. rust-analyzer runs build scripts and loads proc macros in the exported commit tree. `REVIEWMAP_RUST_ANALYZER` names another executable. Missing tools or an indexer failure fall back to name matching at both sides; recoverable dependency, build-script, macro, and symbol failures retain available references with an `index-partial` warning.
+- **Cache**: indexes and logs are kept per repo, commit, and workspace under `~/.reviewmap/index/<repo>/<sha>/rust/`. `--rebuild-index` indexes again. Syntax-only analysis does not expand macros or trace file-module visibility; index mode supplies compiler-resolved references where available.
 
 ### All languages
 

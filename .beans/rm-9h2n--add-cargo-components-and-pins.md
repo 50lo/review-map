@@ -1,11 +1,11 @@
 ---
 # rm-9h2n
 title: Add Cargo components and pins
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T08:00:00Z
+updated_at: 2026-11-06T21:23:09Z
 parent: rm-wa33
 ---
 
@@ -18,5 +18,11 @@ parent: rm-wa33
 - Settings: features, `edition`, `rust-version`, and `[profile]` changes.
 
 ## Acceptance criteria
-- [ ] A workspace fixture with two crates and a binary produces the expected components, test components, and edges.
-- [ ] Third-party crates are external dependencies with their pinned versions.
+- [x] A workspace fixture with two crates and a binary produces the expected components, test components, and edges.
+- [x] Third-party crates are external dependencies with their pinned versions.
+
+## Summary of Changes
+
+Added Cargo library/binary/test components, TOMLDecoder 0.4.5 (no default package dependencies), workspace membership/excludes, module-based binary file ownership, dependency aliases scoped to importing components, inherited dependency pins and build settings. Inline cfg(test) declarations remain in their crate and are classified as tests by checks and review items. Binary target names do not shadow external dependencies.
+
+Validation: three Cargo component tests pass, including the workspace fixture, renamed dependencies, inherited settings, test edges, excluded files and binary-only dependency collision. Swift, TypeScript and Go snapshots remain unchanged. Independent review fixes and the Crossbeam binary collision regression verified. Statute and diff checks pass.
