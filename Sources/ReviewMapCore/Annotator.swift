@@ -818,6 +818,9 @@ struct CLIRunner: @unchecked Sendable {
         p.standardInput = inPipe
         p.standardOutput = outPipe
         p.standardError = errPipe
+        // A run-loop wait (waitUntilExit) on a dispatch thread can miss the exit on macOS and hang; the handler doesn't.
+        let done = DispatchSemaphore(value: 0)
+        p.terminationHandler = { _ in done.signal() }
         try p.run()
         final class Box: @unchecked Sendable { var data = Data() }
         let outBox = Box(), errBox = Box()
@@ -836,11 +839,6 @@ struct CLIRunner: @unchecked Sendable {
             // A CLI that exits without reading its input must not take the analyzer down with SIGPIPE.
             try? inPipe.fileHandleForWriting.write(contentsOf: stdin)
             try? inPipe.fileHandleForWriting.close()
-        }
-        let done = DispatchSemaphore(value: 0)
-        DispatchQueue.global().async {
-            p.waitUntilExit()
-            done.signal()
         }
         var timedOut = false
         if done.wait(timeout: .now() + timeout) == .timedOut {
