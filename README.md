@@ -4,7 +4,7 @@ A code review tool that shows a change as structure (components, dependency edge
 
 ## Run it
 
-The install script requires Bazel (Bazelisk is recommended), the Swift 6.2 toolchain (full Xcode 26 on macOS), Node 20 or later, and git. You can also install manually with SwiftPM without Bazel, as described below. Go 1.22 or later is needed for Go index mode, and a Rust toolchain with rust-analyzer and rust-src for Rust index mode. The analyzer also builds and runs on Linux with SwiftPM; the Bazel build on Linux is unverified.
+The install script requires Bazel (Bazelisk is recommended), the Swift 6.2 toolchain (full Xcode 26 on macOS), Node 20 or later, and git. You can also install manually with SwiftPM without Bazel, as described below. Go 1.22 or later is needed for Go index mode, a Rust toolchain with rust-analyzer and rust-src for Rust index mode, and a JDK 17 or newer with Gradle for Kotlin index mode. The analyzer also builds and runs on Linux with SwiftPM; the Bazel build on Linux is unverified.
 
 ```sh
 git clone https://github.com/50lo/review-map.git
@@ -72,7 +72,7 @@ The subcommands do one step each: `reviewmap analyze` only writes the change rep
 | `--description <file>` | The change's description for the structural review, or `-` for stdin. Default: the PR of the head branch from `gh pr view`, else the commit messages. |
 | `--no-review` | Skip the LLM's structural review of the whole change. |
 | `--index`, `--no-index` | Resolve references exactly from each language's index (see Index mode). Default: `index.enabled` in `reviewmap.yml`, else off. |
-| `--index-builder <b>` | Swift: `bazel`, `xcodebuild`, or `swift` (default: `bazel` for a Bazel workspace with targets, else `xcodebuild` where it exists, else `swift build`). |
+| `--index-builder <b>` | Swift: `bazel`, `xcodebuild`, or `swift` (default: `bazel` for a Bazel workspace with targets, else `xcodebuild` where it exists, else `swift build`). Kotlin: `gradle` (default where there is a Gradle build) or `bazel` (not supported yet). |
 | `--index-target <label>` | Swift: Bazel target to build; repeat for several (default: `top_level_targets` of the repo's rules_xcodeproj `xcodeproj` rule). |
 | `--index-project <path>` | Swift: the `.xcworkspace`, `.xcodeproj`, or package directory to build: relative to the current directory or the repo root, or absolute. |
 | `--index-scheme <name>` | Swift: xcodebuild scheme (default: the only one, the one named after the project, or a package's `-Package` scheme). |
@@ -136,7 +136,9 @@ Name matching is fast and needs no build, but it guesses: a common member name (
 
 ### Kotlin
 
-- **Name matching only**: `.kt` and `.kts` sources are parsed with tree-sitter. Gradle scripts are read as text; Java, Gradle, and an Android SDK are not required. Java source files are not parsed, and Kotlin index mode is deferred.
+- **Name matching**: `.kt` and `.kts` sources are parsed with tree-sitter. Gradle scripts are read as text; Java, Gradle, and an Android SDK are not required. Java source files are not parsed.
+- **Indexing** (Gradle builds): needs a JDK 17 or newer (`java` on the `PATH`) and Gradle (the build's `gradlew`, or `gradle` on the `PATH`). Each side's outermost Gradle builds (directories with a `settings.gradle(.kts)`, or else a `build.gradle(.kts)`) are compiled and indexed by `scip-java index`, which runs `clean` and the compile tasks through an init script, then indexes the Kotlin sources with the Kotlin Analysis API. That is a full build per side, and it runs the repo's Gradle scripts, unlike TypeScript's install with scripts off. scip-java runs from the `PATH`, or its v0.14.1 release launcher (85 MB) is downloaded once, checked against its SHA-256, into `~/.reviewmap/index/tools/`. `REVIEWMAP_SCIP_JAVA` names another command. A missing JDK or Gradle, a compile error, or an Android module without the Android SDK falls back to name matching at both sides with an `index-unavailable` warning. `--index-builder gradle` is accepted and ignored by Swift. Bazel Kotlin is not indexed yet.
+- **Cache**: indexes and logs are kept per repo, commit, and Gradle build under `~/.reviewmap/index/<repo>/<sha>/kotlin/`. `--rebuild-index` indexes again.
 - **Components and references**: literal Gradle module includes, project-directory overrides, JVM/Android/Multiplatform source sets, and declared dependencies form the map. Version catalog aliases contribute dependencies only when a build script uses them; versions are requested versions, not resolved pins. Kotlin packages stay separate from Gradle modules. Explicit, aliased, star, and same-package references are matched within their packages; ambiguous names are reported without choosing a target.
 - **Contracts and review**: public API, nullability, suspend, data-class and serialized/persisted shapes, sealed subclasses, enum entries, visibility, and inheritance modifiers have contract flags. Android manifest permissions, exported components, intent filters, SDK levels, JVM targets, and Kotlin versions are contracts too. Interface and abstract-class requirements feed conformance checks. Android main-thread annotations and UI classes supply isolation, overridden by the innermost explicit dispatcher block; Compose functions and Android UI classes receive view-code risk treatment.
 - **Validation**: small synthetic Gradle fixtures cover the supported behavior, including deliberate ambiguity and duplicate names across packages. They do not establish performance or reference accuracy on large Android projects. See [Step 7 notes](docs/progress.md#step-7-notes).

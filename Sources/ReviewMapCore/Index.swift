@@ -8,8 +8,9 @@ import Foundation
 public struct IndexOptions: Equatable {
     /// Nil follows `index.enabled` in reviewmap.yml.
     public var enabled: Bool?
-    /// "bazel", "xcodebuild", or "swift". Nil picks Bazel for a Bazel workspace with targets (given or from a
-    /// rules_xcodeproj rule), else xcodebuild where it exists (macOS), else swift build.
+    /// Swift: "bazel", "xcodebuild", or "swift". Nil picks Bazel for a Bazel workspace with targets (given or from a
+    /// rules_xcodeproj rule), else xcodebuild where it exists (macOS), else swift build. Kotlin: "gradle" or
+    /// "bazel"; any other value picks Gradle where there is a Gradle build. Swift ignores "gradle".
     public var builder: String?
     /// The .xcworkspace, .xcodeproj, or package directory to build: relative to the repo root, relative to
     /// `workingDirectory`, or absolute inside the repo.

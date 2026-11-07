@@ -1,10 +1,11 @@
 ---
 # rm-lnrl
 title: Kotlin index mode
-status: todo
+status: in-progress
 type: epic
+priority: normal
 created_at: 2026-11-07T22:46:17Z
-updated_at: 2026-11-07T22:46:17Z
+updated_at: 2026-11-07T23:08:29Z
 ---
 
 Give Kotlin an index mode like Go, Rust, TypeScript, and Swift already have, so `reviewmap analyze` with index mode on (`--index` or `index.enabled: true` in reviewmap.yml) gets exact Kotlin references from scip-java instead of name matching. It covers both Gradle and Bazel (rules_kotlin) builds. Today `KotlinLanguage.index` in `Sources/ReviewMapCore/Kotlin/KotlinLanguage.swift` returns nil, so same-named declarations in different packages produce `ambiguous-name` warnings, and the `unused-api`, `orphaned`, and `untested` checks rely on identifier occurrences.
