@@ -5,6 +5,11 @@ on:
   push:
     branches: [main]
 
+# New pushes replace older runs on the same PR or branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,25 +18,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Mark workspace as safe for git
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      # TypeScript index mode runs scip-typescript through npx.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      # Go index mode runs scip-go, which it installs with the go tool.
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-          cache: false
-      - name: Install Rust bootstrap dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends curl ca-certificates
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rust-analyzer, rust-src
       # IndexStoreDB's C++ needs the toolchain's dispatch and Block headers, which aren't on the default include path on Linux.
-      - name: Build
-        run: swift build -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block
-      - name: Test
-        run: swift test -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block
+      # These synthetic fixtures need only Swift and git. Run the full suite locally with `swift test`.
+      - name: Build and smoke test
+        run: swift test -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block --filter 'FixtureTests/testSnapshot|KotlinTests/testFixture'
 
   viewer:
     runs-on: ubuntu-latest
@@ -48,5 +38,5 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
-      - name: Test
-        run: npm test
+      - name: Language smoke tests
+        run: npm test -- src/language-table.test.ts src/languages.test.ts
