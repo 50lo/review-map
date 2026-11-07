@@ -31,6 +31,17 @@ describe("componentLanguages", () => {
     expect(languages.get("dependency")).toEqual(["rust"]);
   });
 
+  it("marks Gradle modules, their tests, and external dependencies as Kotlin", () => {
+    const report = validate({
+      components: [component("app", "gradleModule"), component("tests", "folder", "app"), component("library", "external")],
+      edges: [{ from: "app", to: "library", refs: [{ file: "app/build.gradle.kts" }] }],
+    });
+    const languages = componentLanguages(report);
+    expect(languages.get("app")).toEqual(["kotlin"]);
+    expect(languages.get("tests")).toEqual(["kotlin"]);
+    expect(languages.get("library")).toEqual(["kotlin"]);
+  });
+
   it("uses all retained references, including removed edges, without changing the callee's language", () => {
     const report = validate({
       components: [component("swift", "spmTarget"), component("ts", "npmPackage"), component("ext", "external")],

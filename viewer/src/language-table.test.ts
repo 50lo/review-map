@@ -28,12 +28,17 @@ describe("viewer language table", () => {
     ["bun.lock", "typescript"], ["bun.lockb", "typescript"],
     ["Cargo.toml", "rust"], ["crates/core/Cargo.lock", "rust"], ["not-Cargo.toml", undefined],
     ["go.mod", "go"], ["tools/go.sum", "go"], ["go.work", "go"],
+    ["settings.gradle", "kotlin"], ["settings.gradle.kts", "kotlin"],
+    ["app/build.gradle", "kotlin"], ["app/build.gradle.kts", "kotlin"],
+    ["gradle/libs.versions.toml", "kotlin"], ["app/src/main/AndroidManifest.xml", "kotlin"],
+    ["not-build.gradle", undefined], ["other.versions.toml", undefined],
     ["not-package.json", undefined], ["not-tsconfig.json", undefined],
     ["src/file.js", undefined], ["src/file.TS", undefined], ["README.md", undefined],
   ])("keeps ecosystem detection for %s", (file, expected) => {
     expect(languageOfPath(file)).toBe(expected);
-    // Manifests indicate an ecosystem but are not source code to highlight.
-    if (!file.endsWith(".swift")) expect(languageOf(file)).toBeUndefined();
+    // Kotlin Gradle scripts have Kotlin syntax; other manifests use plain text.
+    if (file.endsWith(".kts")) expect(languageOf(file)).toBe("kotlin");
+    else if (!file.endsWith(".swift")) expect(languageOf(file)).toBeUndefined();
   });
 
   it("keeps language kind names and TypeScript's property/variable distinction", () => {
@@ -69,6 +74,18 @@ describe("viewer language table", () => {
       expect(kindLabel({ ...item, kind: "extension", signature: { base: signature } })).toBe("mod");
     }
     expect(kindLabel({ ...item, kind: "extension", signature: { head: "impl Service for Store" } })).toBe("impl");
+  });
+
+  it("names Kotlin declarations, including removed and companion objects", () => {
+    const item = validate({ components: [], edges: [], reviewItems: [{ kind: "protocol", location: { file: "src/API.kt" } }] }).reviewItems[0];
+    for (const [kind, label] of Object.entries({ protocol: "interface", func: "fun", var: "property", case: "entry", typealias: "typealias" })) {
+      expect(kindLabel({ ...item, kind })).toBe(label);
+    }
+    for (const signature of ["object Cache", "companion object", "companion object Factory", "data object Ready"]) {
+      expect(kindLabel({ ...item, kind: "class", signature: { head: signature } })).toBe("object");
+      expect(kindLabel({ ...item, kind: "class", signature: { base: signature } })).toBe("object");
+    }
+    expect(kindLabel({ ...item, kind: "class", signature: { head: "data class Cart(val count: Int)" } })).toBe("class");
   });
 
 });

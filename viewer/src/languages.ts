@@ -4,10 +4,12 @@ import typescriptGrammar from "shiki/langs/typescript.mjs";
 import tsxGrammar from "shiki/langs/tsx.mjs";
 import goGrammar from "shiki/langs/go.mjs";
 import rustGrammar from "shiki/langs/rust.mjs";
+import kotlinGrammar from "shiki/langs/kotlin.mjs";
 import swiftIcon from "./icons/swift.svg";
 import typescriptIcon from "./icons/typescript.svg";
 import goIcon from "./icons/go.svg";
 import rustIcon from "./icons/rust.svg";
+import kotlinIcon from "./icons/kotlin.svg";
 import type { ChangeReport, ReviewItem } from "./types";
 
 interface LanguageDefinition {
@@ -77,6 +79,24 @@ export const LANGUAGES = [
       var: (reviewItem: ReviewItem) => {
         const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
         return /(?:^|\s)const\s/.test(signature) ? "const" : /(?:^|\s)static\s/.test(signature) ? "static" : "field";
+      },
+    },
+  },
+  {
+    id: "kotlin",
+    name: "Kotlin",
+    extensions: {
+      kt: { language: "kotlin", grammar: kotlinGrammar },
+      kts: { language: "kotlin", grammar: kotlinGrammar },
+    },
+    manifests: [/(?:^|\/)(?:(?:settings|build)\.gradle(?:\.kts)?|libs\.versions\.toml|AndroidManifest\.xml)$/],
+    componentKinds: ["gradleModule"],
+    icon: kotlinIcon,
+    kinds: {
+      protocol: "interface", func: "fun", var: "property", case: "entry", typealias: "typealias",
+      class: (reviewItem: ReviewItem) => {
+        const signature = reviewItem.signature?.head ?? reviewItem.signature?.base ?? "";
+        return /\bobject(?:\s|$)/.test(signature) ? "object" : "class";
       },
     },
   },
