@@ -58,7 +58,7 @@ enum KotlinExtractor {
             }
         }
         return ParsedFile(path: path, language: "kotlin", decls: walker.decls, imports: imports,
-                          typeRefs: refs, memberRefs: members, packageName: package, wildcardImports: stars)
+                          typeRefs: refs, memberRefs: members, marks: KotlinRisk.marks(root), packageName: package, wildcardImports: stars)
     }
 
     private static func qualifiedIdentifier(_ n: SyntaxNode) -> String {
@@ -130,6 +130,7 @@ private struct KotlinDeclarations {
                         inherited: inherited, headerEnd: body)
         let old = parent; parent = index
         if let constructor = first(n, "primary_constructor") {
+            decls[index].traits.insert("constructor-shape:" + constructor.tokens.canon)
             for p in constructor.namedChildren where p.type == "class_parameter" && p.children.contains(where: { $0.type == "binding_pattern_kind" }) {
                 guard let name = declarationName(p) else { continue }
                 let equals = p.tokens.first { $0.type == "=" }

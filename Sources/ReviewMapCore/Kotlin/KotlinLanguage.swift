@@ -17,11 +17,11 @@ struct KotlinLanguage: Language {
     func isPlatformModule(_ module: String) -> Bool { platformModules.contains(String(module.split(separator: ".").first ?? "")) }
     func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { KotlinComponents.pinnedPackages(blobs: blobs, dir: dir) }
     func package(ofModule module: String, pinned: Set<String>) -> String? { KotlinComponents.package(ofModule: module, pinned: pinned) }
-    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { [:] }
-    func contractFile(_ path: String) -> (key: String, flag: String)? { nil }
-    func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] { [] }
-    func settingFlag(_ key: String) -> String { "settings-changed" }
-    func flagRisk(_ flag: String, isInterface: Bool) -> Double { isInterface ? RiskWeight.high : RiskWeight.medium }
+    func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { KotlinFlags(builder, pairs: pairs).compute() }
+    func contractFile(_ path: String) -> (key: String, flag: String)? { KotlinManifest.contractFile(path) }
+    func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] { KotlinManifest.flags(basePath: basePath, headPath: headPath) }
+    func settingFlag(_ key: String) -> String { KotlinFlags.settingFlag(key) }
+    func flagRisk(_ flag: String, isInterface: Bool) -> Double { KotlinFlags.risk(flag, isInterface: isInterface) }
     func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { false }
     func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
         decl.access == "public" && enclosing.allSatisfy { $0.access == "public" }
