@@ -1,11 +1,11 @@
 ---
 # rm-s3g6
 title: Keep Bazel indexes available after disk-cache rebuilds
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T11:53:57Z
+updated_at: 2026-11-07T12:15:07Z
 ---
 
 ## Problem
@@ -45,7 +45,16 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: analyze-ab
 
 ## Acceptance criteria
 
-- [ ] A warm Bazel disk-cache rebuild yields usable indexes for both commits, or performs a targeted rebuild when required index artifacts are unavailable.
-- [ ] Preserve exact references and indexed resolution across cold builds, cached-store reuse, and --rebuild-index with disk-cache hits.
-- [ ] Preserve previously valid cached stores when a rebuild fails.
-- [ ] Add a regression exercising real or faithfully reproduced Bazel cache outputs, including invocation from a platform subdirectory.
+- [x] A warm Bazel disk-cache rebuild yields usable indexes for both commits, or performs a targeted rebuild when required index artifacts are unavailable.
+- [x] Preserve exact references and indexed resolution across cold builds, cached-store reuse, and --rebuild-index with disk-cache hits.
+- [x] Preserve previously valid cached stores when a rebuild fails.
+- [x] Add a regression exercising real or faithfully reproduced Bazel cache outputs, including invocation from a platform subdirectory.
+
+## Summary of Changes
+
+- Reproduced the real cached build with 25 disk-cache hits: the global store was absent and `ios_app.indexstore` existed without materialized units/records. The existing merge logic recognized the layout correctly; no usable files had been downloaded.
+- Confirmed rules_swift 3.6.1 exports the declared artifacts in `swift_index_store`. Bazel 9.3.1 defaults to downloading top-level outputs, so requesting `--output_groups=+swift_index_store` restores that store. Added `--remote_download_regex=.*[.]indexstore(/.*)?` to restore transitive library stores too. Global indexing, file-prefix mapping, and the disk cache remain enabled.
+- A separate real two-module fixture restored both application and dependency units/records on a warm build with 26 disk-cache hits. Evidence: `/private/tmp/reviewmap-indexing-transitive-{cold,warm}.log` and corresponding output bases.
+- Reworked the fake Bazel integration fixture to compile real remapped units per module and model selective cached-output materialization. Regression coverage compares exact references for both commits, review items, and regions across cold builds, cached-store reuse, forced disk-cache rebuilds, failed builds, and successful builds with missing index artifacts. Cleanup assertions now inspect only the test's own output bases.
+- Validation: 14 Swift index regression tests passed. The real synthetic monorepo cold root build, ios/ cache reuse, and android/ and root forced rebuilds preserve index resolution, all ten declaration changes, Swift caller context, and zero warnings. Both commits in each forced rebuild recorded 25 disk-cache hits. Reports and build logs are in `/private/tmp/reviewmap-indexing-final-evidence/`.
+- The original synthetic fixture and its existing caches/artifacts remain unchanged. The separately assigned Kotlin caller-context fix is not part of this commit.

@@ -214,8 +214,9 @@ enum IndexBuilder {
             return labels.filter { seen.insert($0).inserted }
         }
 
-        /// `bazel build` with rules_swift's global index store, in a temporary output base that is expunged
-        /// afterwards. Downloads and action results are shared through Bazel's repository cache and a disk cache.
+        /// Build with indexing in a temporary output base, sharing downloads and action results.
+        /// Request index artifacts explicitly: cache hits do not recreate the global-store side
+        /// effect, and Bazel's default download policy omits non-default and transitive outputs.
         static func bazel(options: IndexOptions, srcDir: String, workspace: String, scratch: String, cacheDir: String) throws -> BuildPlan {
             let dir = workspace == "." ? srcDir : srcDir + "/" + workspace
             let targets = options.targets ?? xcodeprojTargets(srcDir, workspace: workspace)
@@ -226,6 +227,7 @@ enum IndexBuilder {
             let exe = hasBazel ? "bazel" : "bazelisk"
             let startup = [exe, "--output_base=\(scratch)/output_base", "--max_idle_secs=300"]
             let cmd = startup + ["build", "--features=swift.index_while_building", "--features=swift.use_global_index_store",
+                                 "--output_groups=+swift_index_store", "--remote_download_regex=.*[.]indexstore(/.*)?",
                                  "--disk_cache=\((cacheDir as NSString).appendingPathComponent(".bazel-disk-cache"))"]
                 + (options.bazelArgs ?? []) + ["--"] + targets
             let locate = { () throws -> (store: String?, extraRoots: [String]) in
