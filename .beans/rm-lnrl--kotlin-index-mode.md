@@ -28,3 +28,9 @@ Give Kotlin an index mode like Go, Rust, TypeScript, and Swift already have, so 
 1. rm-mje8: shared KotlinIndex plus Gradle.
 2. rm-bcg9: builds on the KotlinIndex from rm-mje8.
 3. rm-pczu: synthetic repos, timings, docs, and cleanup.
+
+## Local setup (checked 2026-11-08)
+
+- The Mac mini has Homebrew OpenJDK 27.0.1, linked into `/Library/Java/JavaVirtualMachines`, so `java` and `/usr/libexec/java_home` work. It also has Gradle 9.8.2, Bazel, and bazelisk.
+- JDK 27 is newer than Kotlin can target. With Kotlin 2.2.0, the default JVM target makes `compileKotlin` fail with "Inconsistent JVM-target compatibility", and Kotlin 2.4.10 still fails (it targets 26 while Java defaults to 27). Every Kotlin fixture and synthetic repo must pin the target: `java { targetCompatibility = JavaVersion.VERSION_21 }` plus `kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_21) } }` for Gradle, and the equivalent `jvm_target` in the rules_kotlin toolchain for Bazel.
+- scip-java is tested on Java 17, 21, and 25. If it fails on JDK 27, install `openjdk@21` and point `JAVA_HOME` at it for indexing. Record which JDK was used in `docs/progress.md`.
