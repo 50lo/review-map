@@ -505,17 +505,22 @@ private final class RegionBuilder {
             }
             if !byDecl[key]!.lines.contains(line) { byDecl[key]!.lines.append(line) }
         }
-        // Index mode: every exact reference, in any component.
-        if !b.index.isEmpty, let pi = b.pairOf[DeclKey(side: .head, file: hd.file, index: hd.index)] {
+        // Exact head references, in any component. Coverage belongs to the caller's file,
+        // so an index for another language or target must not suppress uncovered callers.
+        let covered = b.index[.head]?.refs ?? [:]
+        if let pi = b.pairOf[DeclKey(side: .head, file: hd.file, index: hd.index)] {
             for u in b.indexCallers[pi] ?? [] { note(u.component, u.file, u.line) }
-        } else {
-            for u in e.usedBy { note(u.component, u.file, u.line) }
+        }
+        // usedBy also retains base-only usages. Their line numbers cannot locate head callers.
+        for u in e.usedBy where u.side != .base && covered[u.file] == nil {
+            note(u.component, u.file, u.line)
         }
         // Same-component references by name; members only count in files that mention their type.
-        if b.index.isEmpty && !d.isContainer && d.name.count >= 4 && d.name != "init" {
+        if !d.isContainer && d.name.count >= 4 && d.name != "init" {
             // The innermost type must be named in the file, or the reference must come from inside that type.
             let owner = d.scope.map { String($0.split(separator: ".").last ?? "") }
-            for (path, file) in b.head.files.sorted(by: { $0.key < $1.key }) where b.head.layout.fileComponent[path] == e.component {
+            for (path, file) in b.head.files.sorted(by: { $0.key < $1.key })
+                where b.head.layout.fileComponent[path] == e.component && covered[path] == nil {
                 let mentionsType = owner == nil || (file.typeRefs + file.memberRefs).contains { $0.name == owner }
                 let refs = owner == nil ? file.typeRefs : file.memberRefs + file.typeRefs
                 for ref in refs where ref.name == d.name {

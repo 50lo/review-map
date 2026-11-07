@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import IndexStoreDB
 @testable import ReviewMapCore
 
 /// Index mode on Fixtures/indexed, a package that builds anywhere (Foundation only). It has the cases
@@ -171,7 +172,7 @@ final class IndexProjectTests: XCTestCase {
 }
 
 /// The Bazel builder: target discovery from a rules_xcodeproj rule, path mapping, and the build flow with a
-/// stand-in `bazel` that answers build, info, and clean the way Bazel does (building with SwiftPM).
+/// stand-in `bazel` that answers build, info, and clean with real Swift compiler index outputs.
 final class IndexBazelTests: XCTestCase {
     typealias Plan = IndexBuilder.BuildPlan
 
@@ -228,27 +229,113 @@ final class IndexBazelTests: XCTestCase {
         XCTAssertNil(IndexBuilder.relativePath("/elsewhere/ios/App.swift", roots: roots, known: known))
         let stored = IndexBuilder.storedPaths("mobile/ios/App.swift", roots: roots)
         XCTAssertTrue(stored.contains("/ob/execroot/_main/ios/App.swift"))
-        XCTAssertTrue(stored.contains("ios/App.swift"))
-        XCTAssertTrue(stored.contains("./ios/App.swift"))
+        XCTAssertTrue(stored.allSatisfy { $0.hasPrefix("/") })
+    }
+
+    /// Compile the same remapped working directory and paths emitted by rules_swift, then
+    /// read after deleting the build tree, as happens when a cached store is reused.
+    func testRemappedIndexReadsReferencesAndSkipsUncoveredFiles() throws {
+        let library = try IndexStoreLibrary(dylibPath: IndexBuilder.libraryPath())
+        let fm = FileManager.default
+        let tmp = NSTemporaryDirectory() + "rm-remapped-\(UUID().uuidString)"
+        defer { try? fm.removeItem(atPath: tmp) }
+        let workspace = tmp + "/execroot"
+        try fm.createDirectory(atPath: workspace + "/ios", withIntermediateDirectories: true)
+        try "public func greeting() -> String { \"hello\" }\n"
+            .write(toFile: workspace + "/ios/Greeting.swift", atomically: true, encoding: .utf8)
+        try "public func render() -> String { greeting() }\n"
+            .write(toFile: workspace + "/ios/Screen.swift", atomically: true, encoding: .utf8)
+        try Shell.run(["swiftc", "-module-name", "App", "-emit-module", "-o", tmp + "/App.swiftmodule",
+                       "-index-store-path", tmp + "/store", "-file-prefix-map", "\(workspace)=.",
+                       "ios/Greeting.swift", "ios/Screen.swift"], cwd: workspace)
+        try fm.removeItem(atPath: workspace)
+        for prefix in ["", "mobile/"] {
+            let built = IndexBuilder.BuiltStore(storePath: tmp + "/store", databasePath: tmp + "/db-\(prefix.isEmpty)",
+                                               sourceRoots: [tmp + "/export", workspace + "\t" + String(prefix.dropLast())])
+            let result = try IndexBuilder.read(store: built, library: library,
+                files: [prefix + "ios/Greeting.swift", prefix + "ios/Screen.swift", prefix + "ios/Uncovered.swift"],
+                log: { _ in }, side: .head)
+            let refs = try XCTUnwrap(result.refs[prefix + "ios/Screen.swift"])
+            XCTAssertTrue(refs.contains { $0.targetFile == prefix + "ios/Greeting.swift" && $0.targetLine == 1 && $0.line == 1 })
+            XCTAssertNil(result.refs[prefix + "ios/Uncovered.swift"])
+        }
+    }
+
+    func testMergeAddsOnlyMissingRecordsToExistingGlobalStore() throws {
+        let fm = FileManager.default
+        let root = NSTemporaryDirectory() + "rm-merge-\(UUID().uuidString)"
+        defer { try? fm.removeItem(atPath: root) }
+        let global = root + "/_global_index_store"
+        let existing = global + "/v5/records/AA/shared"
+        try fm.createDirectory(atPath: (existing as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+        try "existing record".write(toFile: existing, atomically: true, encoding: .utf8)
+        let inode = try fm.attributesOfItem(atPath: existing)[.systemFileNumber] as? NSNumber
+        // No declared stores: the global-only fallback stays usable without any copying.
+        XCTAssertNil(IndexBuilder.mergeStores(under: root, into: global))
+        XCTAssertEqual(IndexBuilder.findStore(global), global)
+        let declared = root + "/bin/Dependency.indexstore/v5/records/AA"
+        try fm.createDirectory(atPath: declared, withIntermediateDirectories: true)
+        try "duplicate must not replace global".write(toFile: declared + "/shared", atomically: true, encoding: .utf8)
+        try "cached dependency".write(toFile: declared + "/missing", atomically: true, encoding: .utf8)
+        XCTAssertEqual(IndexBuilder.mergeStores(under: root, into: global), global)
+        XCTAssertEqual(try String(contentsOfFile: existing, encoding: .utf8), "existing record")
+        XCTAssertEqual(try String(contentsOfFile: global + "/v5/records/AA/missing", encoding: .utf8), "cached dependency")
+        XCTAssertEqual(try fm.attributesOfItem(atPath: existing)[.systemFileNumber] as? NSNumber, inode)
+        let addedInode = try fm.attributesOfItem(atPath: global + "/v5/records/AA/missing")[.systemFileNumber] as? NSNumber
+        XCTAssertNil(IndexBuilder.mergeStores(under: root, into: global), "A repeated merge copies nothing")
+        XCTAssertEqual(try fm.attributesOfItem(atPath: global + "/v5/records/AA/missing")[.systemFileNumber] as? NSNumber, addedInode)
+        let fresh = root + "/merged-store"
+        XCTAssertEqual(IndexBuilder.mergeStores(under: root, into: fresh), fresh)
+        XCTAssertEqual(try String(contentsOfFile: fresh + "/v5/records/AA/missing", encoding: .utf8), "cached dependency")
+    }
+
+    func testObsoleteDatabaseCleanupPreservesStoresAndFailedRebuilds() throws {
+        let fm = FileManager.default
+        let root = NSTemporaryDirectory() + "rm-db-migration-\(UUID().uuidString)"
+        defer { try? fm.removeItem(atPath: root) }
+        for name in ["store/v5", "db", "db-absolute-paths-v1"] {
+            try fm.createDirectory(atPath: root + "/" + name, withIntermediateDirectories: true)
+            try "keep".write(toFile: root + "/" + name + "/marker", atomically: true, encoding: .utf8)
+        }
+        try root.write(toFile: root + "/root.txt", atomically: true, encoding: .utf8)
+        // An invalid builder makes the rebuild fail without replacing any existing cache data.
+        XCTAssertThrowsError(try IndexBuilder.buildIfNeeded(options: IndexOptions(builder: "none", rebuild: true),
+            side: .head, sha: "test", srcDir: root, repoRoot: root, cache: root, log: { _ in }))
+        XCTAssertTrue(fm.fileExists(atPath: root + "/db/marker"))
+        let reused = try IndexBuilder.buildIfNeeded(options: IndexOptions(builder: "none"),
+            side: .head, sha: "test", srcDir: root, repoRoot: root, cache: root, log: { _ in })
+        XCTAssertFalse(fm.fileExists(atPath: root + "/db"))
+        XCTAssertEqual(reused.storePath, root + "/store")
+        XCTAssertEqual(reused.databasePath, root + "/db-absolute-paths-v1")
+        XCTAssertTrue(fm.fileExists(atPath: reused.storePath + "/v5/marker"))
+        XCTAssertTrue(fm.fileExists(atPath: reused.databasePath + "/marker"))
     }
 
     static let fakeBazel = """
     #!/bin/sh
-    # Stand-in for bazel: build compiles the package with SwiftPM and puts its index store where
-    # rules_swift's global index store would be; info and clean answer like Bazel.
-    ob=""; cmd=""
+    # Reproduce mixed Bazel output: only the newly compiled Feed is in the global store;
+    # dependency indexes, as restored from disk cache, exist only in declared output stores.
+    ob=""; cmd=""; fail=no
     for a in "$@"; do
       case "$a" in
         --output_base=*) ob="${a#--output_base=}" ;;
+        --fake-fail) fail=yes ;;
         build|info|clean) [ -z "$cmd" ] && cmd="$a" ;;
       esac
     done
     echo "fake bazel $*" >&2
     case "$cmd" in
       build)
-        swift build --package-path . --scratch-path "$ob/swiftpm" --enable-index-store >&2 || exit 1
-        mkdir -p "$ob/out"
-        cp -R "$(find "$ob/swiftpm" -type d -path '*index/store' | head -1)" "$ob/out/_global_index_store" ;;
+        [ "$fail" = yes ] && exit 1
+        mkdir -p "$ob/modules" "$ob/out/config/bin"
+        for module in Storage Cache Settings Feed; do
+          store="$ob/out/config/bin/$module.indexstore"
+          [ "$module" = Feed ] && store="$ob/out/_global_index_store"
+          swiftc -emit-module -module-name "$module" -I "$ob/modules" \
+            -emit-module-path "$ob/modules/$module.swiftmodule" \
+            -index-store-path "$store" -file-prefix-map "$(pwd -P)=." \
+            Sources/"$module"/*.swift >&2 || exit 1
+        done ;;
       info) echo "output_path: $ob/out"; echo "execution_root: $PWD" ;;
       clean) rm -rf "$ob" ;;
     esac
@@ -306,19 +393,67 @@ final class IndexBazelTests: XCTestCase {
         try git("commit", "-qm", "head")
 
         let cache = tmp + "/cache"
-        let m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main", index: IndexOptions(enabled: true, cacheDir: cache)))
+        // For the root workspace, invoke from an unrelated platform directory.
+        try fm.createDirectory(atPath: repo + "/android", withIntermediateDirectories: true)
+        let workingDirectory = subdir.isEmpty ? repo + "/android" : repo
+        func analyze(rebuild: Bool = false, args: [String]? = nil, builder: String? = nil) throws -> ChangeReport {
+            try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main",
+                index: IndexOptions(enabled: true, builder: builder, bazelArgs: args, cacheDir: cache,
+                                    rebuild: rebuild, workingDirectory: workingDirectory)))
+        }
+        // Successful builds retire the old derived database namespace too.
+        for ref in ["base", "main"] {
+            let sha = try Shell.string(["git", "-C", repo, "rev-parse", ref])
+            try fm.createDirectory(atPath: cache + "/repo/" + sha + "/db", withIntermediateDirectories: true)
+        }
+        let m = try analyze()
         XCTAssertEqual(m.analyzer.resolution, "index", "\(m.warnings)")
         XCTAssertEqual(try XCTUnwrap(m.reviewItems.first { $0.qualifiedName == "Store.load()" }).usedBy.map(\.symbol), ["Feed.items()"])
         let logs = try fm.subpathsOfDirectory(atPath: cache).filter { $0.hasSuffix("build.log") }
         XCTAssertEqual(logs.count, 2)
+        for path in logs {
+            XCTAssertFalse(fm.fileExists(atPath: cache + "/" + (path as NSString).deletingLastPathComponent + "/db"))
+        }
         let log = try String(contentsOfFile: cache + "/" + logs[0], encoding: .utf8)
         XCTAssertTrue(log.contains("--features=swift.use_global_index_store"), log)
+        XCTAssertTrue(log.contains("--output_groups=+swift_index_store"), log)
+        XCTAssertTrue(log.contains("--remote_download_regex=.*[.]indexstore(/.*)?"), log)
         XCTAssertTrue(log.contains("-- //Sources:Storage //:Feed"), log)
         XCTAssertFalse(m.warnings.contains { $0.kind == "index-partial" }, "\(m.warnings)")
-        // The temporary output bases were expunged.
-        let leftovers = try fm.contentsOfDirectory(atPath: NSTemporaryDirectory()).filter { $0.hasPrefix("reviewmap-build-") }
-        for dir in leftovers {
-            XCTAssertFalse(fm.fileExists(atPath: NSTemporaryDirectory() + "/" + dir + "/output_base"), dir)
+        let library = try IndexStoreLibrary(dylibPath: IndexBuilder.libraryPath())
+        let files = try fm.subpathsOfDirectory(atPath: ws + "/Sources").filter { $0.hasSuffix(".swift") }
+            .map { (subdir.isEmpty ? "" : subdir + "/") + "Sources/" + $0 }
+        func references() throws -> [String: [String: [IndexedRef]]] {
+            var result: [String: [String: [IndexedRef]]] = [:]
+            for path in logs {
+                let dir = cache + "/" + (path as NSString).deletingLastPathComponent
+                let roots = try String(contentsOfFile: dir + "/root.txt", encoding: .utf8).split(separator: "\n").map(String.init)
+                let built = IndexBuilder.BuiltStore(storePath: dir + "/store", databasePath: dir + "/assert-db-\(UUID().uuidString)", sourceRoots: roots)
+                result[path] = try IndexBuilder.read(store: built, library: library, files: files, log: { _ in }, side: .head).refs
+            }
+            return result
+        }
+        let originalRefs = try references()
+        XCTAssertEqual(originalRefs.count, 2)
+        for refs in originalRefs.values {
+            XCTAssertEqual(Set(refs.keys), Set(files), "Both sides must cover every compiled module")
+            let feed = (subdir.isEmpty ? "" : subdir + "/") + "Sources/Feed/Feed.swift"
+            XCTAssertTrue(try XCTUnwrap(refs[feed]).contains { $0.name == "load()" && $0.targetFile.hasSuffix("Sources/Storage/Store.swift") })
+        }
+        // A failed rebuild must preserve both sides' exact references and source-root mappings.
+        let failed = try analyze(rebuild: true, args: ["--fake-fail"])
+        XCTAssertTrue(failed.warnings.contains { $0.kind == "index-unavailable" })
+        let preserved = try analyze(builder: "none")
+        XCTAssertEqual(preserved.analyzer.resolution, "index")
+        XCTAssertEqual(preserved.reviewItems, m.reviewItems)
+        XCTAssertEqual(preserved.regions, m.regions)
+        XCTAssertEqual(try references(), originalRefs)
+        // Check only this test's output bases; other analyzers may be running concurrently.
+        for path in logs {
+            let text = try String(contentsOfFile: cache + "/" + path, encoding: .utf8)
+            let argument = try XCTUnwrap(text.split(whereSeparator: \.isWhitespace).first { $0.hasPrefix("--output_base=") })
+            let outputBase = String(argument.dropFirst("--output_base=".count))
+            XCTAssertFalse(fm.fileExists(atPath: outputBase), outputBase)
         }
     }
 }

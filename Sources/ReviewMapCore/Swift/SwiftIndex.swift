@@ -34,9 +34,13 @@ enum IndexBuilder {
         let fm = FileManager.default
         let storeDir = cache + "/store"
         let rootFile = cache + "/root.txt"
+        // Reimport old stores: databases made before path remapping contain relative keys.
+        let databasePath = cache + "/db-absolute-paths-v1"
         if !options.rebuild, fm.fileExists(atPath: storeDir), let roots = try? String(contentsOfFile: rootFile, encoding: .utf8) {
+            // The old database is derived data; keep the raw store and current database.
+            try? fm.removeItem(atPath: cache + "/db")
             log("Index for \(side.rawValue) \(sha.prefix(8)): cached.")
-            return BuiltStore(storePath: storeDir, databasePath: cache + "/db",
+            return BuiltStore(storePath: storeDir, databasePath: databasePath,
                               sourceRoots: roots.split(separator: "\n").map(String.init).filter { !$0.isEmpty })
         }
         try fm.createDirectory(atPath: cache, withIntermediateDirectories: true)
@@ -58,12 +62,13 @@ enum IndexBuilder {
         }
         // Replace an earlier store (and its database) only once the new build succeeded.
         try? fm.removeItem(atPath: storeDir)
-        try? fm.removeItem(atPath: cache + "/db")
+        try? fm.removeItem(atPath: databasePath)
         try fm.moveItem(atPath: built, toPath: storeDir)
         let roots = [srcDir] + located.extraRoots
         try roots.joined(separator: "\n").write(toFile: rootFile, atomically: true, encoding: .utf8)
+        try? fm.removeItem(atPath: cache + "/db")
         log("Built \(side.rawValue) in \(Int(Date().timeIntervalSince(start)))s.")
-        return BuiltStore(storePath: storeDir, databasePath: cache + "/db", sourceRoots: roots)
+        return BuiltStore(storePath: storeDir, databasePath: databasePath, sourceRoots: roots)
     }
 
     struct BuildPlan {
@@ -212,8 +217,9 @@ enum IndexBuilder {
             return labels.filter { seen.insert($0).inserted }
         }
 
-        /// `bazel build` with rules_swift's global index store, in a temporary output base that is expunged
-        /// afterwards. Downloads and action results are shared through Bazel's repository cache and a disk cache.
+        /// Build with indexing in a temporary output base, sharing downloads and action results.
+        /// Request index artifacts explicitly: cache hits do not recreate the global-store side
+        /// effect, and Bazel's default download policy omits non-default and transitive outputs.
         static func bazel(options: IndexOptions, srcDir: String, workspace: String, scratch: String, cacheDir: String) throws -> BuildPlan {
             let dir = workspace == "." ? srcDir : srcDir + "/" + workspace
             let targets = options.targets ?? xcodeprojTargets(srcDir, workspace: workspace)
@@ -224,6 +230,7 @@ enum IndexBuilder {
             let exe = hasBazel ? "bazel" : "bazelisk"
             let startup = [exe, "--output_base=\(scratch)/output_base", "--max_idle_secs=300"]
             let cmd = startup + ["build", "--features=swift.index_while_building", "--features=swift.use_global_index_store",
+                                 "--output_groups=+swift_index_store", "--remote_download_regex=.*[.]indexstore(/.*)?",
                                  "--disk_cache=\((cacheDir as NSString).appendingPathComponent(".bazel-disk-cache"))"]
                 + (options.bazelArgs ?? []) + ["--"] + targets
             let locate = { () throws -> (store: String?, extraRoots: [String]) in
@@ -236,8 +243,10 @@ enum IndexBuilder {
                 guard let out = values["output_path"] else { return (nil, []) }
                 // The execution root mirrors the Bazel workspace, which may be a subdirectory of the repo.
                 let roots = values["execution_root"].map { ["\($0)\t\(workspace == "." ? "" : workspace)"] } ?? []
-                if let global = IndexBuilder.findStore(out + "/_global_index_store") { return (global, roots) }
-                return (IndexBuilder.mergeStores(under: out, into: scratch + "/merged-store"), roots)
+                // A mixed cache-hit build populates the global store only for actions that ran.
+                // Merge it with declared artifacts so cached dependencies remain indexed too.
+                let global = IndexBuilder.findStore(out + "/_global_index_store")
+                return (IndexBuilder.mergeStores(under: out, into: global ?? scratch + "/merged-store") ?? global, roots)
             }
             let cleanup = { _ = try? Shell.run(startup + ["clean", "--expunge"], cwd: dir) }
             let summary = "\(exe) build \(targets.joined(separator: " "))\(workspace == "." ? "" : " in \(workspace)")"
@@ -337,7 +346,7 @@ enum IndexBuilder {
         return nil
     }
 
-    /// Per-target `.indexstore` directories (rules_swift without a global store) copied into one store.
+    /// Copy missing per-target records into the existing global store, or a new merged store.
     /// Unit and record file names are content hashes, so stores merge by copying.
     static func mergeStores(under root: String, into dest: String) -> String? {
         let fm = FileManager.default
@@ -390,8 +399,14 @@ enum IndexBuilder {
     // MARK: Reading
 
     static func read(store: BuiltStore, library: IndexStoreLibrary, files: [String], log: (String) -> Void, side: Side) throws -> SideIndex {
+        // rules_swift maps the execution root to "." in both the unit working directory and
+        // source paths. Expand that prefix while importing, before IndexStoreDB canonicalizes
+        // paths; querying a relative filename is invalid even when a unit recorded one.
+        let workspaceRoot = store.sourceRoots.last { $0.contains("\t") }
+            .map { String($0.split(separator: "\t", omittingEmptySubsequences: false)[0]) }
+        let mappings = workspaceRoot.map { [PathMapping(original: ".", replacement: $0)] } ?? []
         let db = try IndexStoreDB(storePath: store.storePath, databasePath: store.databasePath, library: library,
-                                  waitUntilDoneInitializing: true, listenToUnitEvents: true)
+                                  waitUntilDoneInitializing: true, listenToUnitEvents: true, prefixMappings: mappings)
         let roots = expandRoots(store.sourceRoots)
         let known = Set(files)
         func relative(_ path: String) -> String? { relativePath(path, roots: roots, known: known) }
@@ -454,20 +469,17 @@ enum IndexBuilder {
         return nil
     }
 
-    /// The forms a repo-relative file may have in the index, most likely first.
+    /// Absolute query paths for a repo-relative file. IndexStoreDB cannot query relative paths.
     static func storedPaths(_ file: String, roots: [Root]) -> [String] {
         var out: [String] = []
-        var relative: [String] = [file]
         for r in roots {
             if r.prefix.isEmpty {
                 out.append(r.path + "/" + file)
             } else if file.hasPrefix(r.prefix + "/") {
                 let inner = String(file.dropFirst(r.prefix.count + 1))
                 out.append(r.path + "/" + inner)
-                relative.append(inner)
             }
         }
-        for rel in relative { out += [rel, "./" + rel] }
         var seen = Set<String>()
         return out.filter { seen.insert($0).inserted }
     }
