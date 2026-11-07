@@ -100,6 +100,20 @@ final class KotlinStructureTests: XCTestCase {
         XCTAssertTrue(nested.evidence.joined().contains("Outer.Impl"))
     }
 
+    func testRemovingDefaultImplementationCreatesARequirement() throws {
+        let report = try Fixture.report("kotlin-structure")
+        for (member, conformer) in [("LosesDefault.refresh()", "NeedsDefault"), ("LosesImplementation.reset()", "NeedsImplementation")] {
+            let item = try XCTUnwrap(report.reviewItems.first { $0.qualifiedName == member })
+            XCTAssertTrue(item.changes.contains(.body))
+            let finding = try XCTUnwrap(report.findings.first { $0.kind == "conformers" && $0.anchors.contains { $0.reviewItem == item.id } })
+            XCTAssertTrue(finding.message.hasPrefix("New requirement"))
+            XCTAssertTrue(finding.evidence.joined().contains(conformer))
+        }
+        let interfaceMember = try XCTUnwrap(report.reviewItems.first { $0.qualifiedName == "LosesDefault.refresh()" })
+        XCTAssertTrue(interfaceMember.contractFlags.contains("kotlin:interface-member-changed"))
+        XCTAssertFalse(interfaceMember.contractFlags.contains("kotlin:final-removed"), "interface default members are implicitly open")
+    }
+
     func testUsageIsolationReachesStructuralPrompt() throws {
         let report = try Fixture.report("kotlin-structure")
         let load = try XCTUnwrap(report.reviewItems.first { $0.qualifiedName == "load()" })

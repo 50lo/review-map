@@ -448,7 +448,10 @@ struct StructuralChecks {
         for p in b.pairs {
             guard let h = p.head, !isLow(h, .head), let parent = decl(.head, h.file, h.decl.parentIndex) else { continue }
             let abstract = parent.kind == .class && h.decl.modifiers.contains("abstract")
-            guard h.decl.inProtocol || abstract, p.changes.contains(.added) || p.changes.contains(.signature) else { continue }
+            let wasRequirement = p.base.map { $0.decl.inProtocol || ($0.decl.parentKind == .class && $0.decl.modifiers.contains("abstract")) } ?? false
+            let gainedRequirement = !wasRequirement && (h.decl.inProtocol || abstract)
+            guard h.decl.inProtocol || abstract,
+                  p.changes.contains(.added) || p.changes.contains(.signature) || gainedRequirement else { continue }
             guard let interfaceIndex = b.parentPair(h, side: .head) else { continue }
             let interface = b.pairs[interfaceIndex]
             let proto = parent.qualifiedName
@@ -465,7 +468,7 @@ struct StructuralChecks {
                 }
             }
             guard !missing.isEmpty || !stale.isEmpty else { continue }
-            let what = p.changes.contains(.added) ? "New requirement" : "Changed requirement"
+            let what = p.changes.contains(.added) || gainedRequirement ? "New requirement" : "Changed requirement"
             let typeName = { (c: Located) in c.decl.kind == .extension ? c.decl.name : c.decl.qualifiedName }
             var evidence: [String] = []
             if !missing.isEmpty { evidence.append("No \(h.decl.name) in \(missing.map(typeName).joined(separator: ", ")), and no default implementation in an extension of \(proto).") }

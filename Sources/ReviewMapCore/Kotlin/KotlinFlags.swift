@@ -37,7 +37,8 @@ struct KotlinFlags {
                 else if p.changes.contains(.signature) { flag("api-signature-changed") }
             }
             if d.kind == .case && (added || removed) { member("enum-entry-\(added ? "added" : "removed")") }
-            if d.inProtocol && structural { member("interface-member-\(added ? "added" : removed ? "removed" : "changed")") }
+            let gainedRequirement = base?.inProtocol == false && head?.inProtocol == true
+            if d.inProtocol && (structural || gainedRequirement) { member("interface-member-\(added ? "added" : removed ? "removed" : "changed")") }
             if d.traits.contains("constructor-property"), structural || p.changes.contains(.modifiers),
                let parent, [b.pairs[parent].base?.decl, b.pairs[parent].head?.decl].compactMap({ $0 }).contains(where: { $0.modifiers.contains("data") }) {
                 member("data-class-shape-changed")
@@ -108,7 +109,7 @@ struct KotlinFlags {
     private func nullable(_ d: Declaration) -> Set<String> { Set(d.traits.filter { $0.hasPrefix("nullable:") }) }
     private func hasModifier(_ modifier: String, _ d: Declaration) -> Bool {
         if modifier == "final" {
-            return d.modifiers.contains("final") || (!d.modifiers.contains("open") && !d.modifiers.contains("abstract") && !d.modifiers.contains("sealed") && !d.modifiers.contains("override") && d.kind != .protocol && !d.inProtocol)
+            return d.modifiers.contains("final") || (!d.modifiers.contains("open") && !d.modifiers.contains("abstract") && !d.modifiers.contains("sealed") && !d.modifiers.contains("override") && d.kind != .protocol && d.parentKind != .protocol && !d.inProtocol)
         }
         return d.modifiers.contains(modifier)
     }

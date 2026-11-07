@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-07T01:04:30Z
+updated_at: 2026-11-07T01:09:54Z
 parent: rm-aks4
 ---
 
@@ -21,3 +21,5 @@ parent: rm-aks4
 - [x] Composable functions are excluded from region control-flow risk, as SwiftUI views are.
 
 Implemented lexical dispatcher regions with innermost-block precedence, Android main-thread declaration conventions, and Compose view-risk handling. Kotlin conformer lookup uses package/import and enclosing-type identity; only actual class members satisfy requirements. Six focused structural tests plus the Kotlin fixture pass locally (7 tests), covering interface defaults, abstract class requirements, import aliases, same-name types in different packages, nested interfaces, dispatcher overrides, usage/prompt isolation, and Compose region risk. Independent review findings were fixed and covered by regressions; temporary fixture repositories are removed by tests.
+
+Final review also reproduced removal of an existing interface default body being missed as a new requirement. The conformer check now handles default/concrete-to-abstract transitions; interface default members are not inferred final. Regression validation: 22 ChecksTests, KotlinFlagTests, and KotlinStructureTests pass locally; independently reviewed.
