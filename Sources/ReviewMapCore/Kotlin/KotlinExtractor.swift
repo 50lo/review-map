@@ -57,8 +57,19 @@ enum KotlinExtractor {
                 refs.append(NameRef(name: name, line: n.startLine))
             }
         }
-        return ParsedFile(path: path, language: "kotlin", decls: walker.decls, imports: imports,
-                          typeRefs: refs, memberRefs: members, marks: KotlinRisk.marks(root), packageName: package, wildcardImports: stars)
+        var declarations = walker.decls
+        for i in declarations.indices {
+            let supertypes = declarations[i].traits.filter { $0.hasPrefix("supertype:") }
+            for trait in supertypes {
+                let parts = String(trait.dropFirst("supertype:".count)).split(separator: ".").map(String.init)
+                guard let first = parts.first, let binding = bindings[first] else { continue }
+                declarations[i].traits.remove(trait)
+                declarations[i].traits.insert("supertype:" + ([binding.package, binding.name] + parts.dropFirst()).filter { !$0.isEmpty }.joined(separator: "."))
+            }
+        }
+        return ParsedFile(path: path, language: "kotlin", decls: declarations, imports: imports,
+                          typeRefs: refs, memberRefs: members, marks: KotlinRisk.marks(root), packageName: package, wildcardImports: stars,
+                          isolationRegions: KotlinStructure.regions(root))
     }
 
     private static func qualifiedIdentifier(_ n: SyntaxNode) -> String {
@@ -116,6 +127,7 @@ private struct KotlinDeclarations {
         let kind: ReviewItemKind = n.children.contains { $0.type == "interface" } ? .protocol :
             (n.children.contains { $0.type == "enum" } ? .enum : .class)
         var inherited: [String] = []
+        var supertypes: [String] = []
         for c in n.namedChildren where c.type == "delegation_specifier" {
             var identifiers: [SyntaxNode] = []
             c.forEach { node in
@@ -124,10 +136,14 @@ private struct KotlinDeclarations {
                 }
                 return identifiers.isEmpty
             }
-            if let id = identifiers.last { inherited.append(KotlinExtractor.clean(id.text)) }
+            if let id = identifiers.last {
+                inherited.append(KotlinExtractor.clean(id.text))
+                supertypes.append(identifiers.map { KotlinExtractor.clean($0.text) }.joined(separator: "."))
+            }
         }
         let index = add(n, kind: kind, name: name, header: tokens.filter { $0.startByte < (body?.startByte ?? n.endByte) },
                         inherited: inherited, headerEnd: body)
+        decls[index].traits.formUnion(supertypes.map { "supertype:" + $0 })
         let old = parent; parent = index
         if let constructor = first(n, "primary_constructor") {
             decls[index].traits.insert("constructor-shape:" + constructor.tokens.canon)

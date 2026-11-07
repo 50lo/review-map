@@ -22,7 +22,11 @@ struct KotlinLanguage: Language {
     func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] { KotlinManifest.flags(basePath: basePath, headPath: headPath) }
     func settingFlag(_ key: String) -> String { KotlinFlags.settingFlag(key) }
     func flagRisk(_ flag: String, isInterface: Bool) -> Double { KotlinFlags.risk(flag, isInterface: isInterface) }
-    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { false }
+    func isViewCode(_ decl: Declaration, inherits: Set<String>) -> Bool { KotlinStructure.isViewCode(decl, inherits: inherits) }
+    func isolation(in file: ParsedFile, line: Int) -> String? { KotlinStructure.isolation(in: file, line: line) }
+    func conformers(of interface: Pair, requirement: Pair?, in builder: ChangeReportBuilder, for use: ConformanceUse) -> [Conformer] {
+        KotlinStructure.conformers(of: interface, requirement: requirement, in: builder, for: use)
+    }
     func isPublicAPI(_ decl: Declaration, enclosing: [Declaration]) -> Bool {
         decl.access == "public" && enclosing.allSatisfy { $0.access == "public" }
     }
