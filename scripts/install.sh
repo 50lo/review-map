@@ -26,23 +26,17 @@ if [ $# -gt 0 ]; then
   exit 2
 fi
 
-for tool in swift node npm git; do
+for tool in bazel swift node npm git; do
   if ! command -v "$tool" >/dev/null 2>&1; then
-    echo "$tool is not installed. reviewmap needs Swift 6.2 (Xcode 26 on macOS), Node 20 or later, and git." >&2
+    echo "$tool is not installed. Installing reviewmap needs Bazel, Swift 6.2 (full Xcode 26 on macOS), Node 20 or later, and git." >&2
     exit 1
   fi
 done
 
 echo "Building reviewmap (release)…"
 cd "$root"
-# On Linux, IndexStoreDB's C++ needs the toolchain's dispatch and Block headers on the include path.
-set --
-if [ "$(uname -s)" = "Linux" ]; then
-  swift_lib="$(dirname "$(dirname "$(readlink -f "$(command -v swift)")")")/lib/swift"
-  set -- -Xcxx "-I$swift_lib" -Xcxx "-I$swift_lib/Block"
-fi
-swift build -c release --product reviewmap "$@"
-built="$(swift build -c release --show-bin-path "$@")/reviewmap"
+bazel build --config=release //:reviewmap
+built="$(bazel info --config=release bazel-bin)/reviewmap"
 
 mkdir -p "$bin" "$share/viewer"
 install -m 755 "$built" "$bin/reviewmap"

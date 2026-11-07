@@ -4,7 +4,7 @@ A code review tool that shows a change as structure (components, dependency edge
 
 ## Run it
 
-Requires the Swift 6.2 toolchain (Xcode 26) on macOS, Node 20 or later for the viewer and for TypeScript index mode, Go 1.22 or later for Go index mode, a Rust toolchain with rust-analyzer and rust-src for Rust index mode, and git. The analyzer also builds and runs on Linux.
+The install script requires Bazel (Bazelisk is recommended), the Swift 6.2 toolchain (full Xcode 26 on macOS), Node 20 or later, and git. You can also install manually with SwiftPM without Bazel, as described below. Go 1.22 or later is needed for Go index mode, and a Rust toolchain with rust-analyzer and rust-src for Rust index mode. The analyzer also builds and runs on Linux with SwiftPM; the Bazel build on Linux is unverified.
 
 ```sh
 git clone https://github.com/50lo/review-map.git
@@ -27,11 +27,21 @@ or
 bazel build --config=release //:reviewmap
 ```
 
-Installation script `scripts/install.sh` uses SwiftPM.
+The installation script uses the Bazel release build. To install without Bazel, run the following from the checkout after building with SwiftPM:
 
-Without installing, `.build/release/reviewmap` runs the SwiftPM build too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); the install script and CI do this.
+```sh
+prefix="$HOME/.local"  # or another installation prefix
+mkdir -p "$prefix/bin" "$prefix/share/reviewmap/viewer"
+install -m 755 "$(swift build -c release --show-bin-path)/reviewmap" "$prefix/bin/reviewmap"
+(cd viewer && tar -cf - --exclude ./node_modules --exclude ./dist .) | (cd "$prefix/share/reviewmap/viewer" && tar -xf -)
+(cd "$prefix/share/reviewmap/viewer" && npm ci --no-audit --no-fund)
+```
 
-An experimental native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
+Add `"$prefix/bin"` to your `PATH` if needed. The viewer and its dependencies are copied into the same layout as the script's installation, so the installed copy can run without the checkout.
+
+Without installing, `.build/release/reviewmap` runs the SwiftPM build too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); CI does this.
+
+The native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
 
 With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change report to `~/.reviewmap/reports/<repo>/<head>/change-report.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own change report, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
 

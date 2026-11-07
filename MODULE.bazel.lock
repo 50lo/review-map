@@ -540,7 +540,7 @@
           "REPO_MAPPING:rules_swift_package_manager+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_swift_package_manager+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_swift_package_manager+,cgrindel_bazel_starlib cgrindel_bazel_starlib+",
-          "FILE:@@//Package.resolved 6bde3963901265001d2bb8f3cc62a47a40d6dfc7dc6bd83775735b53dcbcdf77"
+          "FILE:@@//Package.resolved 83000aed9e2fadb22ad142464f8b71b7228e6e151031c87c03e66f7ccc7a986c"
         ],
         "generatedRepoSpecs": {
           "swift_package": {
@@ -561,12 +561,35 @@
                 "swiftpkg_swift_argument_parser",
                 "swiftpkg_swift_lmdb",
                 "swiftpkg_swift_syntax",
+                "swiftpkg_tomldecoder",
                 "swiftpkg_tree_sitter",
+                "swiftpkg_tree_sitter_go",
+                "swiftpkg_tree_sitter_kotlin",
+                "swiftpkg_tree_sitter_rust",
                 "swiftpkg_tree_sitter_typescript",
                 "swiftpkg_xcode_project_format",
                 "swiftpkg_xcodeproj",
                 "swiftpkg_yams"
               ]
+            }
+          },
+          "swiftpkg_tomldecoder": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_tomldecoder",
+              "commit": "a2bbd2796fe3064e107de18cb56031052c4fa899",
+              "remote": "https://github.com/dduan/TOMLDecoder.git",
+              "version": "0.4.5",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
           "swiftpkg_swift_syntax": {
@@ -720,6 +743,62 @@
               "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
             }
           },
+          "swiftpkg_tree_sitter_go": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_tree_sitter_go",
+              "commit": "1547678a9da59885853f5f5cc8a99cc203fa2e2c",
+              "remote": "https://github.com/tree-sitter/tree-sitter-go.git",
+              "version": "0.25.0",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_tree_sitter_rust": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_tree_sitter_rust",
+              "commit": "77a3747266f4d621d0757825e6b11edcbf991ca5",
+              "remote": "https://github.com/tree-sitter/tree-sitter-rust.git",
+              "version": "0.24.2",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
+          "swiftpkg_tree_sitter_kotlin": {
+            "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
+            "attributes": {
+              "bazel_package_name": "swiftpkg_tree_sitter_kotlin",
+              "commit": "d6af96d2e23ef0a8ff5ab512864378cf08fba311",
+              "remote": "https://github.com/fwcd/tree-sitter-kotlin.git",
+              "env": {},
+              "env_inherit": [],
+              "cached_json_directory": "",
+              "make_files_read_only": false,
+              "replace_scm_with_registry": false,
+              "target_deps": {},
+              "module_aliases": {},
+              "dep_module_aliases": "",
+              "bazel_target_mods": "",
+              "package_repos": "@@rules_swift_package_manager++swift_deps+swift_deps_package_repos//:package_repos.json"
+            }
+          },
           "swiftpkg_aexml": {
             "repoRuleId": "@@rules_swift_package_manager+//swiftpkg/internal:swift_package.bzl%swift_package",
             "attributes": {
@@ -798,6 +877,7 @@
         },
         "moduleExtensionMetadata": {
           "explicitRootModuleDirectDeps": [
+            "swiftpkg_tomldecoder",
             "swiftpkg_swift_syntax",
             "swiftpkg_swift_argument_parser",
             "swiftpkg_xcodeproj",
@@ -806,6 +886,9 @@
             "swiftpkg_indexstore_db",
             "swiftpkg_tree_sitter",
             "swiftpkg_tree_sitter_typescript",
+            "swiftpkg_tree_sitter_go",
+            "swiftpkg_tree_sitter_rust",
+            "swiftpkg_tree_sitter_kotlin",
             "swift_package"
           ],
           "explicitRootModuleDirectDevDeps": [],
