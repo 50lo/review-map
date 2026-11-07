@@ -1,11 +1,11 @@
 ---
 # rm-tjwt
 title: Prevent crashes when reading Bazel indexes with relative source paths
-status: todo
+status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T11:53:57Z
+updated_at: 2026-11-07T12:05:23Z
 ---
 
 ## Problem
@@ -50,7 +50,15 @@ Local evidence: analyze-bazel-root.log and bazel-index-cache/repo/b3eb6fdd2bd049
 
 ## Acceptance criteria
 
-- [ ] Default rules_swift path remapping can be read without aborting.
-- [ ] Both commits retain correct indexed Swift references and caller context; name fallback alone is not a successful fix.
-- [ ] Cover real Bazel relative-path output and missing/uncovered source files without passing relative paths to an absolute-path-only API.
-- [ ] Verify root and subdirectory invocation in the Swift/Kotlin monorepo.
+- [x] Default rules_swift path remapping can be read without aborting.
+- [x] Both commits retain correct indexed Swift references and caller context; name fallback alone is not a successful fix.
+- [x] Cover real Bazel relative-path output and missing/uncovered source files without passing relative paths to an absolute-path-only API.
+- [x] Verify root and subdirectory invocation in the Swift/Kotlin monorepo.
+
+## Summary of Changes
+
+- Read the actual rules_swift 3.6.1 unit with libIndexStore: working directory is `.` and the main file is `./ios/Screen.swift`. IndexStoreDB imports these without the Bazel execution root, then the relative query fallback asserts.
+- Remap `.` to the persisted execution root during import and query only absolute paths. Use a new database name so previously imported relative keys are rebuilt without recompiling cached stores.
+- Add a compiler-backed regression with the same file-prefix mapping, deleted build tree, root/nested workspace mappings, and an uncovered Swift file.
+- Real default Bazel cold build and cached reads from root, ios/, and android/ retain index resolution, Swift greeting caller context, all ten declarations, and zero warnings. Evidence: `/private/tmp/reviewmap-indexing-real-{root,ios,android}.{json,log}`. The separate Kotlin caller-context defect remains assigned elsewhere.
+- The original synthetic fixture and its existing artifacts were not modified.

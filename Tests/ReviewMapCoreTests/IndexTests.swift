@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+import IndexStoreDB
 @testable import ReviewMapCore
 
 /// Index mode on Fixtures/indexed, a package that builds anywhere (Foundation only). It has the cases
@@ -228,8 +229,36 @@ final class IndexBazelTests: XCTestCase {
         XCTAssertNil(IndexBuilder.relativePath("/elsewhere/ios/App.swift", roots: roots, known: known))
         let stored = IndexBuilder.storedPaths("mobile/ios/App.swift", roots: roots)
         XCTAssertTrue(stored.contains("/ob/execroot/_main/ios/App.swift"))
-        XCTAssertTrue(stored.contains("ios/App.swift"))
-        XCTAssertTrue(stored.contains("./ios/App.swift"))
+        XCTAssertTrue(stored.allSatisfy { $0.hasPrefix("/") })
+    }
+
+    /// Compile the same remapped working directory and paths emitted by rules_swift, then
+    /// read after deleting the build tree, as happens when a cached store is reused.
+    func testRemappedIndexReadsReferencesAndSkipsUncoveredFiles() throws {
+        let library = try IndexStoreLibrary(dylibPath: IndexBuilder.libraryPath())
+        let fm = FileManager.default
+        let tmp = NSTemporaryDirectory() + "rm-remapped-\(UUID().uuidString)"
+        defer { try? fm.removeItem(atPath: tmp) }
+        let workspace = tmp + "/execroot"
+        try fm.createDirectory(atPath: workspace + "/ios", withIntermediateDirectories: true)
+        try "public func greeting() -> String { \"hello\" }\n"
+            .write(toFile: workspace + "/ios/Greeting.swift", atomically: true, encoding: .utf8)
+        try "public func render() -> String { greeting() }\n"
+            .write(toFile: workspace + "/ios/Screen.swift", atomically: true, encoding: .utf8)
+        try Shell.run(["swiftc", "-module-name", "App", "-emit-module", "-o", tmp + "/App.swiftmodule",
+                       "-index-store-path", tmp + "/store", "-file-prefix-map", "\(workspace)=.",
+                       "ios/Greeting.swift", "ios/Screen.swift"], cwd: workspace)
+        try fm.removeItem(atPath: workspace)
+        for prefix in ["", "mobile/"] {
+            let built = IndexBuilder.BuiltStore(storePath: tmp + "/store", databasePath: tmp + "/db-\(prefix.isEmpty)",
+                                               sourceRoots: [tmp + "/export", workspace + "\t" + String(prefix.dropLast())])
+            let result = try IndexBuilder.read(store: built, library: library,
+                files: [prefix + "ios/Greeting.swift", prefix + "ios/Screen.swift", prefix + "ios/Uncovered.swift"],
+                log: { _ in }, side: .head)
+            let refs = try XCTUnwrap(result.refs[prefix + "ios/Screen.swift"])
+            XCTAssertTrue(refs.contains { $0.targetFile == prefix + "ios/Greeting.swift" && $0.targetLine == 1 && $0.line == 1 })
+            XCTAssertNil(result.refs[prefix + "ios/Uncovered.swift"])
+        }
     }
 
     static let fakeBazel = """

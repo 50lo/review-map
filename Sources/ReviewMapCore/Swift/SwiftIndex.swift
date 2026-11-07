@@ -34,9 +34,11 @@ enum IndexBuilder {
         let fm = FileManager.default
         let storeDir = cache + "/store"
         let rootFile = cache + "/root.txt"
+        // Reimport old stores: databases made before path remapping contain relative keys.
+        let databasePath = cache + "/db-absolute-paths-v1"
         if !options.rebuild, fm.fileExists(atPath: storeDir), let roots = try? String(contentsOfFile: rootFile, encoding: .utf8) {
             log("Index for \(side.rawValue) \(sha.prefix(8)): cached.")
-            return BuiltStore(storePath: storeDir, databasePath: cache + "/db",
+            return BuiltStore(storePath: storeDir, databasePath: databasePath,
                               sourceRoots: roots.split(separator: "\n").map(String.init).filter { !$0.isEmpty })
         }
         try fm.createDirectory(atPath: cache, withIntermediateDirectories: true)
@@ -58,12 +60,12 @@ enum IndexBuilder {
         }
         // Replace an earlier store (and its database) only once the new build succeeded.
         try? fm.removeItem(atPath: storeDir)
-        try? fm.removeItem(atPath: cache + "/db")
+        try? fm.removeItem(atPath: databasePath)
         try fm.moveItem(atPath: built, toPath: storeDir)
         let roots = [srcDir] + located.extraRoots
         try roots.joined(separator: "\n").write(toFile: rootFile, atomically: true, encoding: .utf8)
         log("Built \(side.rawValue) in \(Int(Date().timeIntervalSince(start)))s.")
-        return BuiltStore(storePath: storeDir, databasePath: cache + "/db", sourceRoots: roots)
+        return BuiltStore(storePath: storeDir, databasePath: databasePath, sourceRoots: roots)
     }
 
     struct BuildPlan {
@@ -390,8 +392,14 @@ enum IndexBuilder {
     // MARK: Reading
 
     static func read(store: BuiltStore, library: IndexStoreLibrary, files: [String], log: (String) -> Void, side: Side) throws -> SideIndex {
+        // rules_swift maps the execution root to "." in both the unit working directory and
+        // source paths. Expand that prefix while importing, before IndexStoreDB canonicalizes
+        // paths; querying a relative filename is invalid even when a unit recorded one.
+        let workspaceRoot = store.sourceRoots.last { $0.contains("\t") }
+            .map { String($0.split(separator: "\t", omittingEmptySubsequences: false)[0]) }
+        let mappings = workspaceRoot.map { [PathMapping(original: ".", replacement: $0)] } ?? []
         let db = try IndexStoreDB(storePath: store.storePath, databasePath: store.databasePath, library: library,
-                                  waitUntilDoneInitializing: true, listenToUnitEvents: true)
+                                  waitUntilDoneInitializing: true, listenToUnitEvents: true, prefixMappings: mappings)
         let roots = expandRoots(store.sourceRoots)
         let known = Set(files)
         func relative(_ path: String) -> String? { relativePath(path, roots: roots, known: known) }
@@ -454,20 +462,17 @@ enum IndexBuilder {
         return nil
     }
 
-    /// The forms a repo-relative file may have in the index, most likely first.
+    /// Absolute query paths for a repo-relative file. IndexStoreDB cannot query relative paths.
     static func storedPaths(_ file: String, roots: [Root]) -> [String] {
         var out: [String] = []
-        var relative: [String] = [file]
         for r in roots {
             if r.prefix.isEmpty {
                 out.append(r.path + "/" + file)
             } else if file.hasPrefix(r.prefix + "/") {
                 let inner = String(file.dropFirst(r.prefix.count + 1))
                 out.append(r.path + "/" + inner)
-                relative.append(inner)
             }
         }
-        for rel in relative { out += [rel, "./" + rel] }
         var seen = Set<String>()
         return out.filter { seen.insert($0).inserted }
     }
