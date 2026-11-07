@@ -500,6 +500,7 @@ struct PromptBuilder: @unchecked Sendable {
         case .tsconfig: return "tsconfig project"
         case .goPackage: return "Go package"
         case .cargoCrate: return "Cargo crate"
+        case .gradleModule: return "Gradle module"
         case .folder: return "folder"
         case .external: return "external package"
         }

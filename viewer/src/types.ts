@@ -71,7 +71,7 @@ export interface RegionLLM {
 export interface Component {
   id: string;
   name: string;
-  kind: "spmTarget" | "xcodeTarget" | "npmPackage" | "tsconfig" | "goPackage" | "cargoCrate" | "folder" | "external" | string;
+  kind: "spmTarget" | "xcodeTarget" | "npmPackage" | "tsconfig" | "goPackage" | "cargoCrate" | "gradleModule" | "folder" | "external" | string;
   layer?: string;
   module?: string;
   parent?: string;

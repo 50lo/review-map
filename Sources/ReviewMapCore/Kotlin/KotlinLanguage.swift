@@ -10,11 +10,13 @@ struct KotlinLanguage: Language {
     }
     func parse(path: String, source: String) -> ParsedFile { KotlinExtractor.parse(path: path, source: source) }
     let generatedPatterns = ["**/build/generated/**"]
-    func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout) {}
+    func addComponents(root: String, files: [String], options: AnalyzeOptions, layout: inout ComponentLayout) {
+        KotlinComponents.add(root: root, files: files, options: options, layout: &layout)
+    }
     let platformModules: Set<String> = ["kotlin", "java", "javax", "android", "dalvik"]
     func isPlatformModule(_ module: String) -> Bool { platformModules.contains(String(module.split(separator: ".").first ?? "")) }
-    func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { [:] }
-    func package(ofModule module: String, pinned: Set<String>) -> String? { nil }
+    func pinnedPackages(blobs: [String: String], dir: String) -> [String: String] { KotlinComponents.pinnedPackages(blobs: blobs, dir: dir) }
+    func package(ofModule module: String, pinned: Set<String>) -> String? { KotlinComponents.package(ofModule: module, pinned: pinned) }
     func contractFlags(_ builder: ChangeReportBuilder, pairs: [Int]) -> [Int: [String]] { [:] }
     func contractFile(_ path: String) -> (key: String, flag: String)? { nil }
     func contractFileFlags(key: String, flag: String, basePath: String, headPath: String) -> [String] { [] }
