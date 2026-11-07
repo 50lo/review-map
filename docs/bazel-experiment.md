@@ -9,7 +9,8 @@ The Xcode 27.2 comparison below is complete. Bazel improves unchanged and CLI-ed
 builds, but does not provide a broad speedup for this project: release clean/core
 builds are similar, and SwiftPM is faster for debug clean/core builds.
 
-The installer, CI, SwiftPM tests and viewer build still use their existing commands.
+The installer uses Bazel for the analyzer; CI, SwiftPM tests and the viewer build
+still use their existing commands.
 The Bazel target covers the analyzer executable; it does not yet provide a Bazel
 test target or build the viewer. Run `cd viewer && npm ci && npm run build` for the
 viewer with either analyzer build system.
@@ -39,8 +40,8 @@ paths are relative to its execution root.
 ## Repeatable comparison
 
 Run builds serially on an otherwise idle machine, using the same developer
-directory for both. Release is the primary comparison because
-`scripts/install.sh` uses `swift build -c release --product reviewmap`.
+directory for both. Release is the primary comparison because the installer builds
+the release configuration.
 
 ```sh
 python3 scripts/benchmark-builds.py --output .build/experiment/release.json
@@ -112,8 +113,8 @@ Release clean compilation differs by only about 2%, from one trial per system;
 that is too small a difference to treat as a meaningful clean-build win.
 Release core edits differ by about 4%. In debug, Bazel takes about 1.8 times as
 long for both clean builds and core edits. These results favor keeping SwiftPM
-as the default for work on `ReviewMapCore`, while retaining this branch as the
-Bazel experiment.
+for work on `ReviewMapCore`. These results informed the original experiment;
+the installer now uses Bazel for release builds.
 
 The earlier four-minute unchanged SwiftPM rebuild does not reproduce with the
 new Xcode toolchain: unchanged SwiftPM builds consistently take about two seconds.
