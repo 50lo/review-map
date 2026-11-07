@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:22:14Z
+updated_at: 2026-11-07T20:02:46Z
 ---
 
 ## Problem
@@ -64,6 +64,13 @@ Local evidence under /private/tmp/reviewmap-mobile-monorepo-ngl0vlne: analyze-ab
 ### Mixed-cache review follow-up
 
 - Reproduced the partial-global-store case with a warm two-module Bazel fixture, an app-only source edit, and a fresh output base. The build recorded 24 disk-cache hits and one Swift compiler execution; its global store contained only `Screen.swift`, while the downloaded dependency store contained `Greeting.swift`. The previous global-first return ignored the dependency.
-- Merge declared stores and the global store together, retaining support for global-only output. Declared units take precedence when both sources contain the same unit filename.
+- Merge declared stores and the global store together, retaining support for global-only output. The PR review follow-up below changes this to merge into the existing global store and retain its already present records.
 - The integration fixture now caches modules independently and populates its global store only for compiler executions. It verifies all compiled files on both sides, explicitly forces mixed app/dependency cache results, compares exact references and caller/definition regions, and checks global-only output and retained caches after failures. The new coverage failed against the old selector, then all 14 index tests passed after the fix.
 - Real analyzer verification: the new app commit had 24 disk-cache hits plus one Swift compiler execution, and the base had 26 disk-cache hits. Both saved stores contain both source units, resolution remains `index`, and the app receives definition context for the cached dependency's `greeting(name:prefix:)`. No index warnings occurred. The fixture still has its unrelated `unresolved-import` warning because module `Greetings` is not represented by a discovered component. Evidence: `/private/tmp/reviewmap-indexing-mixed-validation.json`, `/private/tmp/reviewmap-indexing-mixed-analysis.json`, and `/private/tmp/reviewmap-indexing-mixed-after.log`.
+
+### PR #28 merge and test-scope review
+
+- Merge declared output stores into the existing global store when available; otherwise merge into scratch and retain the global-only fallback. Removed the `including` parameter and the full global-store copy. A focused filesystem test verifies existing content and inode identity survive the merge, a repeated merge copies nothing, and missing-global/global-only cases remain supported.
+- Replaced the fake disk-cache state machine with one fixed mixed-output layout: Feed is in the global store and dependency indexes are available only in per-target stores. Retained full file coverage and exact reference checks for both commits, output-group/download flag assertions, exact caller checks, and one failed-rebuild preservation case. Reduced each flow to three analyzer runs. Actual cache hits continue to be verified with real Bazel rather than simulated state.
+- All 16 index tests pass (`/private/tmp/reviewmap-indexing-review-tests-final.log`). The unchanged original monorepo passed cold-root, ios/ reuse, and android/ forced disk-cache rebuild checks with all ten declarations, both platform caller contexts, and no warnings. Reports/build logs are under `/private/tmp/reviewmap-indexing-review-evidence/`; all runs used new private cache paths.
+- The separate two-module fixture was used read-only. Its mixed base build recorded 24 disk-cache hits and one Swift compiler execution; both sides retain both source units and indexed dependency definition context. No index warnings; the existing unrelated `Greetings` component-discovery warning remains. See `mixed-validation.json` in the evidence directory.

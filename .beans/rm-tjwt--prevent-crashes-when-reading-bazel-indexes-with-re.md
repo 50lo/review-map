@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:05:23Z
+updated_at: 2026-11-07T20:02:46Z
 ---
 
 ## Problem
@@ -62,3 +62,8 @@ Local evidence: analyze-bazel-root.log and bazel-index-cache/repo/b3eb6fdd2bd049
 - Add a compiler-backed regression with the same file-prefix mapping, deleted build tree, root/nested workspace mappings, and an uncovered Swift file.
 - Real default Bazel cold build and cached reads from root, ios/, and android/ retain index resolution, Swift greeting caller context, all ten declarations, and zero warnings. Evidence: `/private/tmp/reviewmap-indexing-real-{root,ios,android}.{json,log}`. The separate Kotlin caller-context defect remains assigned elsewhere.
 - The original synthetic fixture and its existing artifacts were not modified.
+
+### PR #28 database migration review
+
+- Remove the obsolete `cache/db` derived database when reusing a raw store or after a successful rebuild. The current `db-absolute-paths-v1` database and raw store are preserved; failed rebuilds leave the previous cache untouched.
+- Added a small direct cleanup/preservation test and verified successful-build cleanup in the existing Bazel flow, without adding another analyzer run. All 16 index tests pass.

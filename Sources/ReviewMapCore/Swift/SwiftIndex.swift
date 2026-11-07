@@ -37,6 +37,8 @@ enum IndexBuilder {
         // Reimport old stores: databases made before path remapping contain relative keys.
         let databasePath = cache + "/db-absolute-paths-v1"
         if !options.rebuild, fm.fileExists(atPath: storeDir), let roots = try? String(contentsOfFile: rootFile, encoding: .utf8) {
+            // The old database is derived data; keep the raw store and current database.
+            try? fm.removeItem(atPath: cache + "/db")
             log("Index for \(side.rawValue) \(sha.prefix(8)): cached.")
             return BuiltStore(storePath: storeDir, databasePath: databasePath,
                               sourceRoots: roots.split(separator: "\n").map(String.init).filter { !$0.isEmpty })
@@ -64,6 +66,7 @@ enum IndexBuilder {
         try fm.moveItem(atPath: built, toPath: storeDir)
         let roots = [srcDir] + located.extraRoots
         try roots.joined(separator: "\n").write(toFile: rootFile, atomically: true, encoding: .utf8)
+        try? fm.removeItem(atPath: cache + "/db")
         log("Built \(side.rawValue) in \(Int(Date().timeIntervalSince(start)))s.")
         return BuiltStore(storePath: storeDir, databasePath: databasePath, sourceRoots: roots)
     }
@@ -243,7 +246,7 @@ enum IndexBuilder {
                 // A mixed cache-hit build populates the global store only for actions that ran.
                 // Merge it with declared artifacts so cached dependencies remain indexed too.
                 let global = IndexBuilder.findStore(out + "/_global_index_store")
-                return (IndexBuilder.mergeStores(under: out, into: scratch + "/merged-store", including: global) ?? global, roots)
+                return (IndexBuilder.mergeStores(under: out, into: global ?? scratch + "/merged-store") ?? global, roots)
             }
             let cleanup = { _ = try? Shell.run(startup + ["clean", "--expunge"], cwd: dir) }
             let summary = "\(exe) build \(targets.joined(separator: " "))\(workspace == "." ? "" : " in \(workspace)")"
@@ -343,9 +346,9 @@ enum IndexBuilder {
         return nil
     }
 
-    /// Per-target `.indexstore` directories plus any global compiler store, copied into one store.
+    /// Copy missing per-target records into the existing global store, or a new merged store.
     /// Unit and record file names are content hashes, so stores merge by copying.
-    static func mergeStores(under root: String, into dest: String, including global: String? = nil) -> String? {
+    static func mergeStores(under root: String, into dest: String) -> String? {
         let fm = FileManager.default
         guard let e = fm.enumerator(atPath: root) else { return nil }
         var stores: [String] = []
@@ -355,7 +358,6 @@ enum IndexBuilder {
                 e.skipDescendants()
             }
         }
-        if let global { stores.append(global) }
         var merged = false
         for store in stores {
             for version in ["v5", "v6"] {
