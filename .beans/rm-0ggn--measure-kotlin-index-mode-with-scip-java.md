@@ -1,11 +1,11 @@
 ---
 # rm-0ggn
 title: Measure Kotlin index mode with scip-java
-status: todo
+status: scrapped
 type: task
 priority: deferred
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-07T21:29:19Z
+updated_at: 2026-11-07T22:46:26Z
 ---
 
 Decide whether Kotlin index mode is worth its cost by measuring what scip-java costs and resolves on Kotlin code. `KotlinLanguage.index` in `Sources/ReviewMapCore/Kotlin/KotlinLanguage.swift` returns nil today, so Kotlin references always come from name matching, and `docs/plan.md` holds index mode back until the numbers exist, as it does for Swift.
@@ -49,3 +49,8 @@ Which code to measure on. This bean originally said a real Kotlin project, but o
 No index mode code in this task. CI stays as it is, with no Java or Gradle added.
 
 Deferred outside the Kotlin implementation by the user's 2026-11-07 scope change. The real-project validation and associated scip-java experiment are not required for the Kotlin support epic. Preserve this task for a future explicit request; its measurements have not been performed.
+
+
+## Reasons for Scrapping
+
+On 2026-11-08 the user said Kotlin index mode should be built regardless of its speed. They had asked to drop the measurement gate, not the indexing. Measuring first is therefore no longer wanted. Timings are still recorded as part of rm-pczu under the Kotlin index mode epic (rm-lnrl), which replaces this bean.
