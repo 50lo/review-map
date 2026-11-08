@@ -64,6 +64,18 @@ final class FixtureTests: XCTestCase {
         XCTAssertEqual(prices.first?.signature.head, "func price(for item: Item) -> Decimal")
     }
 
+    /// CORE-006: a formatting-only review item stays in the report but asks for no review.
+    func testCosmeticReviewItemAsksForNoReview() throws {
+        let m = try report("basic")
+        let cosmetic = try reviewItem(m, "CatalogView.title()")
+        XCTAssertEqual(cosmetic.change, .cosmetic)
+        XCTAssertFalse(m.regions.contains { $0.reviewItem == cosmetic.id }, "no regions")
+        XCTAssertFalse(m.findings.contains { f in f.anchors.contains { $0.reviewItem == cosmetic.id } }, "no findings")
+        let component = try XCTUnwrap(m.components.first { $0.id == cosmetic.component })
+        let changed = m.reviewItems.filter { $0.component == cosmetic.component && $0.change != .cosmetic }.count
+        XCTAssertEqual(component.changedReviewItems, changed, "not counted as changed")
+    }
+
     func testEnumModelObservable() throws {
         let m = try report("basic")
         XCTAssertEqual(try reviewItem(m, "PaymentMethod.applePay").contractFlags, ["swift:enum-case-added"])

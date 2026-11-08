@@ -1,1 +1,19 @@
 {"version": 1}
+{"source": "CORE-001", "target": "Sources/ReviewMapCore/Analyzer.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9854bec099d382b2525d3aa76850f6143e73ac039356d051cded980b4f7dbdb8"}
+{"source": "CORE-001", "target": "Sources/ReviewMapCore/Shell.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9b4c8a5f5c50f170b0d20721fa6a8aeb91e26e7c37acd208d0113c7684cc7a1b"}
+{"source": "CORE-001", "target": "Tests/ReviewMapCoreTests/RepoBoundaryTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "1f7a09cab7a1cac80a07c51dc1ebc55e3d83b6c3e255cc62eedb2c9317e296ee"}
+{"source": "CORE-002", "target": "Sources/ReviewMapCore/Annotator.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "bbccc96ec53c55a05cfa0d731fa0ddbc961ecbcfa80fd8e9277d6161ad67beaa"}
+{"source": "CORE-002", "target": "Sources/ReviewMapCore/Shell.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9b4c8a5f5c50f170b0d20721fa6a8aeb91e26e7c37acd208d0113c7684cc7a1b"}
+{"source": "CORE-002", "target": "Tests/ReviewMapCoreTests/AnnotatorTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "9bec284479bf4248333c07c59e315a8c521cc39443cd7f3df1c364b6cb1a2e72"}
+{"source": "CORE-002", "target": "Tests/ReviewMapCoreTests/RepoBoundaryTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "1f7a09cab7a1cac80a07c51dc1ebc55e3d83b6c3e255cc62eedb2c9317e296ee"}
+{"source": "CORE-003", "target": "Sources/ReviewMapCore/Analyzer.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9854bec099d382b2525d3aa76850f6143e73ac039356d051cded980b4f7dbdb8"}
+{"source": "CORE-003", "target": "Tests/ReviewMapCoreTests/IndexTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "1d885585f2713d7ef3c05d1e9bcc8467cb3b04ef11a6d35487b909e0cedd57dd"}
+{"source": "CORE-004", "target": "Sources/ReviewMapCore/Annotator.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "bbccc96ec53c55a05cfa0d731fa0ddbc961ecbcfa80fd8e9277d6161ad67beaa"}
+{"source": "CORE-004", "target": "Tests/ReviewMapCoreTests/AnnotatorTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "9bec284479bf4248333c07c59e315a8c521cc39443cd7f3df1c364b6cb1a2e72"}
+{"source": "CORE-005", "target": "Sources/ReviewMapCore/Checks.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "5ba97b6d10c005e8833b30451d9d3d8a1d0a662f2cf36d9b5fc3fce9b52108ec"}
+{"source": "CORE-005", "target": "Sources/ReviewMapCore/StructuralReview.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9440d21bf764de808b480c1688f4ef65079a888be0a3368918290014e7fad2e7"}
+{"source": "CORE-005", "target": "Tests/ReviewMapCoreTests/AnnotatorTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "9bec284479bf4248333c07c59e315a8c521cc39443cd7f3df1c364b6cb1a2e72"}
+{"source": "CORE-005", "target": "Tests/ReviewMapCoreTests/ChecksTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "b5eaddf1c886705a464a518657eb7f003dc0c1ce0e870848db2b1256239c685e"}
+{"source": "CORE-006", "target": "Sources/ReviewMapCore/Analyzer.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "9854bec099d382b2525d3aa76850f6143e73ac039356d051cded980b4f7dbdb8"}
+{"source": "CORE-006", "target": "Sources/ReviewMapCore/Regions.swift", "role": "code", "mode": "bytes-sha256-v1", "sig": "0b5988a373f88484769f5438401b2483e4ffb149be8e5ed38532e3d8fab11de0"}
+{"source": "CORE-006", "target": "Tests/ReviewMapCoreTests/FixtureTests.swift", "role": "test", "mode": "bytes-sha256-v1", "sig": "43f3add98ed692551a54db6cec2abb0295bb2cb7a81be79bfd0f1f9a60c81134"}
