@@ -161,14 +161,25 @@ enum KotlinBazel {
         return out.sorted { $0.label < $1.label }
     }
 
-    /// The name the workspace gives rules_kotlin: a `repo_name` on its `bazel_dep`, else "rules_kotlin".
+    /// The name the workspace gives rules_kotlin: a `repo_name` on its `bazel_dep`, else "rules_kotlin". Either
+    /// quote style and any keyword order are accepted.
     static func rulesKotlinRepo(_ dir: String) -> String {
-        guard let text = try? String(contentsOfFile: join(dir, "MODULE.bazel"), encoding: .utf8),
-              let regex = try? NSRegularExpression(pattern: #"bazel_dep\(\s*name\s*=\s*"rules_kotlin"[^)]*?repo_name\s*=\s*"([^"]+)""#),
-              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-              let range = Range(match.range(at: 1), in: text)
-        else { return "rules_kotlin" }
-        return String(text[range])
+        guard let text = try? String(contentsOfFile: join(dir, "MODULE.bazel"), encoding: .utf8) else { return "rules_kotlin" }
+        func value(_ key: String, in args: String) -> String? {
+            guard let regex = try? NSRegularExpression(pattern: #"(?<![\w])"# + key + #"\s*=\s*(?:"([^"]*)"|'([^']*)')"#),
+                  let match = regex.firstMatch(in: args, range: NSRange(args.startIndex..., in: args)) else { return nil }
+            for group in [1, 2] {
+                if let range = Range(match.range(at: group), in: args) { return String(args[range]) }
+            }
+            return nil
+        }
+        let deps = try! NSRegularExpression(pattern: #"bazel_dep\s*\(([^)]*)\)"#)
+        for match in deps.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let range = Range(match.range(at: 1), in: text) else { continue }
+            let args = String(text[range])
+            if value("name", in: args) == "rules_kotlin" { return value("repo_name", in: args) ?? "rules_kotlin" }
+        }
+        return "rules_kotlin"
     }
 
     /// The aspect. It follows dependency edges and passes the manifests up, so a target set like `//app:app` also

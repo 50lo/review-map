@@ -130,6 +130,12 @@ final class KotlinBazelIndexTests: XCTestCase {
         )
         """.write(toFile: dir + "/MODULE.bazel", atomically: true, encoding: .utf8)
         XCTAssertEqual(KotlinBazel.rulesKotlinRepo(dir), "io_bazel_rules_kotlin")
+        try "bazel_dep(version = '2.4.21', name = 'rules_kotlin', repo_name = 'kt')\n"
+            .write(toFile: dir + "/MODULE.bazel", atomically: true, encoding: .utf8)
+        XCTAssertEqual(KotlinBazel.rulesKotlinRepo(dir), "kt", "single quotes, keywords in any order")
+        try "bazel_dep(name = \"rules_kotlin\", version = \"2.4.21\")\n"
+            .write(toFile: dir + "/MODULE.bazel", atomically: true, encoding: .utf8)
+        XCTAssertEqual(KotlinBazel.rulesKotlinRepo(dir), "rules_kotlin", "no repo_name")
         XCTAssertTrue(KotlinBazel.aspect(rulesKotlin: "io_bazel_rules_kotlin").contains("load(\"@io_bazel_rules_kotlin//kotlin/internal:defs.bzl\", \"KtJvmInfo\")"))
     }
 
