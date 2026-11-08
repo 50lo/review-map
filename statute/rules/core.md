@@ -58,7 +58,7 @@ boundary:
 
 # CORE-004 A failed LLM reply keeps the deterministic report
 
-The analyzer produces a complete change report without the LLM. When an LLM reply fails validation or the call fails, the reply is dropped, the deterministic scores and data stay, and the change report records it: an `llm-rejected` warning and a count in `llm.failed`.
+The analyzer produces a complete change report without the LLM. When an LLM reply fails validation or the call fails, the reply is dropped, the deterministic scores and data stay, and the change report records it with an `llm-rejected` warning. A rejected annotation batch also counts in `llm.failed`; a rejected structural review sets `llm.review` to `rejected` instead.
 
 ```yaml
 agreed: proposed          # proposed | agreed | retired
