@@ -180,6 +180,9 @@ struct SwiftLanguage: Language {
     // MARK: Resolution
 
     func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {
-        try IndexBuilder.load(options: options, repoRoot: repoRoot, sides: sides, log: log)
+        // "gradle" picks Kotlin's builder; Swift picks its own.
+        var options = options
+        if options.builder == "gradle" { options.builder = nil }
+        return try IndexBuilder.load(options: options, repoRoot: repoRoot, sides: sides, log: log)
     }
 }

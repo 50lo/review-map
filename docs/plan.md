@@ -106,7 +106,7 @@ Two pieces of shared work come before Go:
 | --- | --- | --- | --- | --- |
 | Go | tree-sitter-go | Packages inside `go.mod` modules and `go.work` | `scip-go` | Downloaded modules |
 | Rust | tree-sitter-rust | Cargo workspace members and their targets | `rust-analyzer scip` | `cargo metadata`; build scripts and proc macros compile |
-| Kotlin | tree-sitter-kotlin | Gradle modules and their source sets | `scip-java` with the Kotlin compiler plugin | A Gradle build |
+| Kotlin | tree-sitter-kotlin | Gradle modules and their source sets | `scip-java` (Kotlin Analysis API) | A Gradle or Bazel build |
 
 Go comes first: a package is a directory, so components map directly, and scip-go needs no build. Kotlin comes last: it has no indexer that works without a build, so it ships with name matching, and index mode waits for measurements, as Swift's does.
 
@@ -136,7 +136,7 @@ Go comes first: a package is a directory, so components map directly, and scip-g
 - **View code**: `@Composable` functions and subclasses of `View`, `Fragment`, and `Activity`.
 - **Structural review**: conformers from supertype lists; isolation from `@MainThread`, `@UiThread`, and Android UI classes, where the innermost `Dispatchers` block overrides it.
 - **Validation**: a small synthetic multi-module Gradle project covers imports, test source sets, Android contracts, Compose, and ambiguity handling. Record its results and timings; do not clone or build a real Android project. Keep CI checks minimal, run the full tests locally, and remove temporary validation artifacts afterward.
-- **Index mode**: deferred beyond this implementation, including scip-java measurements. Kotlin ships with name matching; no Gradle execution is needed for validation.
+- **Index mode**: built after name matching, without a measurement gate (the user's decision on 2026-11-08: index mode matters however slow it is). Gradle builds go through `scip-java index`; Bazel (rules_kotlin) needs Review Map to collect sources and classpath itself, since scip-java's Bazel aspect only indexes Java. Nothing depends on the Android SDK, and testing uses synthetic projects only. Tracked as epic rm-lnrl.
 
 ### 8. Faster Swift indexing
 

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Kotlin source is parsed without running Gradle or the compiler.
+/// Kotlin source is parsed without running Gradle or the compiler; only index mode builds.
 struct KotlinLanguage: Language {
     let id = "kotlin"
     let displayName = "Kotlin"
@@ -36,5 +36,7 @@ struct KotlinLanguage: Language {
         return !Set(decl.attributes).isDisjoint(with: ["Test", "Before", "After", "BeforeEach", "AfterEach", "BeforeAll", "AfterAll",
                                                       "BeforeClass", "AfterClass", "ParameterizedTest", "Provides", "Binds", "Inject", "Preview"])
     }
-    func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? { nil }
+    func index(options: IndexOptions, repoRoot: String, sides: [IndexSide], log: (String) -> Void) throws -> [Side: SideIndex]? {
+        try KotlinIndex.load(options: options, repoRoot: repoRoot, sides: sides, log: log)
+    }
 }

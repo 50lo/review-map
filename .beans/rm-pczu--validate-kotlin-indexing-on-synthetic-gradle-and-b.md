@@ -19,6 +19,7 @@ Check Kotlin index mode end to end on throwaway synthetic projects for both buil
    - A Gradle repo: three or four JVM modules, `kotlin("jvm")`, a version catalog, and a test source set.
    - A Bazel repo: rules_kotlin with several packages and a `kt_jvm_test`.
    - Each repo gets a base commit and a head commit. The changes cover a renamed function, a new interface implementation, a same-named class in two packages, and a change used only from tests.
+   - Include a symbol-collision check in the Gradle repo: two app modules that each define `fun main()` and `fun start()` in the same package, plus a `src/test` source set. scip-java gives a leaf module's own symbols no Maven coordinates (`scip-java maven . . demo/start().`). Since PR #33, `KotlinIndex.scopeUnqualifiedSymbols` scopes those symbols to the Gradle project (the nearest directory with a build file) before `SCIP.sideIndex` joins definitions. Check end to end that each module's calls stay within that module and that test sources still reach their module's main code.
 2. Run `reviewmap analyze --index --no-llm --no-review` on each, both cold and cached. Also run `--no-index` for comparison.
 3. Record in `docs/progress.md`:
    - Time per side, cold and cached.
