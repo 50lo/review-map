@@ -90,6 +90,32 @@ final class KotlinBazelIndexTests: XCTestCase {
         XCTAssertTrue(m.warnings.contains { $0.kind == "index-unavailable" && $0.message.contains("needs bazel or bazelisk") }, "\(m.warnings)")
     }
 
+    /// Needs no tools: a workspace in a subdirectory without a Gradle build picks Bazel by default, so the fallback
+    /// names Bazel rather than Gradle.
+    func testNestedWorkspacePicksBazel() throws {
+        setenv("REVIEWMAP_BAZEL", "reviewmap-no-such-bazel", 1)
+        defer { unsetenv("REVIEWMAP_BAZEL") }
+        let fm = FileManager.default
+        let tmp = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-kotlin-nested-\(UUID().uuidString)")
+        defer { try? fm.removeItem(atPath: tmp) }
+        let repo = tmp + "/repo"
+        try fm.createDirectory(atPath: repo + "/android/app", withIntermediateDirectories: true)
+        func git(_ args: String...) throws {
+            try Shell.run(["git", "-C", repo, "-c", "user.email=fixture@example.com", "-c", "user.name=fixture"] + args)
+        }
+        try git("init", "-q", "-b", "main")
+        fm.createFile(atPath: repo + "/android/MODULE.bazel", contents: Data())
+        for side in ["base", "head"] {
+            try "package demo\n\nfun start() = println(\"\(side)\")\n".write(toFile: repo + "/android/app/Main.kt", atomically: true, encoding: .utf8)
+            try git("add", "-A")
+            try git("commit", "-qm", side)
+            if side == "base" { try git("branch", "base") }
+        }
+        let m = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main",
+                                                index: IndexOptions(enabled: true, cacheDir: tmp + "/cache")))
+        XCTAssertTrue(m.warnings.contains { $0.kind == "index-unavailable" && $0.message.contains("needs bazel or bazelisk") }, "\(m.warnings)")
+    }
+
     func testAspectNamesTheRulesKotlinRepo() throws {
         let dir = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-kotlin-module-\(UUID().uuidString)")
         try FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)

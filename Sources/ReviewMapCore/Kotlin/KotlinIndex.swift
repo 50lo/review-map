@@ -20,7 +20,7 @@ enum KotlinIndex {
             }
             let cache = (repoDir as NSString).appendingPathComponent("\(s.sha)/kotlin")
             let builds = gradleBuilds(s.dir)
-            if options.builder == "bazel" || (builds.isEmpty && hasBazelWorkspace(s.dir)) {
+            if options.builder == "bazel" || (builds.isEmpty && hasBazelWorkspace(s.dir, options: options, repoRoot: repoRoot)) {
                 out[s.side] = try KotlinBazel.load(side: s, cache: cache, options: options, repoRoot: repoRoot, log: log)
                 continue
             }
@@ -106,8 +106,11 @@ enum KotlinIndex {
         }
     }
 
-    static func hasBazelWorkspace(_ root: String) -> Bool {
-        IndexBuilder.BuildPlan.bazelWorkspaceFiles.contains { FileManager.default.fileExists(atPath: join(root, $0)) }
+    /// Whether the side has a Bazel workspace, at the root or below it, as Swift's Bazel builder finds it. Several
+    /// workspaces count too, so that KotlinBazel reports which ones to choose from.
+    static func hasBazelWorkspace(_ root: String, options: IndexOptions, repoRoot: String) -> Bool {
+        let cwdRel = options.workingDirectory.flatMap { IndexBuilder.BuildPlan.repoRelative($0, repoRoot: repoRoot) }
+        do { return try IndexBuilder.BuildPlan.bazelWorkspace(root, under: cwdRel) != nil } catch { return true }
     }
 
     /// Whether `java` runs. macOS has a stub at /usr/bin/java that is on the PATH without a JDK installed.
