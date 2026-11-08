@@ -359,7 +359,13 @@ final class IndexBazelTests: XCTestCase {
         try bazelFlow(subdir: "ios")
     }
 
-    func bazelFlow(subdir: String) throws {
+    /// A Kotlin file in the same workspace: Kotlin's Bazel run (which fails against this stand-in) leaves Swift's
+    /// build, flags, and references as they were.
+    func testKotlinLeavesSwiftBazelBuildAlone() throws {
+        try bazelFlow(subdir: "", kotlin: true)
+    }
+
+    func bazelFlow(subdir: String, kotlin: Bool = false) throws {
         do { _ = try IndexBuilder.libraryPath() } catch { throw XCTSkip("No libIndexStore in this toolchain: \(error)") }
         let fm = FileManager.default
         let tmp = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-bazel-\(UUID().uuidString)")
@@ -388,6 +394,10 @@ final class IndexBazelTests: XCTestCase {
             }
             try "# web app\n".write(toFile: repo + "/README.md", atomically: true, encoding: .utf8)
             fm.createFile(atPath: ws + "/MODULE.bazel", contents: Data())
+            if kotlin {
+                try fm.createDirectory(atPath: ws + "/kotlin", withIntermediateDirectories: true)
+                try "package demo\n\nfun start() = println(\"\(side)\")\n".write(toFile: ws + "/kotlin/Main.kt", atomically: true, encoding: .utf8)
+            }
             try Self.buildFile.replacingOccurrences(of: "\"//ios:AppTests\",\n", with: "").replacingOccurrences(of: ":Tool", with: ":Feed")
                 .replacingOccurrences(of: "//ios:App", with: "//Sources:Storage")
                 .write(toFile: ws + "/BUILD.bazel", atomically: true, encoding: .utf8)
@@ -424,6 +434,10 @@ final class IndexBazelTests: XCTestCase {
             XCTAssertFalse(fm.fileExists(atPath: cache + "/" + (path as NSString).deletingLastPathComponent + "/db"))
         }
         let log = try String(contentsOfFile: cache + "/" + logs[0], encoding: .utf8)
+        XCTAssertFalse(log.contains("--aspects") || log.contains("reviewmap_kotlin"), log)
+        if kotlin {
+            XCTAssertTrue(m.warnings.contains { $0.kind == "index-unavailable" && $0.message.contains("Kotlin") }, "\(m.warnings)")
+        }
         XCTAssertTrue(log.contains("--features=swift.use_global_index_store"), log)
         XCTAssertTrue(log.contains("--output_groups=+swift_index_store"), log)
         XCTAssertTrue(log.contains("--remote_download_regex=.*[.]indexstore(/.*)?"), log)

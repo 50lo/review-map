@@ -1,7 +1,7 @@
 ---
 # rm-bcg9
 title: Add Kotlin index mode for Bazel
-status: todo
+status: completed
 type: task
 created_at: 2026-11-07T22:46:17Z
 updated_at: 2026-11-07T22:46:17Z
@@ -46,14 +46,18 @@ Bazel's own output base is outside the export, under Bazel's default for the exp
 
 ## Acceptance criteria
 
-- [ ] On the Bazel fixture, the ambiguous reference resolves to the right declaration across Bazel packages.
-- [ ] A cached second run starts no Bazel.
-- [ ] Without Bazel installed (simulated through PATH or an env override), analysis completes with name matching and `index-unavailable`.
-- [ ] A workspace with both Swift and Kotlin targets still indexes Swift as before. Kotlin indexing does not change Swift's Bazel flags or outputs.
-- [ ] `swift test` passes locally with the tools installed. No leftover Bazel output bases from the tests.
+- [x] On the Bazel fixture, the ambiguous reference resolves to the right declaration across Bazel packages.
+- [x] A cached second run starts no Bazel.
+- [x] Without Bazel installed (simulated through PATH or an env override), analysis completes with name matching and `index-unavailable`.
+- [x] A workspace with both Swift and Kotlin targets still indexes Swift as before. Kotlin indexing does not change Swift's Bazel flags or outputs.
+- [x] `swift test` passes locally with the tools installed. No leftover Bazel output bases from the tests.
 
 ## Constraints
 
 - Depends on rm-mje8 (KotlinIndex, the tool lookup, and the fallback tests).
 - No Android (`kt_android_library` is out of scope) and no CI changes.
 - Run `statute show` first and the `change` skill afterwards, per `AGENTS.md`.
+
+## Summary of Changes
+
+Added `Sources/ReviewMapCore/Kotlin/KotlinBazel.swift`, which `KotlinIndex.load` calls for `--index-builder bazel` or a Bazel workspace without a Gradle build. It writes an aspect into the export (`.reviewmap_kotlin/kotlin_index.bzl`, removed afterwards) that reads rules_kotlin's `KtJvmInfo` (loaded from `@rules_kotlin//kotlin/internal:defs.bzl`, following a `repo_name` in MODULE.bazel), follows `deps`/`exports`/`associates`/`runtime_deps`, and writes one JSON manifest per target with its main-repo Kotlin sources, its compile classpath without its own jars (the Kotlin stdlib is already in `transitive_compile_time_jars`), and its main-repo dependencies. `bazel build --aspects=... --output_groups=reviewmap_kotlin --lockfile_mode=off` runs on `options.targets` (default `//...`) plus `bazelArgs`, in a temporary output base that is expunged and deleted afterwards, with the shared disk cache. Then `java -cp <launcher> org.scip_code.scip_java.kotlin_analysis.MainKt` (the 85 MB release launcher is a fat jar, so this works) indexes each target, and `java -jar <launcher> aggregate` merges the shards. The index and the targets are cached per commit and workspace as `kotlin/bazel-<name>.scip` and `.targets.json`. rules_kotlin jars carry no Maven coordinates, so every symbol is `scip-java maven . . ...`; only symbols that two targets declare are scoped to their declaring target, so cross-target references still link. Tests: `KotlinBazelIndexTests` (6) with `Fixtures/kotlin-bazel-indexed` (rules_kotlin 2.4.21, rules_java 9.9.0, Bazel 9.3.1, `jvm_target = "21"`), plus `IndexBazelTests.testKotlinLeavesSwiftBazelBuildAlone`. `.bazelignore` keeps the fixture out of this repo's Bazel build. The full suite (179 tests) passed locally with OpenJDK 27.0.1 and Bazel 9.3.1, with no failures. The `change` skill named in AGENTS.md was not available in this session.

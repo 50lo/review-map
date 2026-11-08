@@ -1,0 +1,2 @@
+# A test fixture: a rules_kotlin workspace that this repo does not build.
+Tests/ReviewMapCoreTests/Fixtures/kotlin-bazel-indexed

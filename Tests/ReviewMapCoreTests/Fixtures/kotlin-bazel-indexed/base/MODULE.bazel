@@ -1,0 +1,6 @@
+module(name = "kotlin_bazel_indexed")
+
+bazel_dep(name = "rules_java", version = "9.9.0")
+bazel_dep(name = "rules_kotlin", version = "2.4.21")
+
+register_toolchains("//:kotlin_toolchain")
