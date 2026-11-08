@@ -1,0 +1,8 @@
+load("@rules_kotlin//kotlin:jvm.bzl", "kt_jvm_binary")
+
+kt_jvm_binary(
+    name = "app",
+    srcs = ["Main.kt"],
+    main_class = "demo.app.MainKt",
+    deps = ["//cache", "//store"],
+)

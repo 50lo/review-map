@@ -1,8 +1,8 @@
 import Foundation
 
 // Kotlin's index: scip-java compiles each Gradle build of a side's exported tree (`clean` and the compile tasks,
-// through its init script), then indexes the Kotlin sources with the Kotlin Analysis API. It is a full build per
-// side, like Swift's. The indexes are cached per commit next to the other languages', in
+// through its init script), then indexes the Kotlin sources with the Kotlin Analysis API. Bazel workspaces go
+// through KotlinBazel instead. It is a full build per side, like Swift's. The indexes are cached per commit next to the other languages', in
 // `<cache>/<repo>/<sha>/kotlin/`, one per Gradle build.
 
 enum KotlinIndex {
@@ -21,7 +21,8 @@ enum KotlinIndex {
             let cache = (repoDir as NSString).appendingPathComponent("\(s.sha)/kotlin")
             let builds = gradleBuilds(s.dir)
             if options.builder == "bazel" || (builds.isEmpty && hasBazelWorkspace(s.dir)) {
-                throw IndexError("Kotlin index mode does not support Bazel yet.")
+                out[s.side] = try KotlinBazel.load(side: s, cache: cache, options: options, repoRoot: repoRoot, log: log)
+                continue
             }
             guard !builds.isEmpty else {
                 throw IndexError("Kotlin indexing needs a Gradle build (settings.gradle.kts or build.gradle.kts) at \(s.side.rawValue).")
@@ -105,7 +106,7 @@ enum KotlinIndex {
         }
     }
 
-    private static func hasBazelWorkspace(_ root: String) -> Bool {
+    static func hasBazelWorkspace(_ root: String) -> Bool {
         IndexBuilder.BuildPlan.bazelWorkspaceFiles.contains { FileManager.default.fileExists(atPath: join(root, $0)) }
     }
 
@@ -150,10 +151,16 @@ enum KotlinIndex {
             return command.split(separator: " ").map(String.init)
         }
         if Shell.exists("scip-java") { return ["scip-java"] }
+        return [try scipJavaLauncher(options: options, log: log)]
+    }
+
+    /// The scip-java release launcher in the cache, downloaded the first time and checked against its published
+    /// SHA-256. It is a shell script followed by a jar that holds all of scip-java, the Kotlin indexer included.
+    static func scipJavaLauncher(options: IndexOptions, log: (String) -> Void) throws -> String {
         let fm = FileManager.default
         let bin = (options.cacheDir as NSString).appendingPathComponent("tools/scip-java-\(scipJavaVersion)")
         let path = bin + "/scip-java"
-        if fm.isExecutableFile(atPath: path) { return [path] }
+        if fm.isExecutableFile(atPath: path) { return path }
         try fm.createDirectory(atPath: bin, withIntermediateDirectories: true)
         log("Downloading scip-java \(scipJavaVersion)…")
         let url = "https://github.com/scip-code/scip-java/releases/download/\(scipJavaVersion)/scip-java-\(scipJavaVersion)"
@@ -171,6 +178,6 @@ enum KotlinIndex {
         }
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: download)
         try fm.moveItem(atPath: download, toPath: path)
-        return [path]
+        return path
     }
 }
