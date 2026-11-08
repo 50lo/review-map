@@ -159,6 +159,9 @@ final class ChecksTests: XCTestCase {
                         .head: SideIndex(refs: ["Lib/Format.swift": [], "Other/Other.swift": []])]
             })
         XCTAssertEqual(m.analyzer.resolution, "index")
+        // CORE-003: the files matched by name are named in a warning.
+        XCTAssertTrue(m.warnings.contains { $0.kind == "index-partial" && $0.message.contains("Swift") && $0.message.contains("App/App.swift") },
+                      "\(m.warnings)")
         XCTAssertEqual(findings(m, "orphaned"), [], "App/App.swift still calls Format.legacy")
     }
 
