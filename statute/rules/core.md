@@ -9,7 +9,7 @@ Rules for how the analyzer turns a change into a change report.
 By default, the base of a change is the merge-base of the base ref and the head, which is what a pull request shows. The change report records the commits it compared (`baseSha`, `headSha`) and whether the base is the merge-base (`usesMergeBase`).
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Analyzer.run and the RepoInfo it writes into every change report."
 terms: [Change, Change report]
@@ -25,7 +25,7 @@ boundary:
 Analyzing a change reads the reviewed repository and writes nothing into it: not its working tree, its index, its refs, or `.git`. The base and head are exported to a temporary directory, index builds run in those copies, and the change report, caches and indexes go outside the repository.
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Analyzer.run, GitRepo.export, index builds, and the LLM annotator's cache."
 terms: [Change, Change report]
@@ -43,7 +43,7 @@ boundary:
 When references in a language are matched by name instead of resolved through that language's index, the change report carries a warning that names the language: `index-unavailable` when no index could be built, `index-partial` with the uncovered files when the index missed some of them.
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Index mode in Analyzer.run and ChangeReportBuilder.addIndex, for every language."
 terms: [Change report, Dependency]
@@ -61,7 +61,7 @@ boundary:
 The analyzer produces a complete change report without the LLM. When an LLM reply fails validation or the call fails, the reply is dropped, the deterministic scores and data stay, and the change report records it with an `llm-rejected` warning. A rejected annotation batch also counts in `llm.failed`; a rejected structural review sets `llm.review` to `rejected` instead.
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Annotator.run and the structural review's LLM pass."
 terms: [Change report, Review item, Region, Finding]
@@ -78,7 +78,7 @@ boundary:
 Every finding cites evidence and is anchored to at least one component, dependency or review item that exists in the same change report.
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Deterministic checks (Checks) and the LLM structural review (StructuralReview.validate)."
 terms: [Finding, Component, Dependency, Review item, Change report]
@@ -94,7 +94,7 @@ boundary:
 A review item whose only difference is formatting stays in the change report with change `cosmetic`, but it gets no regions, is not counted as changed, and is not passed to the checks or the structural review.
 
 ```yaml
-agreed: proposed          # proposed | agreed | retired
+agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
 scope: "Change classification in ChangeReportBuilder, region building, component scores, checks and structural review input."
 terms: [Review item, Region, Change report]
