@@ -49,6 +49,30 @@ final class ChecksTests: XCTestCase {
         m.findings.filter { $0.kind == kind }
     }
 
+    /// CORE-005: every deterministic finding cites evidence and is anchored to a component, dependency, or
+    /// review item of the same report.
+    func testEveryFindingIsAnchoredInTheReport() throws {
+        let m = try analyze(
+            base: ["App/App.swift": "struct AppRoot { let store = Store() }\n",
+                   "Store/Store.swift": "public struct Store {\n    public init() {}\n    func load() {}\n}\n",
+                   "Tests/StoreTests.swift": "func testStore() { _ = Store() }\n"],
+            head: ["Store/Store.swift": "public struct Store {\n    public init() {}\n    func load() {}\n    public func nobody() {}\n    func root() -> AppRoot? { nil }\n}\n"])
+        XCTAssertFalse(m.findings.isEmpty)
+        let components = Set(m.components.map(\.id))
+        let reviewItems = Set(m.reviewItems.map(\.id))
+        let edges = Set(m.edges.map { [$0.from, $0.to] })
+        for f in m.findings {
+            XCTAssertFalse(f.evidence.isEmpty, "\(f.id) cites no evidence")
+            XCTAssertFalse(f.anchors.isEmpty, "\(f.id) has no anchor")
+            for a in f.anchors {
+                if let id = a.reviewItem { XCTAssertTrue(reviewItems.contains(id), "\(f.id): unknown review item \(id)") }
+                else if let id = a.component { XCTAssertTrue(components.contains(id), "\(f.id): unknown component \(id)") }
+                else if let from = a.from, let to = a.to { XCTAssertTrue(edges.contains([from, to]), "\(f.id): no edge \(from) → \(to)") }
+                else { XCTFail("\(f.id): an anchor names nothing") }
+            }
+        }
+    }
+
     func testNewCycle() throws {
         let m = try analyze(
             base: ["App/App.swift": "struct AppRoot { let store = Store() }\n",
@@ -135,6 +159,9 @@ final class ChecksTests: XCTestCase {
                         .head: SideIndex(refs: ["Lib/Format.swift": [], "Other/Other.swift": []])]
             })
         XCTAssertEqual(m.analyzer.resolution, "index")
+        // CORE-003: the files matched by name are named in a warning.
+        XCTAssertTrue(m.warnings.contains { $0.kind == "index-partial" && $0.message.contains("Swift") && $0.message.contains("App/App.swift") },
+                      "\(m.warnings)")
         XCTAssertEqual(findings(m, "orphaned"), [], "App/App.swift still calls Format.legacy")
     }
 

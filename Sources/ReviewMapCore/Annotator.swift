@@ -269,7 +269,9 @@ public enum Annotator {
             return .success(try JSONDecoder().decode(T.self, from: Data(json.utf8)))
         } catch let DecodingError.keyNotFound(key, ctx) {
             return .failure(AnnotatorError("missing \(key.stringValue) at \(path(ctx))"))
-        } catch let DecodingError.typeMismatch(_, ctx), let DecodingError.valueNotFound(_, ctx) {
+        } catch let DecodingError.typeMismatch(_, ctx) {
+            return .failure(AnnotatorError("wrong or null value at \(path(ctx))"))
+        } catch let DecodingError.valueNotFound(_, ctx) {
             return .failure(AnnotatorError("wrong or null value at \(path(ctx))"))
         } catch {
             return .failure(AnnotatorError("reply is not valid JSON"))

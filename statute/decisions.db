@@ -47,3 +47,23 @@
   terms:
   - Review item
   - Declaration
+- id: D261108-fyhht
+  timestamp: 2026-11-08T09:28:22Z
+  actor: user
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-08T10:44:43Z
+  summary: 'Adopt six core analysis rules: a change is measured from the merge-base, analysis never writes into the reviewed repo, name-matched references always carry a warning, a failed LLM reply keeps the deterministic report, every finding is anchored to something on the map, and formatting-only changes ask for no review.'
+  rationale: 'These are the guarantees a reviewer relies on when reading a map, and all six already hold in the code, so writing them down records current behavior and lets statute flag changes that would break them. Rejected for now: per-branch reviewed marks (viewer convenience, not core), refusing reports older than version 4 (no enforcing code found), and byte-identical reports for the same inputs (not verified; warnings are stored in a set). CORE-003 deliberately puts the guarantee on the per-language warnings rather than analyzer.resolution, which reads index when any language was indexed.'
+  establishes:
+  - CORE-001
+  - CORE-002
+  - CORE-003
+  - CORE-004
+  - CORE-005
+  - CORE-006
+  changes: []
+  retires: []
+  terms: []
