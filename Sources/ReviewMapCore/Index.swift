@@ -16,7 +16,8 @@ public struct IndexOptions: Equatable {
     /// `workingDirectory`, or absolute inside the repo.
     public var project: String?
     public var scheme: String?
-    /// xcodebuild destination (default "generic/platform=iOS Simulator").
+    /// xcodebuild destination. Nil uses Xcode's default for projects and workspaces, or a generic
+    /// iOS simulator for standalone Swift packages, which require a destination.
     public var destination: String?
     /// Bazel targets to build.
     public var targets: [String]?

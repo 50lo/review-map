@@ -132,7 +132,7 @@ struct IndexArgs: ParsableArguments {
     @Option(name: .customLong("index-scheme"), help: "xcodebuild scheme (default: the only one, or the one named after the project).")
     var scheme: String?
 
-    @Option(name: .customLong("index-destination"), help: "xcodebuild destination (default: generic/platform=iOS Simulator).")
+    @Option(name: .customLong("index-destination"), help: "xcodebuild destination (default: chosen by Xcode, or generic/platform=iOS Simulator for standalone packages).")
     var destination: String?
 
     @Option(name: .customLong("index-cache"), help: "Directory for built indexes (default: ~/.reviewmap/index).")

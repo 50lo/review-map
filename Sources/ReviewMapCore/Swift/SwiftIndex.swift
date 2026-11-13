@@ -134,10 +134,15 @@ enum IndexBuilder {
                     cwd = projectPath.hasSuffix("Package.swift") ? (projectPath as NSString).deletingLastPathComponent : projectPath
                 }
                 let scheme = try options.scheme ?? pickScheme(listArgs: listArgs, cwd: cwd, project: project)
-                let destination = options.destination ?? "generic/platform=iOS Simulator"
-                cmd += listArgs + ["-scheme", scheme, "-destination", destination, "-derivedDataPath", scratch,
-                                   "-clonedSourcePackagesDirPath", packageCache, "-skipPackagePluginValidation", "-skipMacroValidation",
-                                   "CODE_SIGNING_ALLOWED=NO", "COMPILER_INDEX_STORE_ENABLE=YES"]
+                cmd += listArgs + ["-scheme", scheme]
+                // Xcode chooses a destination for projects and workspaces, but requires one for a standalone package.
+                let defaultDestination = listArgs.isEmpty ? "generic/platform=iOS Simulator" : nil
+                if let destination = options.destination ?? defaultDestination {
+                    cmd += ["-destination", destination]
+                }
+                cmd += ["-derivedDataPath", scratch,
+                        "-clonedSourcePackagesDirPath", packageCache, "-skipPackagePluginValidation", "-skipMacroValidation",
+                        "CODE_SIGNING_ALLOWED=NO", "COMPILER_INDEX_STORE_ENABLE=YES"]
                 return BuildPlan(command: cmd, cwd: cwd, storeSearchRoot: scratch + "/Index.noindex",
                                  summary: "xcodebuild \(project), scheme \(scheme)")
             default:

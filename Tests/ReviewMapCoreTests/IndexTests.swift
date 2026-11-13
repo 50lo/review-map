@@ -167,6 +167,32 @@ final class IndexProjectTests: XCTestCase {
         XCTAssertEqual(try Plan.findProject(root, builder: "xcodebuild"), "apps/ios/App.xcworkspace")
     }
 
+    func testXcodebuildLetsXcodeChooseTheDestinationByDefault() throws {
+        let options = IndexOptions(builder: "xcodebuild", project: "tools/Tool.xcodeproj", scheme: "Release (Standalone)")
+        let plan = try Plan.make(options: options, srcDir: root, repoRoot: root, scratch: root + "/scratch",
+                                 packageCache: root + "/packages")
+        XCTAssertFalse(plan.command.contains("-destination"))
+    }
+
+    func testXcodebuildPassesAnExplicitDestination() throws {
+        let destination = "generic/platform=iOS Simulator"
+        let options = IndexOptions(builder: "xcodebuild", project: "apps/ios/App.xcodeproj", scheme: "App",
+                                   destination: destination)
+        let plan = try Plan.make(options: options, srcDir: root, repoRoot: root, scratch: root + "/scratch",
+                                 packageCache: root + "/packages")
+        let flag = try XCTUnwrap(plan.command.firstIndex(of: "-destination"))
+        XCTAssertEqual(Array(plan.command.dropFirst(flag).prefix(2)), ["-destination", destination])
+    }
+
+    func testXcodebuildSuppliesARequiredDestinationForStandalonePackages() throws {
+        try Data().write(to: URL(fileURLWithPath: root + "/Package.swift"))
+        let options = IndexOptions(builder: "xcodebuild", project: "Package.swift", scheme: "App-Package")
+        let plan = try Plan.make(options: options, srcDir: root, repoRoot: root, scratch: root + "/scratch",
+                                 packageCache: root + "/packages")
+        let flag = try XCTUnwrap(plan.command.firstIndex(of: "-destination"))
+        XCTAssertEqual(Array(plan.command.dropFirst(flag).prefix(2)), ["-destination", "generic/platform=iOS Simulator"])
+    }
+
     func testGivenProjectPathForms() throws {
         let resolve = { (p: String, wd: String?) in try Plan.resolveProject(p, srcDir: self.root, repoRoot: self.root, workingDirectory: wd) }
         XCTAssertEqual(try resolve("apps/ios/App.xcodeproj", nil), "apps/ios/App.xcodeproj")
