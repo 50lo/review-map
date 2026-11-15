@@ -21,6 +21,8 @@ anyhow = "1"
 reviewmap-core = { path = "../../crates/core" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tauri = { version = "2", features = [] }
+# custom-protocol: the app serves the UI it was built with (what `tauri build` turns on); without it,
+# Tauri loads build.devUrl. The app is built with Bazel only (//app/src-tauri:reviewmap-app).
+tauri = { version = "2", features = ["custom-protocol"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-single-instance = "2"

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::process::CommandExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
 pub struct SwiftHelper {
@@ -61,7 +61,8 @@ struct Reply {
 
 impl SwiftHelper {
     /// The helper binary: `REVIEWMAP_SWIFT_HELPER`, next to the running executable (the app bundles it there),
-    /// or the build in this checkout's `helper/` directory.
+    /// or Bazel's build of it next to the running executable's (`bazel-bin/helper`, two levels up from
+    /// `bazel-bin/crates/cli/reviewmap` and `bazel-bin/app/src-tauri/reviewmap-app`).
     pub fn locate() -> Option<PathBuf> {
         if let Ok(p) = std::env::var("REVIEWMAP_SWIFT_HELPER") {
             if !p.is_empty() {
@@ -74,17 +75,15 @@ impl SwiftHelper {
             if let Some(dir) = exe.parent() {
                 candidates.push(dir.join("reviewmap-swift-helper"));
                 candidates.push(dir.join("../Resources/reviewmap-swift-helper"));
+                candidates.push(dir.join("../../helper/reviewmap-swift-helper"));
             }
         }
-        let checkout = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../helper/.build");
-        candidates.push(checkout.join("release/reviewmap-swift-helper"));
-        candidates.push(checkout.join("debug/reviewmap-swift-helper"));
         candidates.into_iter().find(|p| p.is_file())
     }
 
     pub fn start() -> Result<SwiftHelper> {
         let path = Self::locate().ok_or_else(|| {
-            anyhow!("The Swift helper is not built. Run `swift build -c release` in helper/, or set REVIEWMAP_SWIFT_HELPER to its path.")
+            anyhow!("The Swift helper is not built. Run `bazel build //helper:reviewmap-swift-helper`, or set REVIEWMAP_SWIFT_HELPER to its path.")
         })?;
         let mut child = Command::new(&path)
             .stdin(Stdio::piped())

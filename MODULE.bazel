@@ -1,5 +1,17 @@
 module(name = "reviewmap")
 
+# The rebuild (docs/rebuild-phase1-proposal.md) builds with Bazel only: the Rust crates (rules_rust, crates
+# from Cargo.toml and Cargo.lock), the Swift helper (rules_swift, the same Swift packages as the prototype),
+# the UI (rules_js and rules_ts, packages from app/pnpm-lock.yaml) and the app bundle (//app:bundle).
+# First, so that its C and C++ toolchain is the one Bazel picks: rules_swift needs it, and the rules below
+# bring a generic one.
+bazel_dep(name = "apple_support", version = "2.5.2", repo_name = "build_bazel_apple_support")
+bazel_dep(name = "rules_rust", version = "0.75.0")
+bazel_dep(name = "aspect_rules_js", version = "3.6.1")
+bazel_dep(name = "aspect_rules_ts", version = "3.10.1")
+bazel_dep(name = "bazel_lib", version = "3.7.0")
+bazel_dep(name = "bazel_skylib", version = "1.9.2")
+
 bazel_dep(name = "rules_swift", version = "3.6.1", repo_name = "build_bazel_rules_swift")
 bazel_dep(name = "rules_swift_package_manager", version = "1.25.0")
 
@@ -69,3 +81,41 @@ use_repo(
     "swiftpkg_xcodeproj",
     "swiftpkg_yams",
 )
+
+# Rust: the toolchain, and the crates.io and git dependencies that Cargo.lock pins.
+rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
+rust.toolchain(
+    edition = "2021",
+    versions = ["1.99.1"],
+)
+use_repo(rust, "rust_toolchains")
+
+register_toolchains("@rust_toolchains//:all")
+
+crate = use_extension("@rules_rust//crate_universe:extensions.bzl", "crate")
+crate.from_cargo(
+    name = "crates",
+    cargo_lockfile = "//:Cargo.lock",
+    manifests = ["//:Cargo.toml"],
+)
+use_repo(crate, "crates")
+
+# The UI: Node.js packages from app/pnpm-lock.yaml, and the TypeScript compiler that app/package.json pins.
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_translate_lock(
+    name = "npm",
+    pnpm_lock = "//app:pnpm-lock.yaml",
+)
+use_repo(npm, "npm")
+
+# Bazel's pnpm, for updating the lockfile: bazel run -- @pnpm//:pnpm --dir $PWD/app install --lockfile-only
+pnpm = use_extension(
+    "@aspect_rules_js//npm:extensions.bzl",
+    "pnpm",
+    dev_dependency = True,
+)
+use_repo(pnpm, "pnpm")
+
+typescript = use_extension("@aspect_rules_ts//ts:extensions.bzl", "typescript")
+typescript.deps(version_from = "//app:package.json")
+use_repo(typescript, "npm_typescript")

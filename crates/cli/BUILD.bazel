@@ -1,0 +1,15 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_binary")
+load("//:version.bzl", "VERSION")
+
+exports_files(["Cargo.toml"])
+
+rust_binary(
+    name = "reviewmap",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    edition = "2021",
+    version = VERSION,
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True) + ["//crates/core:reviewmap_core"],
+)

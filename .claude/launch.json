@@ -3,11 +3,8 @@
   "configurations": [
     {
       "name": "reviewmap-ui-preview",
-      "runtimeExecutable": "sh",
-      "runtimeArgs": [
-        "-c",
-        "cd app && npx vite"
-      ],
+      "runtimeExecutable": "bazel",
+      "runtimeArgs": ["run", "//app:dev"],
       "port": 1420
     }
   ]

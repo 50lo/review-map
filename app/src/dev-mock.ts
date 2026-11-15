@@ -1,4 +1,4 @@
-// A stand-in for the app's Rust side, for working on the UI in a plain browser with `npm run dev`.
+// A stand-in for the app's Rust side, for working on the UI in a plain browser with `bazel run //app:dev`.
 // It answers the commands in backend.ts from the dev server (see vite.config.ts): the report named by
 // REVIEWMAP_REPORT, sources read with `git show`, and marks kept in browser storage. Never part of the app.
 

@@ -1,0 +1,69 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+load("//:version.bzl", "VERSION")
+
+exports_files([
+    "Cargo.toml",
+    "icons/icon.icns",
+])
+
+# The app is built without the Tauri CLI: Tauri's build script and generate_context!() read tauri.conf.json,
+# and this patch to it (Tauri merges TAURI_CONFIG into the file) points them at the UI that //app:dist built.
+# //app:bundle makes the bundle that `tauri build` would.
+TAURI_CONFIG = json.encode({"build": {"frontendDist": "DIST"}})
+
+CONFIG = [
+    "Cargo.toml",
+    "tauri.conf.json",
+    "//:Cargo.toml",
+] + glob([
+    "capabilities/**",
+    "icons/**",
+])
+
+# tauri-build finds Cargo's target directory as the parent of a `build` directory above OUT_DIR, so the
+# script's name puts its OUT_DIR under one.
+cargo_build_script(
+    name = "build/script",
+    srcs = ["build.rs"],
+    aliases = aliases(build = True),
+    # rules_rust makes an $(execpath) in these absolute.
+    build_script_env = {"TAURI_CONFIG": TAURI_CONFIG.replace("DIST", "$(execpath //app:dist)")},
+    crate_name = "build_script_build",
+    data = CONFIG + ["//app:dist"],
+    edition = "2021",
+    link_deps = all_crate_deps(normal = True),
+    deps = all_crate_deps(build = True),
+)
+
+rust_library(
+    name = "reviewmap_app",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    compile_data = CONFIG + ["//app:dist"],
+    crate_name = "reviewmap_app",
+    edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    rustc_env = {"TAURI_CONFIG": TAURI_CONFIG.replace("DIST", "$(execpath //app:dist)")},
+    version = VERSION,
+    deps = all_crate_deps(normal = True) + [
+        ":build/script",
+        "//crates/core:reviewmap_core",
+    ],
+)
+
+rust_binary(
+    name = "reviewmap-app",
+    srcs = ["src/main.rs"],
+    edition = "2021",
+    version = VERSION,
+    visibility = ["//app:__pkg__"],
+    deps = [":reviewmap_app"],
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":reviewmap_app",
+)

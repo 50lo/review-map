@@ -1,0 +1,90 @@
+load("@aspect_rules_js//js:defs.bzl", "js_binary")
+load("@aspect_rules_ts//ts:defs.bzl", "ts_config", "ts_project")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+load("@npm//app:vite/package_json.bzl", vite_bin = "bin")
+load("@npm//app:vitest/package_json.bzl", vitest_bin = "bin")
+load("//:version.bzl", "VERSION")
+load(":macos_app.bzl", "macos_app")
+
+exports_files([
+    "package.json",
+    "pnpm-lock.yaml",
+])
+
+# The packages of pnpm-lock.yaml, laid out as node_modules under bazel-bin/app.
+npm_link_all_packages(name = "node_modules")
+
+SOURCES = glob(
+    ["src/**"],
+    exclude = ["src/**/*.test.ts"],
+)
+
+TESTS = glob(["src/**/*.test.ts"])
+
+CONFIG = [
+    "package.json",
+    "tsconfig.json",
+    "vite.config.ts",
+]
+
+ts_config(
+    name = "tsconfig",
+    src = "tsconfig.json",
+)
+
+# The type check (`tsc --noEmit`). It is also the target that holds the UI's TypeScript, which Review Map
+# builds when it indexes a change to app/.
+ts_project(
+    name = "ts",
+    srcs = [f for f in SOURCES + TESTS if f.endswith((".ts", ".tsx"))] + ["vite.config.ts"],
+    no_emit = True,
+    tsconfig = ":tsconfig",
+    deps = [":node_modules"],
+)
+
+# The UI as the app loads it: Vite's build into bazel-bin/app/dist.
+vite_bin.vite(
+    name = "dist",
+    srcs = SOURCES + CONFIG + [
+        "index.html",
+        ":node_modules",
+    ],
+    args = ["build"],
+    chdir = package_name(),
+    out_dirs = ["dist"],
+    visibility = ["//app/src-tauri:__pkg__"],
+)
+
+# Vite's dev server on the sources in the checkout, with reloads; see dev.mjs.
+js_binary(
+    name = "dev",
+    data = [":node_modules"],
+    entry_point = "dev.mjs",
+    tags = ["manual"],
+)
+
+vitest_bin.vitest_test(
+    name = "test",
+    args = ["run"],
+    chdir = package_name(),
+    data = SOURCES + TESTS + CONFIG + [
+        ":node_modules",
+        "//:prototype_reports",
+    ],
+)
+
+# Review Map.app, laid out as `tauri build` laid it out: the app, with the `reviewmap` command and the
+# Swift helper next to it. `bazel build -c opt //app:bundle`, or scripts/build-app.sh.
+macos_app(
+    name = "bundle",
+    bundle_id = "dev.reviewmap.app",
+    bundle_name = "Review Map",
+    executable = "//app/src-tauri:reviewmap-app",
+    extra_executables = [
+        "//crates/cli:reviewmap",
+        "//helper:reviewmap-swift-helper",
+    ],
+    icon = "//app/src-tauri:icons/icon.icns",
+    minimum_os_version = "14.0",
+    version = VERSION,
+)

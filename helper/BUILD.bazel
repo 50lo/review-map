@@ -1,0 +1,20 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_binary")
+
+# The Swift helper the app owns (see docs/rebuild-phase1-proposal.md). Its Swift packages are the
+# prototype's, pinned in the root Package.swift and Package.resolved: swift-syntax 602.0.0 and indexstore-db
+# at swift-6.2.4-RELEASE, the revision the prototype reads index stores with.
+swift_binary(
+    name = "reviewmap-swift-helper",
+    srcs = glob(["Sources/reviewmap-swift-helper/*.swift"]),
+    copts = [
+        "-swift-version",
+        "5",
+    ],
+    module_name = "reviewmap_swift_helper",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@swiftpkg_indexstore_db//:IndexStoreDB",
+        "@swiftpkg_swift_syntax//:SwiftParser",
+        "@swiftpkg_swift_syntax//:SwiftSyntax",
+    ],
+)

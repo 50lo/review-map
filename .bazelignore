@@ -1,6 +1,7 @@
 # A test fixture: a rules_kotlin workspace that this repo does not build.
 Tests/ReviewMapCoreTests/Fixtures/kotlin-bazel-indexed
-# The rebuild's build outputs and dependencies: not Bazel packages, and large to walk.
+# Not Bazel packages, and large to walk: the Bazel fixture tests' home (target/), the link to the UI's
+# packages that `bazel run //app:dev` makes (app/node_modules), and what builds before Bazel left behind.
 target
 app/node_modules
 app/dist

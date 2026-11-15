@@ -39,7 +39,7 @@ class CrashScreen extends React.Component<{ children: React.ReactNode }, { error
 }
 
 async function main() {
-  // Outside the app (`npm run dev` in a browser), a mock answers for the Rust side.
+  // Outside the app (`bazel run //app:dev` in a browser), a mock answers for the Rust side.
   if (import.meta.env.DEV && !("__TAURI_INTERNALS__" in window)) await (await import("./dev-mock")).install();
   window.addEventListener("error", (e) => void logUiError(describe(e.error ?? e.message)));
   window.addEventListener("unhandledrejection", (e) => void logUiError(`unhandled rejection: ${describe(e.reason)}`));

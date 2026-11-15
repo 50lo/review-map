@@ -10,14 +10,39 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::OnceLock;
 
+/// The checkout these tests run from. Under `bazel test` they run in their runfiles, where the files a test
+/// declares as `data` are linked; this file is one of them, and its link leads back to the checkout. A test
+/// that reads the checkout itself (the Bazel fixtures, which `.bazelignore` keeps out of Bazel's view, and the
+/// kept test home) is therefore tagged to run outside the sandbox. Under Cargo it is the manifest's directory,
+/// two levels up.
+pub fn checkout() -> &'static Path {
+    static CHECKOUT: OnceLock<PathBuf> = OnceLock::new();
+    CHECKOUT.get_or_init(|| {
+        if std::env::var_os("TEST_SRCDIR").is_some() {
+            let this = std::fs::canonicalize("crates/core/tests/common/mod.rs").expect("this file among the test's runfiles");
+            this.ancestors().nth(5).expect("the checkout").to_path_buf()
+        } else {
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
+        }
+    })
+}
+
+/// A file or directory of the checkout, from the test's runfiles when it is declared as `data` there.
+fn source(path: &str) -> PathBuf {
+    if std::env::var_os("TEST_SRCDIR").is_some() && Path::new(path).exists() {
+        return std::env::current_dir().expect("the runfiles directory").join(path);
+    }
+    checkout().join(path)
+}
+
 /// Moves the app's cache and data under a directory of this test run, so tests never read or write the
-/// reviewer's own. `persistent` names a directory under Cargo's target directory that is kept between
-/// runs, for the tests that would otherwise start Bazel cold every time.
+/// reviewer's own. `persistent` names a directory under the checkout's `target` directory that is kept
+/// between runs, for the tests that would otherwise start Bazel cold every time.
 pub fn home(persistent: Option<&str>) -> &'static Path {
     static HOME: OnceLock<PathBuf> = OnceLock::new();
     HOME.get_or_init(|| {
         let dir = match persistent {
-            Some(name) => Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target").join(name),
+            Some(name) => checkout().join("target").join(name),
             None => tempfile::tempdir().expect("a temporary directory").keep(),
         };
         std::fs::create_dir_all(&dir).expect("the test home");
@@ -180,11 +205,11 @@ pub fn nested_fixture_repo_at(fixture: &Path, path: &Path, nested: &str, extra: 
 
 /// The prototype's fixtures, which the rebuild's tests read in place until the prototype is retired.
 pub fn prototype_fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../Tests/ReviewMapCoreTests/Fixtures").join(name)
+    source(&format!("Tests/ReviewMapCoreTests/Fixtures/{name}"))
 }
 
 pub fn own_fixture(name: &str) -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)
+    source(&format!("crates/core/tests/fixtures/{name}"))
 }
 
 /// `main` → `feature` of a repository, with the defaults a launch has.
@@ -241,7 +266,7 @@ pub fn warning_kinds(report: &ChangeReport) -> Vec<&str> {
 pub fn swift_helper() -> bool {
     let found = reviewmap_core::parse::swift_helper::SwiftHelper::locate().is_some();
     if !found {
-        eprintln!("skipped: the Swift helper is not built (run `swift build -c release` in helper/)");
+        eprintln!("skipped: the Swift helper is not built (run `bazel build //helper:reviewmap-swift-helper`, or `bazel test`, which passes it in)");
     }
     found
 }

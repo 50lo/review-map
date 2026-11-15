@@ -3,13 +3,6 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit",
-    "tauri": "tauri"
-  },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
     "@tauri-apps/plugin-dialog": "2.8.4",
@@ -20,7 +13,6 @@
     "shiki": "3.13.0"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "2.12.4",
     "@types/node": "22.15.18",
     "@types/react": "18.3.20",
     "@types/react-dom": "18.3.6",
@@ -28,5 +20,8 @@
     "typescript": "5.8.3",
     "vite": "6.3.5",
     "vitest": "3.1.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": []
   }
 }

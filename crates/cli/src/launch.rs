@@ -14,8 +14,8 @@ use std::process::{Command, Stdio};
 const APP_NAME: &str = "Review Map.app";
 const APP_BINARY: &str = "reviewmap-app";
 
-/// The app's executable: `REVIEWMAP_APP` (an app bundle or an executable), an installed bundle, or a build
-/// in the checkout this command was built from.
+/// The app's executable: `REVIEWMAP_APP` (an app bundle or an executable), an installed bundle, or Bazel's
+/// build of the app next to this command's (`bazel-bin/app`, two levels up from `bazel-bin/crates/cli`).
 fn app_executable() -> Result<PathBuf> {
     let in_bundle = |bundle: PathBuf| bundle.join("Contents/MacOS").join(APP_BINARY);
     if let Ok(given) = std::env::var("REVIEWMAP_APP") {
@@ -39,22 +39,21 @@ fn app_executable() -> Result<PathBuf> {
             } else {
                 unbundled.push(dir.join(APP_BINARY));
             }
-            // Installed next to each other, or built into the same Cargo target directory.
+            // Installed next to each other.
             candidates.push(in_bundle(dir.join("..").join(APP_NAME)));
             candidates.push(in_bundle(dir.join("../share/reviewmap").join(APP_NAME)));
-            candidates.push(in_bundle(dir.join("bundle/macos").join(APP_NAME)));
+            // Built by Bazel in the same configuration (//app:bundle and //app/src-tauri:reviewmap-app).
+            let bazel_bin = dir.join("../..");
+            candidates.push(in_bundle(bazel_bin.join("app").join(APP_NAME)));
+            unbundled.push(bazel_bin.join("app/src-tauri").join(APP_BINARY));
         }
     }
     if let Some(home) = std::env::var_os("HOME") {
         candidates.push(in_bundle(PathBuf::from(home).join("Applications").join(APP_NAME)));
     }
     candidates.push(in_bundle(PathBuf::from("/Applications").join(APP_NAME)));
-    let checkout = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target");
-    candidates.push(in_bundle(checkout.join("release/bundle/macos").join(APP_NAME)));
     // The executable outside a bundle runs too, without the app's name and icon; it comes last.
     candidates.extend(unbundled);
-    candidates.push(checkout.join("release").join(APP_BINARY));
-    candidates.push(checkout.join("debug").join(APP_BINARY));
     candidates
         .into_iter()
         .find(|p| p.is_file())

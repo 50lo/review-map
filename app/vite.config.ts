@@ -5,11 +5,11 @@ import { execFile } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-// The UI of the Review Map app. Tauri loads the built assets from dist/ (no server, no port); `tauri dev`
-// uses this dev server on a fixed port instead.
+// The UI of the Review Map app. Bazel builds it into bazel-bin/app/dist (//app:dist), which the app embeds
+// and loads without a server or a port.
 //
 // To work on the UI in a plain browser, without the app:
-//   REVIEWMAP_REPORT=/path/to/report.json npm run dev
+//   REVIEWMAP_REPORT=/path/to/report.json bazel run //app:dev
 // serves that report (written by `reviewmap --report`) and the sources it points at through a mocked
 // backend (src/dev-mock.ts). This exists only in the dev server; the app itself never serves HTTP.
 const reportPath = process.env.REVIEWMAP_REPORT ? path.resolve(process.env.REVIEWMAP_REPORT) : undefined;
