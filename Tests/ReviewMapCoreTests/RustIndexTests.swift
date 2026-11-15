@@ -46,7 +46,7 @@ final class RustIndexTests: XCTestCase {
         let changed = report.reviewItems.filter { $0.qualifiedName.contains("render") }
         XCTAssertEqual(changed.count, 2)
         XCTAssertEqual(changed.filter { !$0.usedBy.isEmpty }.count, 1, "Only Alpha's implementation is called: \(changed)")
-        let named = try analyze(IndexOptions())
+        let named = try analyze(IndexOptions(enabled: false))
         XCTAssertNotEqual(named.reviewItems.filter { $0.qualifiedName.contains("render") }.map(\.usedBy), changed.map(\.usedBy), "index mode must improve the ambiguous method call")
         var logs: [String] = []
         let cached = try analyze(IndexOptions(enabled: true, cacheDir: Self.cache!)) { logs.append($0) }

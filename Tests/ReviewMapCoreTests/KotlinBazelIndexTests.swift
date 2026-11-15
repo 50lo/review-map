@@ -65,7 +65,7 @@ final class KotlinBazelIndexTests: XCTestCase {
         XCTAssertEqual(try reviewItem(m, "Store.load()").usedBy.map(\.symbol), ["start()"])
         XCTAssertEqual(try reviewItem(m, "Cache.load()").usedBy, [], "the app never calls Cache.load()")
 
-        let named = try analyze(index: IndexOptions())
+        let named = try analyze(index: IndexOptions(enabled: false))
         XCTAssertNotEqual(try reviewItem(named, "Cache.load()").usedBy.map(\.symbol), [],
                           "name matching can't tell the two load() methods apart")
     }
