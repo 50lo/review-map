@@ -23,7 +23,7 @@ use crate::lang::{self, Language};
 use crate::model::*;
 use crate::parse::cache::SyntaxCache;
 use crate::parse::swift_helper::SwiftHelper;
-use crate::parse::{kotlin, ParsedFile};
+use crate::parse::{kotlin, typescript, ParsedFile};
 use crate::paths::is_under;
 use crate::proc::{is_cancelled, Cancel};
 use anyhow::{anyhow, Result};
@@ -341,161 +341,277 @@ impl Session {
 
     /// Refines the report: the build graph, then each language's index. Emits a report after each step.
     /// A step that fails leaves a warning and the report as far as it got; only cancelling is an error.
+    ///
+    /// Swift and Kotlin are indexed in the Bazel workspaces the change touches. TypeScript is indexed in
+    /// those that use rules_ts, and in Yarn Classic projects, which need no Bazel.
     pub fn refine(&mut self, cancel: &Cancel, emit: Emit) -> Result<()> {
         let languages: Vec<&'static str> = self.languages().iter().map(|l| l.id()).collect();
+        let bazel_only: Vec<&'static str> = languages.iter().copied().filter(|l| *l != "typescript").collect();
         let finish = |session: &mut Session, emit: Emit| {
             session.stage = "complete".to_string();
             emit(Event::Report(Box::new(session.report())));
         };
+        let bazel_tool = crate::tools::bazel();
+        let mut trees: Option<Trees> = None;
+        let mut scopes: BTreeMap<(Side, String), Scope> = BTreeMap::new();
+        let args = self.bazel_args();
         if self.in_scope.is_empty() {
             // Nothing for Bazel to say: no workspace holds changed source.
-            for l in &languages {
+            for l in &bazel_only {
                 self.notes.entry(l.to_string()).or_insert_with(|| "the change touches no Bazel workspace, and phase 1 indexes Bazel projects only".to_string());
             }
-            finish(self, emit);
-            return Ok(());
-        }
-        let Some(bazel_tool) = crate::tools::bazel() else {
-            for l in &languages {
+        } else if let Some(bazel_tool) = bazel_tool.clone() {
+            let t = self.trees(&mut trees, cancel, emit)?;
+            let env = |side: Side, w: &str| BazelEnv::new(bazel_tool.clone(), t.spaces.workspace_dir(side, w), t.spaces.output_base(side, w), args.clone());
+            let (head_source, base_source) = (self.head.clone(), self.base.clone());
+            let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
+
+            // Step 1: the build graph.
+            let mut graphs = (SideGraph::default(), SideGraph::default());
+            for w in self.in_scope.clone() {
+                let mut info = WorkspaceInfo { path: if w.is_empty() { ".".to_string() } else { w.clone() }, graph: "none".to_string(), ..Default::default() };
+                for side in [Side::Head, Side::Base] {
+                    let src = source(side);
+                    if !Self::has_workspace(&src, &w) {
+                        continue;
+                    }
+                    let scope = self.scope(&w, &src);
+                    if side == Side::Head {
+                        info.targets = scope.targets.clone();
+                        info.scope = scope.kind.clone();
+                    }
+                    scopes.insert((side, w.clone()), scope.clone());
+                    let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
+                    emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
+                    match load_graph(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))) {
+                        Ok(graph) => {
+                            if side == Side::Head {
+                                info.graph = if graph.configured { "configured" } else { "unconfigured" }.to_string();
+                            }
+                            push_graph(if side == Side::Head { &mut graphs.1 } else { &mut graphs.0 }, graph);
+                        }
+                        Err(e) => {
+                            if is_cancelled(&e) {
+                                return Err(e);
+                            }
+                            self.warnings.push(Warning::new(
+                                "bazel-graph-unavailable",
+                                format!("Bazel could not report the {} build graph{at}, so its components are Bazel packages: {}", side.name(), first_lines(&e.to_string(), 3)),
+                            ));
+                        }
+                    }
+                }
+                self.workspace_infos.push(info);
+            }
+            // A graph for one side only would cut the two sides into different components.
+            let complete: BTreeSet<String> =
+                graphs.1.workspaces.iter().map(|g| g.workspace.clone()).filter(|w| graphs.0.workspace(w).is_some() || !Self::has_workspace(&self.base, w)).collect();
+            graphs.0.workspaces.retain(|g| complete.contains(&g.workspace));
+            graphs.1.workspaces.retain(|g| complete.contains(&g.workspace));
+            self.graphs = Some(graphs);
+            self.stage = "graph".to_string();
+            emit(Event::Report(Box::new(self.report())));
+            cancel.check()?;
+
+            // Step 2: each language's index, workspace by workspace and at both sides (see `index_workspaces`).
+            // A language with no index at all is syntax-only at both sides, so they are resolved the same way.
+            if self.index_enabled {
+                let cache = crate::store::cache_root().join("index");
+                let repo_key = crate::store::repo_key(self.repo.root());
+                let bazel_units = self.bazel_units();
+                if languages.contains(&"swift") {
+                    let result = SwiftHelper::start().and_then(|mut helper| {
+                        self.index_workspaces("swift", "Swift", &bazel_units, &source, cancel, |w, side, src, files| {
+                            let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
+                            if scope.kind == "all" {
+                                return Err(anyhow!(
+                                    "no Bazel targets define its review scope. Set index.targets in reviewmap.yml, or start the review with --target //app:App, so that libraries are compiled in the application's configuration"
+                                ));
+                            }
+                            let job = SwiftIndexJob {
+                                env: &env(side, w),
+                                side,
+                                sha: &src.sha,
+                                workspace: w,
+                                targets: &scope.targets,
+                                tree_dir: t.dir(side),
+                                files,
+                                cache_dir: cache.join("swift").join(&repo_key),
+                            };
+                            let result = crate::index::swift::load(&job, &mut helper, cancel, &|m| emit(Event::Progress(m)))?;
+                            let mut index = SideIndex { refs: result.refs, warnings: Vec::new() };
+                            if let Some(p) = result.partial {
+                                index.warnings.push(Warning::new("index-partial", p));
+                            }
+                            Ok(index)
+                        })
+                    });
+                    self.take_index("swift", result)?;
+                    emit(Event::Report(Box::new(self.report())));
+                }
+                if languages.contains(&"kotlin") {
+                    let result = self.index_workspaces("kotlin", "Kotlin", &bazel_units, &source, cancel, |w, side, src, files| {
+                        if !bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "rules_kotlin") {
+                            return Err(anyhow!("it does not build Kotlin with rules_kotlin"));
+                        }
+                        let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
+                        let blobs: BTreeMap<String, String> = files.iter().filter_map(|p| src.tree.get(p).map(|e| (p.clone(), e.oid.to_string()))).collect();
+                        let job = KotlinIndexJob {
+                            env: &env(side, w),
+                            side,
+                            sha: &src.sha,
+                            workspace: w,
+                            targets: &scope.targets,
+                            blobs: &blobs,
+                            log_dir: cache.join("kotlin").join(&repo_key),
+                        };
+                        crate::index::kotlin::load(&job, cancel, &|m| emit(Event::Progress(m)))
+                    });
+                    self.take_index("kotlin", result)?;
+                    if languages.contains(&"typescript") {
+                        emit(Event::Report(Box::new(self.report())));
+                    }
+                }
+            }
+        } else {
+            for l in &bazel_only {
                 self.notes.insert(l.to_string(), "Bazel was not found (looked on the PATH and in the usual install locations; REVIEWMAP_BAZEL names another)".to_string());
             }
             self.warnings.push(Warning::new("bazel-unavailable", "Bazel was not found, so components are Bazel packages and not targets."));
-            finish(self, emit);
-            return Ok(());
-        };
-
-        // The app-owned trees are only changed here, between jobs, under the repository's lock.
-        emit(Event::Progress("Waiting for this repository's Bazel workspaces".to_string()));
-        let spaces = Workspaces::acquire(self.repo.root(), cancel)?;
-        let progress = |m: String| emit(Event::Progress(m));
-        let head_dir = spaces.materialize(&self.repo, Side::Head, &self.head.tree, &self.info.head_sha, cancel, &progress)?;
-        let base_dir = spaces.materialize(&self.repo, Side::Base, &self.base.tree, &self.info.base_sha, cancel, &progress)?;
-        let args = self.bazel_args();
-        let env = |side: Side, w: &str| BazelEnv::new(bazel_tool.clone(), spaces.workspace_dir(side, w), spaces.output_base(side, w), args.clone());
-        let (head_source, base_source) = (self.head.clone(), self.base.clone());
-        let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
-
-        // Step 1: the build graph.
-        let mut graphs = (SideGraph::default(), SideGraph::default());
-        let mut scopes: BTreeMap<(Side, String), Scope> = BTreeMap::new();
-        for w in self.in_scope.clone() {
-            let mut info = WorkspaceInfo { path: if w.is_empty() { ".".to_string() } else { w.clone() }, graph: "none".to_string(), ..Default::default() };
-            for side in [Side::Head, Side::Base] {
-                let src = source(side);
-                if !Self::has_workspace(&src, &w) {
-                    continue;
-                }
-                let scope = self.scope(&w, &src);
-                if side == Side::Head {
-                    info.targets = scope.targets.clone();
-                    info.scope = scope.kind.clone();
-                }
-                scopes.insert((side, w.clone()), scope.clone());
-                let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
-                emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
-                match load_graph(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))) {
-                    Ok(graph) => {
-                        if side == Side::Head {
-                            info.graph = if graph.configured { "configured" } else { "unconfigured" }.to_string();
-                        }
-                        push_graph(if side == Side::Head { &mut graphs.1 } else { &mut graphs.0 }, graph);
-                    }
-                    Err(e) => {
-                        if is_cancelled(&e) {
-                            return Err(e);
-                        }
-                        self.warnings.push(Warning::new(
-                            "bazel-graph-unavailable",
-                            format!("Bazel could not report the {} build graph{at}, so its components are Bazel packages: {}", side.name(), first_lines(&e.to_string(), 3)),
-                        ));
-                    }
-                }
-            }
-            self.workspace_infos.push(info);
         }
-        // A graph for one side only would cut the two sides into different components.
-        let complete: BTreeSet<String> = graphs.1.workspaces.iter().map(|g| g.workspace.clone()).filter(|w| graphs.0.workspace(w).is_some() || !Self::has_workspace(&self.base, w)).collect();
-        graphs.0.workspaces.retain(|g| complete.contains(&g.workspace));
-        graphs.1.workspaces.retain(|g| complete.contains(&g.workspace));
-        self.graphs = Some(graphs);
-        self.stage = "graph".to_string();
-        emit(Event::Report(Box::new(self.report())));
-        cancel.check()?;
 
-        // Step 2: each language's index, workspace by workspace and at both sides (see `index_workspaces`).
-        // A language with no index at all is syntax-only at both sides, so they are resolved the same way.
-        if !self.index_enabled {
-            finish(self, emit);
-            return Ok(());
-        }
-        let cache = crate::store::cache_root().join("index");
-        let repo_key = crate::store::repo_key(self.repo.root());
-        if languages.contains(&"swift") {
-            let result = SwiftHelper::start().and_then(|mut helper| {
-                self.index_workspaces("swift", "Swift", &source, cancel, |w, side, src, files| {
-                    let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
-                    if scope.kind == "all" {
-                        return Err(anyhow!(
-                            "no Bazel targets define its review scope. Set index.targets in reviewmap.yml, or start the review with --target //app:App, so that libraries are compiled in the application's configuration"
-                        ));
-                    }
-                    let job = SwiftIndexJob {
-                        env: &env(side, w),
-                        side,
-                        sha: &src.sha,
-                        workspace: w,
-                        targets: &scope.targets,
-                        tree_dir: if side == Side::Head { &head_dir } else { &base_dir },
-                        files,
-                        cache_dir: cache.join("swift").join(&repo_key),
-                    };
-                    let result = crate::index::swift::load(&job, &mut helper, cancel, &|m| emit(Event::Progress(m)))?;
-                    let mut index = SideIndex { refs: result.refs, warnings: Vec::new() };
-                    if let Some(p) = result.partial {
-                        index.warnings.push(Warning::new("index-partial", p));
-                    }
-                    Ok(index)
-                })
-            });
-            self.take_index("swift", result)?;
-            emit(Event::Report(Box::new(self.report())));
-        }
-        if languages.contains(&"kotlin") {
-            let result = self.index_workspaces("kotlin", "Kotlin", &source, cancel, |w, side, src, files| {
-                if !bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "rules_kotlin") {
-                    return Err(anyhow!("it does not build Kotlin with rules_kotlin"));
-                }
-                let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
-                let blobs: BTreeMap<String, String> = files.iter().filter_map(|p| src.tree.get(p).map(|e| (p.clone(), e.oid.to_string()))).collect();
-                let job = KotlinIndexJob {
-                    env: &env(side, w),
-                    side,
-                    sha: &src.sha,
-                    workspace: w,
-                    targets: &scope.targets,
-                    blobs: &blobs,
-                    log_dir: cache.join("kotlin").join(&repo_key),
-                };
-                crate::index::kotlin::load(&job, cancel, &|m| emit(Event::Progress(m)))
-            });
-            self.take_index("kotlin", result)?;
+        if self.index_enabled && languages.contains(&"typescript") {
+            let result = self.index_typescript(&mut trees, bazel_tool.as_ref(), &scopes, cancel, emit);
+            self.take_index("typescript", result)?;
         }
         finish(self, emit);
         Ok(())
     }
 
-    /// One language's index over the workspaces in scope. `build` makes the index of one workspace at one
-    /// side, given that side's files of the language in the workspace.
+    /// The app-owned base and head trees, brought to the two revisions the first time a step needs them.
+    /// They are only changed here, between jobs, under the repository's lock.
+    fn trees<'t>(&self, trees: &'t mut Option<Trees>, cancel: &Cancel, emit: Emit) -> Result<&'t Trees> {
+        if trees.is_none() {
+            emit(Event::Progress("Waiting for this repository's app-owned workspaces".to_string()));
+            let spaces = Workspaces::acquire(self.repo.root(), cancel)?;
+            let progress = |m: String| emit(Event::Progress(m));
+            let head = spaces.materialize(&self.repo, Side::Head, &self.head.tree, &self.info.head_sha, cancel, &progress)?;
+            let base = spaces.materialize(&self.repo, Side::Base, &self.base.tree, &self.info.base_sha, cancel, &progress)?;
+            *trees = Some(Trees { spaces, head, base });
+        }
+        Ok(trees.as_ref().expect("the trees were just made"))
+    }
+
+    /// The Bazel workspaces in scope, as the units Swift and Kotlin are indexed in.
+    fn bazel_units(&self) -> Units<'static> {
+        let workspaces = self.workspaces.clone();
+        Units {
+            dirs: self.in_scope.clone(),
+            of: Box::new(move |path: &str| workspace_of(&workspaces, path).map(str::to_string)),
+            exists: Box::new(|src: &SideSource, w: &str| Self::has_workspace(src, w)),
+            name: Box::new(|w: &str| if w.is_empty() { "the root workspace".to_string() } else { w.to_string() }),
+            none: "no Bazel workspace in the change has {language} files".to_string(),
+        }
+    }
+
+    /// TypeScript's index, over the projects that hold its changed files: Bazel workspaces that use rules_ts,
+    /// and package-manager roots outside them, of which phase 1 indexes Yarn Classic ones. A Yarn Berry, pnpm,
+    /// or npm root is not indexed, and its files show only links that syntax proves, with a warning that says
+    /// why (for Berry: that support comes later).
+    fn index_typescript(&self, trees: &mut Option<Trees>, bazel_tool: Option<&PathBuf>, scopes: &BTreeMap<(Side, String), Scope>, cancel: &Cancel, emit: Emit) -> Result<(SideIndex, SideIndex)> {
+        use crate::index::typescript::{load, unsupported, Setup, TypeScriptIndexJob};
+        use crate::lang::typescript::project;
+        let rules_ts = |src: &SideSource, w: &str| Self::has_workspace(src, w) && bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "aspect_rules_ts");
+        let bazel_ws: BTreeSet<String> = self.workspaces.iter().filter(|w| rules_ts(&self.head, w) || rules_ts(&self.base, w)).cloned().collect();
+        let mut roots: BTreeSet<String> = BTreeSet::new();
+        for src in [&self.head, &self.base] {
+            for r in &project(src).roots {
+                if !bazel_ws.iter().any(|w| is_under(&r.dir, w)) {
+                    roots.insert(r.dir.clone());
+                }
+            }
+        }
+        let all: Vec<String> = bazel_ws.iter().chain(roots.iter()).cloned().collect();
+        let unit_of = move |path: &str| -> Option<String> { all.iter().filter(|u| is_under(path, u)).max_by_key(|u| u.len()).cloned() };
+        // The units that hold a changed TypeScript file.
+        let mut dirs: BTreeSet<String> = BTreeSet::new();
+        let paths: BTreeSet<&String> = self.base.files.keys().chain(self.head.files.keys()).collect();
+        for path in paths {
+            let language = self.head.files.get(path).or_else(|| self.base.files.get(path)).map(|f| f.language.as_str());
+            if language != Some("typescript") || self.base.tree.get(path).map(|e| e.oid) == self.head.tree.get(path).map(|e| e.oid) {
+                continue;
+            }
+            if let Some(u) = unit_of(path) {
+                dirs.insert(u);
+            }
+        }
+        let bazel_names = bazel_ws.clone();
+        let units = Units {
+            dirs: dirs.into_iter().collect(),
+            of: Box::new(unit_of),
+            exists: Box::new(move |src: &SideSource, u: &str| if bazel_ws.contains(u) { Self::has_workspace(src, u) } else { project(src).roots.iter().any(|r| r.dir == u) }),
+            name: Box::new(move |u: &str| {
+                let place = if u.is_empty() { "the repository root".to_string() } else { u.to_string() };
+                if bazel_names.contains(u) { format!("the Bazel workspace {place}") } else { place }
+            }),
+            none: "the change's TypeScript files are in no Yarn Classic project and no Bazel workspace that uses rules_ts".to_string(),
+        };
+        let (head_source, base_source) = (self.head.clone(), self.base.clone());
+        let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
+        let args = self.bazel_args();
+        let log_dir = crate::store::cache_root().join("index").join("typescript").join("logs").join(crate::store::repo_key(self.repo.root()));
+        self.index_workspaces("typescript", "TypeScript", &units, &source, cancel, |u, side, src, files| {
+            let bazel_unit = rules_ts(src, u);
+            if !bazel_unit {
+                let p = project(src);
+                let root = p.roots.iter().find(|r| r.dir == u).ok_or_else(|| anyhow!("it has no package.json at {}", side.name()))?;
+                if let Some(why) = unsupported(&root.manager, &root.evidence) {
+                    return Err(anyhow!(why));
+                }
+            }
+            if bazel_unit && bazel_tool.is_none() {
+                return Err(anyhow!("it builds TypeScript with rules_ts, and Bazel was not found (looked on the PATH and in the usual install locations; REVIEWMAP_BAZEL names another)"));
+            }
+            if crate::tools::node().is_none() {
+                return Err(anyhow!(
+                    "TypeScript indexing needs Node.js, which was not found (looked on the PATH, in the usual install locations, and in Volta, nvm, fnm, mise, and asdf; REVIEWMAP_NODE names another)"
+                ));
+            }
+            let t = self.trees(trees, cancel, emit)?;
+            let env;
+            let default_targets = vec!["//...".to_string()];
+            let setup = if bazel_unit {
+                let bazel_tool = bazel_tool.expect("checked above");
+                env = BazelEnv::new(bazel_tool.clone(), t.spaces.workspace_dir(side, u), t.spaces.output_base(side, u), args.clone());
+                let targets = scopes.get(&(side, u.to_string())).filter(|s| s.kind != "all").map(|s| &s.targets).unwrap_or(&default_targets);
+                Setup::Bazel { env: &env, targets }
+            } else {
+                let p = project(src);
+                let root = p.roots.iter().find(|r| r.dir == u).expect("checked above");
+                Setup::Yarn {
+                    pin: root.yarn_pin.clone(),
+                    has_lockfile: root.has_lockfile,
+                    in_bazel_workspace: workspace_of(&self.workspaces, &crate::paths::join(u, "package.json")).is_some(),
+                }
+            };
+            let job = TypeScriptIndexJob { side, sha: &src.sha, dir: u, tree_dir: t.dir(side), source: src, files: &files, setup, log_dir: log_dir.clone() };
+            load(&job, cancel, &|m| emit(Event::Progress(m)))
+        })
+    }
+
+    /// One language's index over a set of units: the Bazel workspaces in scope, or TypeScript's projects.
+    /// `build` makes the index of one unit at one side, given that side's files of the language in the unit.
     ///
-    /// A workspace is indexed at every side it exists at, or not at all: its files that exist at both sides
-    /// could not use an index of one side anyway. A workspace that can't be indexed (it doesn't build the
-    /// language with Bazel, it has no scope targets, its build failed) leaves its files syntax-only and says
-    /// why in an `index-partial` warning (CORE-003); it doesn't take the other workspaces' indexes with it.
-    /// Only when no workspace could be indexed is the language without an index.
+    /// A unit is indexed at every side it exists at, or not at all: its files that exist at both sides
+    /// could not use an index of one side anyway. A unit that can't be indexed (it doesn't build the
+    /// language with Bazel, it has no scope targets, its build failed, it is a Yarn Berry project) leaves
+    /// its files syntax-only and says why in an `index-partial` warning (CORE-003); it doesn't take the other
+    /// units' indexes with it. Only when no unit could be indexed is the language without an index.
     fn index_workspaces(
         &self,
         language: &str,
         display_name: &str,
+        units: &Units,
         source: &dyn Fn(Side) -> Arc<SideSource>,
         cancel: &Cancel,
         mut build: impl FnMut(&str, Side, &SideSource, Vec<String>) -> Result<SideIndex>,
@@ -503,15 +619,14 @@ impl Session {
         let mut sides = (SideIndex::default(), SideIndex::default());
         let mut built = 0;
         let mut problems: Vec<(String, String)> = Vec::new();
-        for w in &self.in_scope {
-            let name = if w.is_empty() { "the root workspace".to_string() } else { w.clone() };
+        for w in &units.dirs {
+            let name = (units.name)(w);
             let mut pair = (None, None);
             let mut problem = None;
             for side in [Side::Head, Side::Base] {
                 let src = source(side);
-                let files: Vec<String> =
-                    src.files.iter().filter(|(p, f)| f.language == language && workspace_of(&self.workspaces, p) == Some(w.as_str())).map(|(p, _)| p.clone()).collect();
-                if files.is_empty() || !Self::has_workspace(&src, w) {
+                let files: Vec<String> = src.files.iter().filter(|(p, f)| f.language == language && (units.of)(p).as_deref() == Some(w.as_str())).map(|(p, _)| p.clone()).collect();
+                if files.is_empty() || !(units.exists)(&src, w) {
                     continue;
                 }
                 match build(w, side, &src, files) {
@@ -541,7 +656,7 @@ impl Session {
         }
         if built == 0 {
             return Err(match problems.as_slice() {
-                [] => anyhow!("no Bazel workspace in the change has {display_name} files"),
+                [] => anyhow!("{}", units.none.replace("{language}", display_name)),
                 [(name, reason)] => anyhow!("{name}: {reason}"),
                 many => anyhow!("{}", many.iter().map(|(name, reason)| format!("{name}: {reason}")).collect::<Vec<_>>().join("\n")),
             });
@@ -589,6 +704,41 @@ impl Session {
     }
 }
 
+/// The app-owned base and head trees of a review, held under the repository's lock.
+struct Trees {
+    spaces: Workspaces,
+    head: PathBuf,
+    base: PathBuf,
+}
+
+impl Trees {
+    fn dir(&self, side: Side) -> &Path {
+        if side == Side::Head {
+            &self.head
+        } else {
+            &self.base
+        }
+    }
+}
+
+type UnitOf<'u> = Box<dyn Fn(&str) -> Option<String> + 'u>;
+type UnitExists<'u> = Box<dyn Fn(&SideSource, &str) -> bool + 'u>;
+type UnitName<'u> = Box<dyn Fn(&str) -> String + 'u>;
+
+/// The places a language is indexed in, one by one.
+struct Units<'u> {
+    /// Repo-relative directories.
+    dirs: Vec<String>,
+    /// The unit a file belongs to.
+    of: UnitOf<'u>,
+    /// Whether a unit exists at a side.
+    exists: UnitExists<'u>,
+    /// How warnings name a unit.
+    name: UnitName<'u>,
+    /// Why there is no index when no unit has the language's files; `{language}` is its name.
+    none: String,
+}
+
 fn push_graph(side: &mut SideGraph, graph: WorkspaceGraph) {
     side.workspaces.retain(|g| g.workspace != graph.workspace);
     side.workspaces.push(graph);
@@ -631,7 +781,8 @@ pub fn run(request: ReviewRequest, cancel: &Cancel, emit: Emit) -> Result<Sessio
 type Parsed = BTreeMap<String, Arc<ParsedFile>>;
 
 /// Parses the source files of both revisions. A blob is parsed once however many paths and sides hold it,
-/// and not at all when the syntax cache has it.
+/// and not at all when the syntax cache has it. A TypeScript blob is parsed once per grammar: the same
+/// content parses differently as `.ts` and as `.tsx`.
 fn parse_sides(
     repo: &Repo,
     base: &Tree,
@@ -641,42 +792,52 @@ fn parse_sides(
     cancel: &Cancel,
     emit: Emit,
 ) -> Result<(Parsed, Parsed)> {
-    // Blob id -> (language, a path that holds it).
-    let mut blobs: BTreeMap<gix::ObjectId, (&'static str, String)> = BTreeMap::new();
-    let wanted = |tree: &Tree| -> Vec<(String, gix::ObjectId, &'static str)> {
+    // (blob id, grammar) -> a path that holds it. The grammar is the language id, or "tsx".
+    type Key = (gix::ObjectId, &'static str);
+    let mut blobs: BTreeMap<Key, String> = BTreeMap::new();
+    let wanted = |tree: &Tree| -> Vec<(String, Key)> {
         tree.iter()
             .filter(|(_, e)| matches!(e.mode, crate::git::EntryMode::File | crate::git::EntryMode::Executable))
             .filter_map(|(p, e)| {
                 let language = languages.iter().find(|l| l.is_source(p))?;
-                (!excludes.iter().any(|g| g.matches(p))).then(|| (p.clone(), e.oid, language.id()))
+                let grammar = if language.id() == "typescript" && typescript::is_tsx(p) { "tsx" } else { language.id() };
+                (!excludes.iter().any(|g| g.matches(p))).then(|| (p.clone(), (e.oid, grammar)))
             })
             .collect()
     };
     let base_list = wanted(base);
     let head_list = wanted(head);
-    for (path, oid, language) in base_list.iter().chain(head_list.iter()) {
-        blobs.entry(*oid).or_insert((language, path.clone()));
+    for (path, key) in base_list.iter().chain(head_list.iter()) {
+        blobs.entry(*key).or_insert(path.clone());
     }
-    let mut parsed: HashMap<gix::ObjectId, Arc<ParsedFile>> = HashMap::new();
+    let mut parsed: HashMap<Key, Arc<ParsedFile>> = HashMap::new();
 
-    // Kotlin: tree-sitter, in parallel.
-    let kotlin_cache = SyntaxCache::new("kotlin", kotlin::PARSER_VERSION);
-    let kotlin_blobs: Vec<gix::ObjectId> = blobs.iter().filter(|(_, v)| v.0 == "kotlin").map(|(k, _)| *k).collect();
-    if !kotlin_blobs.is_empty() {
-        emit(Event::Progress(format!("Parsing {} Kotlin files", kotlin_blobs.len())));
-        let results: Vec<(gix::ObjectId, Arc<ParsedFile>)> = kotlin_blobs
+    // Kotlin and TypeScript: tree-sitter, in parallel.
+    type Parse = fn(&str) -> ParsedFile;
+    let tree_sitter: [(&str, &str, SyntaxCache, Parse); 3] = [
+        ("kotlin", "Kotlin", SyntaxCache::new("kotlin", kotlin::PARSER_VERSION), kotlin::parse),
+        ("typescript", "TypeScript", SyntaxCache::new("typescript", typescript::PARSER_VERSION), |s| typescript::parse(s, false)),
+        ("tsx", "TSX", SyntaxCache::new("tsx", typescript::PARSER_VERSION), |s| typescript::parse(s, true)),
+    ];
+    for (grammar, name, cache, parse) in &tree_sitter {
+        let keys: Vec<Key> = blobs.keys().filter(|k| k.1 == *grammar).copied().collect();
+        if keys.is_empty() {
+            continue;
+        }
+        emit(Event::Progress(format!("Parsing {} {name} files", keys.len())));
+        let results: Vec<(Key, Arc<ParsedFile>)> = keys
             .par_iter()
             .map_init(
                 || repo.local(),
-                |local, oid| {
-                    let key = oid.to_string();
-                    if let Some(hit) = kotlin_cache.get(&key) {
-                        return (*oid, Arc::new(hit));
+                |local, key| {
+                    let id = key.0.to_string();
+                    if let Some(hit) = cache.get(&id) {
+                        return (*key, Arc::new(hit));
                     }
-                    let text = read_blob(local, *oid).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
-                    let file = kotlin::parse(&text);
-                    kotlin_cache.put(&key, &file);
-                    (*oid, Arc::new(file))
+                    let text = read_blob(local, key.0).map(|b| String::from_utf8_lossy(&b).into_owned()).unwrap_or_default();
+                    let file = parse(&text);
+                    cache.put(&id, &file);
+                    (*key, Arc::new(file))
                 },
             )
             .collect();
@@ -685,7 +846,7 @@ fn parse_sides(
     }
 
     // Swift: the helper, in batches, for the blobs the cache doesn't have.
-    let swift_blobs: Vec<(gix::ObjectId, String)> = blobs.iter().filter(|(_, v)| v.0 == "swift").map(|(k, v)| (*k, v.1.clone())).collect();
+    let swift_blobs: Vec<(gix::ObjectId, String)> = blobs.iter().filter(|(k, _)| k.1 == "swift").map(|(k, p)| (k.0, p.clone())).collect();
     if !swift_blobs.is_empty() {
         // The cache key needs the helper's version, so the helper starts even when everything is cached.
         let mut helper = SwiftHelper::start().map_err(|e| anyhow!("Swift files can't be parsed: {e}"))?;
@@ -696,7 +857,7 @@ fn parse_sides(
         for (oid, hit) in cached {
             match hit {
                 Some(file) => {
-                    parsed.insert(oid, Arc::new(file));
+                    parsed.insert((oid, "swift"), Arc::new(file));
                 }
                 None => missing.push((oid, paths[&oid].clone())),
             }
@@ -722,13 +883,13 @@ fn parse_sides(
             for (key, file) in results.into_inner().unwrap() {
                 swift_cache.put(&key, &file);
                 if let Some(oid) = by_key.get(&key) {
-                    parsed.insert(*oid, Arc::new(file));
+                    parsed.insert((*oid, "swift"), Arc::new(file));
                 }
             }
         }
     }
 
-    let collect = |list: Vec<(String, gix::ObjectId, &'static str)>| -> Parsed { list.into_iter().filter_map(|(path, oid, _)| parsed.get(&oid).map(|f| (path, f.clone()))).collect() };
+    let collect = |list: Vec<(String, Key)>| -> Parsed { list.into_iter().filter_map(|(path, key)| parsed.get(&key).map(|f| (path, f.clone()))).collect() };
     Ok((collect(base_list), collect(head_list)))
 }
 

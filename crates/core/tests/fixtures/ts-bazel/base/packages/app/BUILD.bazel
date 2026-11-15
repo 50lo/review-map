@@ -1,0 +1,22 @@
+load("@aspect_rules_ts//ts:defs.bzl", "ts_project")
+load("@npm//:defs.bzl", "npm_link_all_packages")
+
+npm_link_all_packages(name = "node_modules")
+
+# Code that only the build has: the source tree has no src/generated/version.ts.
+genrule(
+    name = "version",
+    outs = ["src/generated/version.ts"],
+    cmd = "echo 'export const VERSION = \"1.0.0\";' > $@",
+)
+
+ts_project(
+    name = "app",
+    srcs = glob(["src/*.ts"]) + [":version"],
+    declaration = True,
+    tsconfig = "//:tsconfig",
+    deps = [
+        ":node_modules/@demo/lib",
+        "//:node_modules/@types/semver",
+    ],
+)

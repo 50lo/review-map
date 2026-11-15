@@ -1,0 +1,6 @@
+{
+  "name": "ts-bazel-fixture",
+  "private": true,
+  "devDependencies": { "typescript": "5.9.3", "@types/semver": "7.7.1" },
+  "pnpm": { "onlyBuiltDependencies": [] }
+}

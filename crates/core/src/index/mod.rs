@@ -1,10 +1,12 @@
 //! Exact references from a language's compiler index, instead of name matching. Each language turns its
 //! index into a `SideIndex` per side: Swift from the compiler's index store, Kotlin from per-target SCIP
-//! indexes resolved through source and classpath ownership.
+//! indexes resolved through source and classpath ownership, and TypeScript from scip-typescript's index of
+//! each Yarn Classic project or rules_ts workspace.
 
 pub mod kotlin;
 pub mod scip;
 pub mod swift;
+pub mod typescript;
 
 use crate::model::Warning;
 use serde::{Deserialize, Serialize};

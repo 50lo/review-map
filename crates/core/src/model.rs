@@ -123,6 +123,10 @@ pub enum ComponentKind {
     BazelPackage,
     Folder,
     External,
+    /// An npm package: a package.json with a name, outside the Bazel targets.
+    NpmPackage,
+    /// A directory with a tsconfig.json that no package covers.
+    Tsconfig,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]

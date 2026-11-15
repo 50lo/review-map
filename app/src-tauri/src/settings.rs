@@ -4,7 +4,8 @@
 //! ```json
 //! {
 //!   "editor": "xcode",                         // or vscode, cursor, zed, idea, studio, or "cmd {file}:{line}"
-//!   "tools": { "bazel": "/opt/homebrew/bin/bazelisk", "java": "/path/to/jdk/bin/java" },
+//!   "tools": { "bazel": "/opt/homebrew/bin/bazelisk", "java": "/path/to/jdk/bin/java",
+//!              "node": "/path/to/node/bin/node", "yarn": "/path/to/yarn" },  // npx and corepack come from node's directory
 //!   "cacheLimitGb": 30,                        // syntax, index, and Bazel action caches together
 //!   "idleWorkspaceDays": 30                    // app-owned Bazel workspaces of repositories unused this long are removed
 //! }

@@ -1,10 +1,11 @@
-//! What a parser reports for one source file. Swift comes from the Swift helper (SwiftSyntax) and Kotlin
-//! from tree-sitter; both fill the same shapes, which follow the prototype's `Syntax.swift`.
+//! What a parser reports for one source file. Swift comes from the Swift helper (SwiftSyntax), Kotlin and
+//! TypeScript from tree-sitter; all fill the same shapes, which follow the prototype's `Syntax.swift`.
 
 pub mod cache;
 pub mod kotlin;
 pub mod swift_helper;
 pub mod treesitter;
+pub mod typescript;
 
 use crate::model::ItemKind;
 use serde::{Deserialize, Serialize};
@@ -98,9 +99,13 @@ impl Declaration {
 pub struct NameRef {
     pub name: String,
     pub line: u32,
-    /// The module (Kotlin: the package) the name was imported from, when the language says.
+    /// The module (Kotlin: the package; TypeScript: the import specifier) the name was imported from, when
+    /// the language says.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub module: Option<String>,
+    /// Last line of a statement that spans several lines (TypeScript imports), when the language says.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub end_line: Option<u32>,
 }
 
 /// A lexical block that establishes or explicitly clears known reference isolation.

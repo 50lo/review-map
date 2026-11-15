@@ -8,7 +8,7 @@
 
 use super::{Builder, CheckCoverage, DeclKey, Mode, SideData};
 use crate::index::{IndexedRef, SideIndex};
-use crate::lang::Language;
+use crate::lang::{ImportTarget, Language};
 use crate::model::*;
 use crate::parse::{NameRef, ParsedFile};
 use crate::paths::is_test_path;
@@ -146,6 +146,25 @@ impl<'a> Builder<'a> {
         let (id, name) = self.external_id(&name);
         self.external_components.insert(id.clone(), name);
         Some(id)
+    }
+
+    /// The component an import leads to, for languages whose imports name files or packages (TypeScript):
+    /// the component of the file it names, the component that compiles a workspace package, or, when
+    /// `externals` is set, the external package's component.
+    fn import_component(&mut self, data: &SideData, lang: &dyn Language, target: &ImportTarget, externals: bool) -> Option<String> {
+        let layout = &data.layout;
+        match target {
+            ImportTarget::File(f) => layout.file_component.get(f).cloned(),
+            ImportTarget::Package { name, workspace, file } => {
+                let own = file.as_ref().and_then(|f| layout.file_component.get(f).cloned()).or_else(|| layout.module_component.get(name).cloned());
+                match own {
+                    Some(c) => Some(c),
+                    None if !*workspace && externals => self.external_component(name, lang, data),
+                    None => None,
+                }
+            }
+            ImportTarget::Platform | ImportTarget::Missing | ImportTarget::Unknown => None,
+        }
     }
 
     /// Index mode for one file: each reference resolves to the exact declaration it points at.
@@ -292,6 +311,15 @@ impl<'a> Builder<'a> {
                         }
                         continue;
                     }
+                    // TypeScript: an import names one file or one package, as the revision's projects resolve it.
+                    if let Some(target) = lang.resolve_import(&data.source, path, &imp.name) {
+                        if let Some(to) = self.import_component(data, lang, &target, true) {
+                            if to != *comp {
+                                self.add_ref(s, comp, &to, import_ref(s));
+                            }
+                        }
+                        continue;
+                    }
                     // Swift: an import names a module, and the build graph says which component compiles into it.
                     if let Some(target) = layout.module_component.get(&imp.name) {
                         if layout.components.get(target).and_then(|c| c.module.as_ref()) != module.as_ref() {
@@ -358,6 +386,15 @@ impl<'a> Builder<'a> {
                         target = choice.1;
                         resolved_name = choice.2;
                         resolved_package = Some(choice.0);
+                    } else if let Some(resolved) =
+                        r.module.as_ref().and_then(|spec| lang.resolve_import(&data.source, path, spec)).filter(|t| *t != ImportTarget::Unknown)
+                    {
+                        // TypeScript: the import says which file or package the name comes from.
+                        let Some(c) = self.import_component(data, lang, &resolved, false) else { continue };
+                        if c == *comp {
+                            continue;
+                        }
+                        target = c;
                     } else {
                         let Some(cands) = data.decl_table.get(&r.name) else { continue };
                         if cands.contains(comp) {

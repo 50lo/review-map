@@ -1,5 +1,6 @@
-//! How one side's source tree is cut into components: Bazel targets when the build graph is known, Bazel
-//! packages before that, and top-level folders for files outside any workspace. Large components are
+//! How one side's source tree is cut into components: Bazel targets when the build graph is known, the
+//! components a language's manifests declare (npm packages), Bazel packages, and top-level folders for the
+//! remaining files. Large components are
 //! split by folder and `reviewmap.yml` rules override the result, as in the prototype's `Components.swift`.
 
 use super::SideSource;
@@ -99,6 +100,11 @@ pub fn build(
         for ws in &graph.workspaces {
             add_targets(source, languages, ws, &mut layout);
         }
+    }
+
+    // Components a language's own manifests declare (TypeScript's npm packages), for files no target claimed.
+    for l in languages {
+        l.add_components(source, &mut layout);
     }
 
     // 2. Bazel packages, for files in a workspace that no target claimed (or whose graph is not known yet).
@@ -290,8 +296,16 @@ fn add_targets(source: &SideSource, languages: &[&'static dyn Language], ws: &Wo
         let t = &ws.targets[*label];
         let id = target_id(wsdir, label);
         let name = if name_count[target_name(label)] > 1 { label.trim_start_matches("//").to_string() } else { target_name(label).to_string() };
-        let language = languages.iter().find(|l| files.iter().any(|f| l.is_source(f))).map(|l| l.id()).unwrap_or("swift");
-        let module = if language == "swift" { t.module_name.clone() } else { None };
+        let lang = languages.iter().find(|l| files.iter().any(|f| l.is_source(f)));
+        let language = lang.map(|l| l.id()).unwrap_or("swift");
+        let package_dir = join(wsdir, label.trim_start_matches("//").split(':').next().unwrap_or(""));
+        let module = if language == "swift" {
+            t.module_name.clone()
+        } else if !is_test_target(t) {
+            lang.and_then(|l| l.target_module(source, &package_dir))
+        } else {
+            None
+        };
         layout.components.insert(
             id.clone(),
             ComponentInfo { id: id.clone(), name, kind: ComponentKind::BazelTarget, module: module.clone(), parent: None, is_test: is_test_target(t), layer: None },
@@ -316,6 +330,23 @@ fn add_targets(source: &SideSource, languages: &[&'static dyn Language], ws: &Wo
         let mut found: BTreeSet<(String, String)> = BTreeSet::new();
         while let Some((dep, first_hop, hops)) = queue.pop_front() {
             if !seen.insert(dep) {
+                continue;
+            }
+            // rules_js links npm packages as `//pkg:node_modules/<name>` targets: a first-party package is
+            // the target that compiles it, anything else an external package.
+            if let Some(name) = npm_link_name(dep) {
+                if hops == 1 {
+                    match layout.module_component.get(&name) {
+                        Some(id) => {
+                            found.insert((id.clone(), dep.to_string()));
+                        }
+                        None => {
+                            let id = format!("ext:{name}");
+                            layout.externals.insert(id.clone(), name);
+                            found.insert((id, dep.to_string()));
+                        }
+                    }
+                }
                 continue;
             }
             let node = ws.targets.get(dep);
@@ -347,6 +378,16 @@ fn add_targets(source: &SideSource, languages: &[&'static dyn Language], ws: &Wo
             }
         }
     }
+}
+
+/// The package a rules_js link target names: "//:node_modules/@types/semver" -> "semver" (a type-only package
+/// stands for the module it types), "//app:node_modules/@demo/lib" -> "@demo/lib".
+fn npm_link_name(label: &str) -> Option<String> {
+    let name = label.strip_prefix("//")?.split_once(':')?.1.strip_prefix("node_modules/")?;
+    if name.is_empty() || name.starts_with('.') {
+        return None;
+    }
+    Some(crate::lang::typescript::project::typed_module(name).unwrap_or_else(|| name.to_string()))
 }
 
 fn split(parent_info: &ComponentInfo, files: &[String], depth: usize, config: &Config, layout: &mut ComponentLayout) {

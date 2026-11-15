@@ -1,4 +1,4 @@
-//! Finding the external tools the app runs (Bazel, a JDK, Xcode's tools, curl).
+//! Finding the external tools the app runs (Bazel, a JDK, Node.js and Yarn, Xcode's tools, curl).
 //!
 //! A Finder launch has no shell PATH, so tools are looked up in this order: an environment override
 //! (`REVIEWMAP_BAZEL`, …), an absolute path in the app's settings, the inherited PATH, and the usual
@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 
-/// Absolute tool paths from the app's settings, by tool name ("bazel", "java").
+/// Absolute tool paths from the app's settings, by tool name ("bazel", "java", "node", "yarn").
 static CONFIGURED: OnceLock<Mutex<BTreeMap<String, PathBuf>>> = OnceLock::new();
 
 pub fn set_configured(tools: BTreeMap<String, PathBuf>) {
@@ -153,4 +153,56 @@ pub fn lib_index_store() -> Option<PathBuf> {
         }
     }
     None
+}
+
+/// The newest version directory under a version manager's install root ("~/.nvm/versions/node/v22.1.0").
+fn newest_version_dir(root: &Path) -> Option<PathBuf> {
+    let key = |p: &PathBuf| -> Vec<u64> {
+        let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        name.trim_start_matches(|c: char| !c.is_ascii_digit()).split(|c: char| !c.is_ascii_digit()).filter_map(|s| s.parse().ok()).collect()
+    };
+    let mut dirs: Vec<PathBuf> = std::fs::read_dir(root).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    dirs.sort_by_key(key);
+    dirs.pop()
+}
+
+/// Node.js: `REVIEWMAP_NODE`, the settings, the PATH and the usual install locations, then the version
+/// managers' own directories (Volta, nvm, fnm, mise, asdf), whose shims a Finder launch doesn't have.
+pub fn node() -> Option<PathBuf> {
+    if let Some(p) = find("node", Some("REVIEWMAP_NODE")) {
+        return Some(p);
+    }
+    if std::env::var("REVIEWMAP_NODE").map(|v| !v.is_empty()).unwrap_or(false) {
+        // An explicit override that names nothing runnable means no Node, not another one.
+        return None;
+    }
+    let home = home();
+    let mut dirs: Vec<PathBuf> = vec![home.join(".volta/bin"), home.join(".local/share/fnm/aliases/default/bin"), home.join(".fnm/aliases/default/bin"), PathBuf::from("/opt/homebrew/opt/node/bin")];
+    for root in [home.join(".nvm/versions/node"), home.join(".local/share/mise/installs/node"), home.join(".asdf/installs/nodejs")] {
+        if let Some(d) = newest_version_dir(&root) {
+            dirs.push(d.join("bin"));
+        }
+    }
+    dirs.into_iter().map(|d| d.join("node")).find(|p| is_executable(p))
+}
+
+/// A tool that comes with Node.js (npx, corepack): next to `node` first, so both are one installation.
+pub fn node_tool(node: &Path, name: &str) -> Option<PathBuf> {
+    node.parent().map(|d| d.join(name)).filter(|p| is_executable(p)).or_else(|| find(name, None))
+}
+
+/// The PATH for Node.js tools: `node`'s own directory first, since npx and Yarn start `node` by name.
+pub fn node_path(node: &Path) -> std::ffi::OsString {
+    let mut dirs: Vec<PathBuf> = node.parent().map(|d| vec![d.to_path_buf()]).unwrap_or_default();
+    dirs.extend(std::env::split_paths(&child_path()));
+    std::env::join_paths(dirs).unwrap_or_else(|_| child_path())
+}
+
+/// An installed Yarn: `REVIEWMAP_YARN`, the settings, next to `node`, or on the search path. None means
+/// Yarn has to come through corepack or npx.
+pub fn yarn(node: &Path) -> Option<PathBuf> {
+    if std::env::var("REVIEWMAP_YARN").map(|v| !v.is_empty()).unwrap_or(false) {
+        return find("yarn", Some("REVIEWMAP_YARN"));
+    }
+    node.parent().map(|d| d.join("yarn")).filter(|p| is_executable(p)).or_else(|| find("yarn", None))
 }

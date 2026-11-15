@@ -18,10 +18,12 @@ All rebuild implementation will be done on a long-living branch named `rebuild`.
 | Core and repository access | Rust and gix. Read committed content directly; materialize source trees where Bazel or other tools require them. |
 | Swift | Bazel projects; SwiftSyntax through a bundled helper for parsing, with compiler-backed reference resolution. |
 | Kotlin | Bazel projects; tree-sitter for syntax and the existing Kotlin compiler-analysis approach for references. |
-| TypeScript/TSX | Yarn Classic projects and workspaces; tree-sitter for syntax and TypeScript-backed indexing. |
+| TypeScript/TSX | Yarn Classic projects and workspaces, and TypeScript built with Bazel (rules_ts with rules_js); tree-sitter for syntax and TypeScript-backed indexing. |
 | Launching | `reviewmap` opens or focuses the app and passes the repository, refs, and working directory. |
 
-Go, Rust language support, Gradle, SwiftPM, direct Xcode build orchestration, Yarn Berry, TypeScript built with Bazel (rules_ts), and other package managers are outside phase 1. Detect Berry and explain that support comes later. Java and Objective-C review support are out of scope for the foreseeable future. They may still need compilation as dependencies of supported targets.
+Go, Rust language support, Gradle, SwiftPM, direct Xcode build orchestration, Yarn Berry, and other package managers (pnpm, npm-only projects) are outside phase 1. Detect Berry and explain in the review, as a coverage warning, that support comes later.
+
+On 2026-11-16 the user moved TypeScript built with Bazel into phase 1. Any rules_ts workspace that uses aspect_rules_js is supported, whatever lockfile its `npm_translate_lock` reads (normally `pnpm-lock.yaml`; a converted `yarn.lock` works the same way). The lockfile is Bazel's business there, so pnpm as a package manager stays out of scope. Review Map installs no packages for Bazel workspaces: Bazel builds the scope targets in the app-owned tree and fetches `node_modules` itself, and indexing uses what Bazel laid out. Java and Objective-C review support are out of scope for the foreseeable future. They may still need compilation as dependencies of supported targets.
 
 Report files and standalone analysis are not product requirements. Internal formats and versioning should serve implementation and testing. Preserve the supported languages' existing contract checks and optional LLM assistance; a deterministic review must work independently of LLM completion.
 
@@ -80,7 +82,7 @@ Provide a cache-size limit and eviction. Keep notes and reviewed state separate 
 1. Bring the review UI into Tauri, with parsing and reusable Bazel workspaces.
 2. Connect Swift and Kotlin indexing immediately, including Kotlin ownership corrections.
 3. Compare indexed and non-indexed reviews manually on representative real changes before substantial performance optimization.
-4. Add TypeScript indexing for Yarn Classic.
+4. Add TypeScript indexing for Yarn Classic and for Bazel workspaces that build TypeScript with rules_ts.
 5. Optimize measured bottlenecks while checking that reference results and coverage remain correct.
 
 Measure empty caches, retained disk caches after reopening, and another review in the same session. Separate workspace preparation, Bazel queries, dependency preparation, index generation, and report/UI work. Record time to the first usable view and to sufficient indexed coverage, false links, missed callers, memory, and disk use.

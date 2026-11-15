@@ -119,7 +119,7 @@ export interface RegionLLM {
 export interface Component {
   id: string;
   name: string;
-  kind: "bazelTarget" | "bazelPackage" | "folder" | "external" | string;
+  kind: "bazelTarget" | "bazelPackage" | "folder" | "external" | "npmPackage" | "tsconfig" | string;
   layer?: string;
   module?: string;
   parent?: string;

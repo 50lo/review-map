@@ -254,11 +254,17 @@ export function StatusBar({
   const gaps = (analysis?.gaps ?? []).filter((g) => g.changedFiles > 0);
   // What is still to come. A language that is syntax-only from the start (indexes are off) has nothing pending.
   const pending = (analysis?.languages ?? []).some((l) => l.resolution === "preliminary");
+  // Without a Bazel workspace in the change, components are already final (npm packages, folders).
+  const bazel = (analysis?.workspaces ?? []).length > 0 || report.components.some((c) => c.kind === "bazelPackage");
   const stageText =
     stage === "preliminary"
       ? pending
-        ? "Preliminary: components are Bazel packages and only links that syntax proves are shown."
-        : "Components are Bazel packages until Bazel reports the build graph."
+        ? bazel
+          ? "Preliminary: components are Bazel packages and only links that syntax proves are shown."
+          : "Preliminary: only links that syntax proves are shown until the index is ready."
+        : bazel
+          ? "Components are Bazel packages until Bazel reports the build graph."
+          : null
       : stage === "graph" && pending
         ? "Components and declared dependencies come from Bazel. References are still preliminary."
         : null;

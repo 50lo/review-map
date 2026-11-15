@@ -1,11 +1,16 @@
 //! What a language plugs into the language-neutral core: which files it parses, its platform modules and
 //! lockfile pins, its contract flags and their risk weights, its non-code contracts, public-API
-//! classification, conformer discovery, and reference isolation. Parsing and indexing are driven by the
-//! session, because they run in stages.
+//! classification, conformer discovery, reference isolation, and, for languages that have them, their own
+//! components and import resolution. Parsing and indexing are driven by the session, because they run in
+//! stages.
 
 pub mod kotlin;
 pub mod swift;
+pub mod typescript;
 
+pub use typescript::project::Resolved as ImportTarget;
+
+use crate::analyze::components::ComponentLayout;
 use crate::analyze::{conformance_name, kind_group, Builder, Located, Pair, SideSource};
 use crate::model::{ItemKind, Side};
 use crate::parse::{Declaration, ParsedFile};
@@ -75,14 +80,28 @@ pub trait Language: Sync + Send {
     fn isolation(&self, _file: &ParsedFile, _line: u32) -> Option<String> {
         None
     }
+
+    /// Components the language's own manifests declare (TypeScript's npm packages), for its files that no
+    /// Bazel target claimed. They come before Bazel packages and folders.
+    fn add_components(&self, _source: &SideSource, _layout: &mut ComponentLayout) {}
+    /// The module a Bazel target of the language compiles into, from what sits in its package directory.
+    fn target_module(&self, _source: &SideSource, _package_dir: &str) -> Option<String> {
+        None
+    }
+    /// What an import names, for languages whose imports name files or packages rather than modules
+    /// (TypeScript). None means the import names a module, as in Swift and Kotlin.
+    fn resolve_import(&self, _source: &SideSource, _file: &str, _spec: &str) -> Option<ImportTarget> {
+        None
+    }
 }
 
 static SWIFT: swift::SwiftLanguage = swift::SwiftLanguage;
 static KOTLIN: kotlin::KotlinLanguage = kotlin::KotlinLanguage;
+static TYPESCRIPT: typescript::TypeScriptLanguage = typescript::TypeScriptLanguage;
 
 /// The languages of phase 1 that are analyzed.
 pub fn all() -> Vec<&'static dyn Language> {
-    vec![&SWIFT, &KOTLIN]
+    vec![&SWIFT, &KOTLIN, &TYPESCRIPT]
 }
 
 /// The language that parses `path`, if any.

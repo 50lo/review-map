@@ -58,11 +58,25 @@ pub struct SideSource {
     pub generated: HashSet<String>,
     repo: Repo,
     texts: Mutex<HashMap<String, Option<Arc<Vec<String>>>>>,
+    /// What languages derive from the whole revision once (TypeScript's projects), by key.
+    memo: Mutex<HashMap<&'static str, Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
 impl SideSource {
     pub fn new(side: Side, sha: String, tree: Arc<Tree>, files: BTreeMap<String, Arc<ParsedFile>>, generated: HashSet<String>, repo: Repo) -> SideSource {
-        SideSource { side, sha, tree, files, generated, repo, texts: Mutex::new(HashMap::new()) }
+        SideSource { side, sha, tree, files, generated, repo, texts: Mutex::new(HashMap::new()), memo: Mutex::new(HashMap::new()) }
+    }
+
+    /// A value derived from this revision, made once by `make` and kept for the session.
+    pub fn memo<T: std::any::Any + Send + Sync>(&self, key: &'static str, make: impl FnOnce() -> T) -> Arc<T> {
+        if let Some(hit) = self.memo.lock().unwrap().get(key).cloned() {
+            if let Ok(value) = hit.downcast::<T>() {
+                return value;
+            }
+        }
+        let value = Arc::new(make());
+        self.memo.lock().unwrap().insert(key, value.clone());
+        value
     }
 
     /// The bytes of a file at this revision.

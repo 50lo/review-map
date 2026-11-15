@@ -1,8 +1,9 @@
-//! Index builds from start to end, on two small Bazel workspaces: `tests/fixtures/swift-bazel` (rules_swift)
-//! and the prototype's `kotlin-bazel-indexed` (rules_kotlin). Each has the case name matching gets wrong.
+//! Index builds from start to end, on small Bazel workspaces: `tests/fixtures/swift-bazel` (rules_swift),
+//! the prototype's `kotlin-bazel-indexed` (rules_kotlin), and `tests/fixtures/ts-bazel` (rules_ts with
+//! rules_js). Each has the case name matching gets wrong.
 //!
 //! These tests start Bazel, so they are the slow ones. Each returns early, saying why, when a tool it needs
-//! is missing (Bazel; the Swift helper and libIndexStore; a JDK), and all of them when
+//! is missing (Bazel; the Swift helper and libIndexStore; a JDK; Node.js), and all of them when
 //! `REVIEWMAP_SKIP_BAZEL_TESTS` is set. The first run fetches the rules and scip-java, so it needs the
 //! network once. The app's home for these tests is kept under Cargo's target directory, and the fixture
 //! repositories are made at fixed paths in it, so Bazel's output bases are warm on later runs; the indexes
@@ -208,6 +209,64 @@ fn kotlin_index_through_bazel() {
     assert_eq!(snapshot(&repo.path()), before, "nothing in the reviewed repository changed");
 }
 
+/// `load()` is a method of both Store and Cache in `//packages/lib`; the app only calls Store's. The app
+/// imports the library by its package name, through the `node_modules` rules_js links, and one of its files
+/// imports code that only a genrule makes, which the index can't see from the source tree.
+#[test]
+fn typescript_index_through_bazel() {
+    let Some(bazel) = bazel() else { return };
+    if reviewmap_core::tools::node().is_none() {
+        eprintln!("skipped: Node.js was not found");
+        return;
+    }
+    let repo = fixture_repo_at(&own_fixture("ts-bazel"), &bazel.home.join("repos/ts-bazel"));
+    let _ = std::fs::remove_dir_all(bazel.home.join("cache/index/typescript"));
+    let before = snapshot(&repo.path());
+
+    let (session, reports, progress) = run(request(&repo));
+    let report = reports.last().expect("a report");
+    assert_eq!(stages(&reports), ["preliminary", "graph", "complete"]);
+    assert_eq!(report.analyzer.resolution, "index", "{:?}", report.warnings);
+    assert!(progress.iter().any(|m| m.starts_with("Building head") && m.contains("for the TypeScript index")), "{progress:?}");
+    assert!(!progress.iter().any(|m| m.starts_with("Installing")), "nothing is installed for a Bazel workspace: {progress:?}");
+
+    // Components are the ts_project targets, which compile the packages their package.json names.
+    for (id, module) in [("//packages/app:app", "@demo/app"), ("//packages/lib:lib", "@demo/lib")] {
+        assert!(report.components.iter().any(|c| c.id == id && c.module.as_deref() == Some(module)), "no component {id}: {:?}", report.components);
+    }
+    let edge = |to: &str| report.edges.iter().any(|e| e.from == "//packages/app:app" && e.to == to);
+    assert!(edge("//packages/lib:lib") && edge("ext:semver"), "{:?}", report.edges);
+
+    assert_eq!(used_by(report, "Store.load()"), ["start()"]);
+    assert_eq!(used_by(report, "Cache.load()"), Vec::<String>::new(), "the app never calls Cache.load()");
+    let named = session.name_based_report();
+    assert!(!used_by(&named, "Cache.load()").is_empty(), "name matching can't tell the two load() methods apart");
+
+    // build_info.ts imports a file only the build has: syntax-only at both sides, and the warning says why.
+    // Its call of Store.load() is not counted, and the checks that claim "no callers" are held back.
+    let partial: Vec<&str> = report.warnings.iter().filter(|w| w.kind == "index-partial").map(|w| w.message.as_str()).collect();
+    assert!(partial.iter().any(|m| m.contains("packages/app/src/build_info.ts imports ./generated/version")), "{partial:#?}");
+    let coverage = report.analysis.languages.iter().find(|l| l.id == "typescript").expect("TypeScript's coverage");
+    assert_eq!((coverage.files, coverage.indexed_files), (5, 4));
+    assert!(coverage.held_back.contains(&"unused-api".to_string()), "{coverage:?}");
+
+    // CORE-002, and the links made for the indexer are gone from the app's own tree.
+    assert_eq!(snapshot(&repo.path()), before, "nothing in the reviewed repository changed");
+    let bazel_dir = bazel.home.join("cache/bazel");
+    let mut leftovers: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&bazel_dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("ts-bazel")) {
+        for side in ["head", "base"] {
+            for dir in ["", "packages/app", "packages/lib"] {
+                let modules = entry.path().join(side).join("tree").join(dir).join("node_modules");
+                if std::fs::symlink_metadata(&modules).is_ok() {
+                    leftovers.push(modules.display().to_string());
+                }
+            }
+        }
+    }
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+}
+
 /// Needs no tools: when Bazel can't be found, the review ends syntax-only and says why (CORE-003).
 #[test]
 fn without_bazel_the_review_stays_syntax_only() {
@@ -225,4 +284,25 @@ fn without_bazel_the_review_stays_syntax_only() {
     // Name matching would link app to cache through `load()`; syntax doesn't.
     assert!(report.review_items.iter().all(|i| i.used_by.is_empty()), "{:?}", report.review_items);
     assert!(report.warnings.iter().any(|w| w.kind == "bazel-unavailable"), "{:?}", report.warnings);
+}
+
+/// Needs no tools: a rules_ts workspace without Bazel ends syntax-only for TypeScript and says why (CORE-003).
+#[test]
+fn without_bazel_a_rules_ts_workspace_stays_syntax_only() {
+    let _guard = BAZEL.lock().unwrap_or_else(|e| e.into_inner());
+    home(Some("reviewmap-test-home"));
+    let repo = fixture_repo(&own_fixture("ts-bazel"));
+    std::env::set_var("REVIEWMAP_BAZEL", "reviewmap-no-such-bazel");
+    let report = analyze(request(&repo));
+    std::env::remove_var("REVIEWMAP_BAZEL");
+    assert_eq!(report.analysis.stage, "complete");
+    assert_eq!(report.analyzer.resolution, "syntax");
+    assert!(
+        report.warnings.iter().any(|w| w.kind == "index-unavailable" && w.message.contains("TypeScript") && w.message.contains("rules_ts") && w.message.contains("Bazel was not found")),
+        "{:?}",
+        report.warnings
+    );
+    assert!(report.review_items.iter().all(|i| i.used_by.is_empty()), "nothing is linked by name");
+    // The app imports @demo/lib by name: syntax links the two packages.
+    assert!(report.edges.iter().any(|e| e.from == "npm:@demo/app" && e.to == "npm:@demo/lib"), "{:?}", report.edges);
 }

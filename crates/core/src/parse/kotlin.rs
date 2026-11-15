@@ -54,7 +54,7 @@ pub fn parse(source: &str) -> ParsedFile {
             let path = qualified_identifier(identifier, source);
             if named_children(entry).iter().any(|c| c.kind() == "wildcard_import") {
                 stars.push(path.clone());
-                imports.push(NameRef { name: path, line: start_line(entry), module: None });
+                imports.push(NameRef { name: path, line: start_line(entry), module: None, end_line: None });
             } else {
                 let parts: Vec<&str> = path.split('.').collect();
                 let Some(name) = parts.last().filter(|s| !s.is_empty()) else { continue };
@@ -64,7 +64,7 @@ pub fn parse(source: &str) -> ParsedFile {
                     .map(|a| text(a, source).to_string())
                     .unwrap_or_else(|| name.to_string());
                 bindings.insert(clean(&alias), (clean(name), package));
-                imports.push(NameRef { name: path.clone(), line: start_line(entry), module: None });
+                imports.push(NameRef { name: path.clone(), line: start_line(entry), module: None, end_line: None });
             }
         }
     }
@@ -83,11 +83,11 @@ pub fn parse(source: &str) -> ParsedFile {
         }
         let name = clean(text(n, source));
         if n.parent().map(|p| p.kind() == "navigation_suffix").unwrap_or(false) {
-            members.push(NameRef { name, line: start_line(n), module: None });
+            members.push(NameRef { name, line: start_line(n), module: None, end_line: None });
         } else if let Some((bound, package)) = bindings.get(&name) {
-            refs.push(NameRef { name: bound.clone(), line: start_line(n), module: Some(package.clone()) });
+            refs.push(NameRef { name: bound.clone(), line: start_line(n), module: Some(package.clone()), end_line: None });
         } else {
-            refs.push(NameRef { name, line: start_line(n), module: None });
+            refs.push(NameRef { name, line: start_line(n), module: None, end_line: None });
         }
         true
     });
