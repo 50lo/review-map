@@ -86,3 +86,35 @@ rust_test(
     ],
     deps = all_crate_deps(normal_dev = True) + [":reviewmap_core"],
 )
+
+# TypeScript outside Bazel from start to end: a Yarn Classic workspace made from tests/fixtures/ts-yarn, which
+# .bazelignore keeps out of this workspace, so the target reads it from the checkout and runs outside the
+# sandbox. The tests that index fetch Yarn Classic (corepack) and scip-typescript (npx) on a first run and
+# find Node.js through the inherited PATH and HOME (Volta, nvm, fnm, mise, asdf); without Node.js they pass
+# early and say `skipped: …` in their log. The fallback, Berry and package-manager tests need no tools.
+rust_test(
+    name = "typescript_fixtures",
+    size = "large",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/typescript_fixtures.rs",
+    ],
+    crate_root = "tests/typescript_fixtures.rs",
+    data = TEST_DATA + ["//:prototype_fixture_typescript"],
+    edition = "2021",
+    env = TEST_ENV,
+    env_inherit = [
+        "HOME",
+        "PATH",
+    ],
+    tags = [
+        "local",
+        "no-cache",
+        "requires-network",
+    ],
+    # serde_json, which the core depends on, reads the prototype's expected report.
+    deps = all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ) + [":reviewmap_core"],
+)

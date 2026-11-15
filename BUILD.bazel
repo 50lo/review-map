@@ -15,6 +15,13 @@ filegroup(
     visibility = ["//crates/core:__pkg__"],
 )
 
+# The prototype's TypeScript fixture, for crates/core/tests/typescript_fixtures.rs.
+filegroup(
+    name = "prototype_fixture_typescript",
+    srcs = glob(["Tests/ReviewMapCoreTests/Fixtures/typescript/**"]),
+    visibility = ["//crates/core:__pkg__"],
+)
+
 # Copied to bazel-bin, where rules_js runs the tests.
 copy_to_bin(
     name = "prototype_reports",
