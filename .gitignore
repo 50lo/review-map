@@ -5,3 +5,5 @@
 .DS_Store
 /bazel-*
 /local.bazelrc
+# The rebuild (docs/rebuild-phase1-proposal.md): Cargo's build directory. app/.gitignore covers the UI's.
+/target/

@@ -1,0 +1,639 @@
+// Pure logic for the component map: what is visible, what relates to the focus, and the
+// Start here ranking. Kept free of React so it can be unit tested against the fixture report.
+
+import type { Focus } from "./nav";
+import type { ChangeReport, Component, Edge, ReviewItem, ExternalDepChange, Region } from "./types";
+import { reviewItemKindLabel } from "./languages";
+
+export type { Focus } from "./nav";
+
+export interface MapOptions {
+  /**
+   * "changed": changed components, plus the ends of added, removed, and changed edges.
+   * "neighbors": also every direct neighbor over unchanged edges.
+   * "all": the whole system.
+   */
+  scope: "changed" | "neighbors" | "all";
+  showTests: boolean;
+}
+
+export interface Index {
+  report: ChangeReport;
+  components: Map<string, Component>;
+  children: Map<string, string[]>;
+  externalChange: Map<string, ExternalDepChange>;
+  reviewItemsByComponent: Map<string, ReviewItem[]>;
+  reviewItems: Map<string, ReviewItem>;
+  /** True once the analyzer scores regions; before that, ranking falls back to contract flags. */
+  hasRegions: boolean;
+  /** Review and removed regions per review item, in line order. */
+  regionsByReviewItem: Map<string, Region[]>;
+  /** Context regions per review item. */
+  contextByReviewItem: Map<string, Region[]>;
+  regions: Map<string, Region>;
+  /** Review and removed regions of review items in the default views, highest risk first. */
+  riskOrder: Region[];
+  /** The report carries LLM annotations. */
+  hasLLM: boolean;
+  /** The LLM layer is on: ranking uses LLM risk, and LLM summaries, pruning, and review findings are available. */
+  llm: boolean;
+}
+
+export interface IndexOptions {
+  /** Use the LLM layer when the report has it. Default true. */
+  llm?: boolean;
+}
+
+export const edgeKey = (e: { from: string; to: string }) => `${e.from}->${e.to}`;
+
+export function buildIndex(report: ChangeReport, opts: IndexOptions = {}): Index {
+  const components = new Map(report.components.map((c) => [c.id, c]));
+  const children = new Map<string, string[]>();
+  for (const c of report.components) {
+    if (c.parent && components.has(c.parent)) {
+      children.set(c.parent, [...(children.get(c.parent) ?? []), c.id]);
+    }
+  }
+  const externalChange = new Map(report.externalDeps.map((d) => [d.name, d]));
+  const reviewItemsByComponent = new Map<string, ReviewItem[]>();
+  for (const e of report.reviewItems) {
+    reviewItemsByComponent.set(e.component, [...(reviewItemsByComponent.get(e.component) ?? []), e]);
+  }
+  const reviewItems = new Map(report.reviewItems.map((e) => [e.id, e]));
+  const regionsByReviewItem = new Map<string, Region[]>();
+  const contextByReviewItem = new Map<string, Region[]>();
+  for (const r of report.regions) {
+    const m = r.kind === "context" ? contextByReviewItem : regionsByReviewItem;
+    m.set(r.reviewItem, [...(m.get(r.reviewItem) ?? []), r]);
+  }
+  const index: Index = {
+    report,
+    components,
+    children,
+    externalChange,
+    reviewItemsByComponent,
+    reviewItems,
+    hasRegions: regionsByReviewItem.size > 0,
+    regionsByReviewItem,
+    contextByReviewItem,
+    regions: new Map(report.regions.map((r) => [r.id, r])),
+    riskOrder: [],
+    hasLLM: hasLLM(report),
+    llm: false,
+  };
+  index.llm = index.hasLLM && opts.llm !== false;
+  const pos = new Map(report.reviewItems.map((e, i) => [e.id, i]));
+  index.riskOrder = report.regions
+    .filter((r) => r.kind !== "context" && reviewItems.has(r.reviewItem) && !isLowRisk(index, reviewItems.get(r.reviewItem)!))
+    .sort((a, b) => regionRisk(index, b) - regionRisk(index, a) || pos.get(a.reviewItem)! - pos.get(b.reviewItem)! || a.startLine - b.startLine);
+  return index;
+}
+
+/** True when any region, summary, or finding came from the LLM annotator. */
+export const hasLLM = (m: ChangeReport) =>
+  !!m.llm && (m.regions.some((r) => r.llm) || m.reviewItems.some((e) => e.llm) || (m.findings ?? []).some((f) => f.source === "llm"));
+
+/** The risk a region ranks by: the LLM's when the LLM layer is on and it scored the region, else the deterministic one. */
+export const regionRisk = (index: Index, r: Region) => (index.llm ? r.llm?.risk ?? r.risk : r.risk);
+
+/** LLM content of a region, review item, or component, or nothing when the LLM layer is off. */
+export const llmOf = <T extends { llm?: unknown }>(index: Index, x: T | undefined): T["llm"] | undefined => (index.llm ? x?.llm : undefined);
+
+/**
+ * Context regions of a review item in display order. With the LLM layer on, kept regions come first in
+ * the LLM's rank and the ones it pruned are split off; otherwise every region shows, in analyzer order.
+ */
+export function contextOf(index: Index, reviewItem: string): { shown: Region[]; pruned: Region[] } {
+  const all = index.contextByReviewItem.get(reviewItem) ?? [];
+  if (!index.llm || !all.some((c) => c.llm?.keep !== undefined)) return { shown: all, pruned: [] };
+  const shown = all.filter((c) => c.llm?.keep !== false).sort((a, b) => (a.llm?.rank ?? 1e9) - (b.llm?.rank ?? 1e9));
+  return { shown, pruned: all.filter((c) => c.llm?.keep === false) };
+}
+
+/** Risk tier for display: high, medium, or low. */
+export const riskTier = (risk: number) => (risk >= 0.6 ? "high" : risk >= 0.3 ? "medium" : "low");
+
+export function externalChangeOf(index: Index, c: Component): ExternalDepChange | undefined {
+  if (c.kind !== "external") return undefined;
+  return index.externalChange.get(c.name);
+}
+
+/** True when the component itself changed, as opposed to only being next to a change. */
+export function isChanged(index: Index, c: Component): boolean {
+  return c.changedReviewItems > 0 || !!c.status || !!externalChangeOf(index, c);
+}
+
+export const isTestComponent = (c: Component) => !!c.isTest;
+
+export interface Visible {
+  /** Components drawn on the map (including group parents of visible children). */
+  nodes: Set<string>;
+  /** Edges whose ends are both drawn. */
+  edges: Edge[];
+  /** Components left out by the test filter. */
+  hiddenTests: number;
+  /** Components left out by the "changed" scope. */
+  hiddenUnrelated: number;
+}
+
+/**
+ * What the map draws. `expanded` lists components whose direct neighbors are shown too,
+ * whatever the scope.
+ */
+export function visible(index: Index, opts: MapOptions, expanded: ReadonlySet<string> = new Set()): Visible {
+  const { report } = index;
+  const allowed = (id: string) => {
+    const c = index.components.get(id);
+    return !!c && (opts.showTests || !isTestComponent(c));
+  };
+  const nodes = new Set<string>();
+  if (opts.scope === "all") {
+    for (const c of report.components) if (allowed(c.id)) nodes.add(c.id);
+  } else {
+    const changed = new Set<string>();
+    for (const c of report.components) if (allowed(c.id) && isChanged(index, c)) changed.add(c.id);
+    for (const e of report.edges) {
+      if (e.status !== "unchanged" && allowed(e.from) && allowed(e.to)) {
+        changed.add(e.from);
+        changed.add(e.to);
+      }
+    }
+    for (const id of changed) nodes.add(id);
+    if (opts.scope === "neighbors") {
+      for (const e of report.edges) {
+        if (!allowed(e.from) || !allowed(e.to)) continue;
+        if (changed.has(e.from)) nodes.add(e.to);
+        if (changed.has(e.to)) nodes.add(e.from);
+      }
+    }
+  }
+  for (const e of report.edges) {
+    if (!allowed(e.from) || !allowed(e.to)) continue;
+    if (expanded.has(e.from)) nodes.add(e.to);
+    if (expanded.has(e.to)) nodes.add(e.from);
+  }
+  // A visible split folder pulls in its target, which is drawn as a group around it.
+  for (const id of [...nodes]) {
+    let p = index.components.get(id)?.parent;
+    while (p && index.components.has(p)) {
+      nodes.add(p);
+      p = index.components.get(p)?.parent;
+    }
+  }
+  const edges = report.edges.filter((e) => nodes.has(e.from) && nodes.has(e.to) && e.from !== e.to);
+  const hiddenTests = opts.showTests ? 0 : report.components.filter(isTestComponent).length;
+  const hiddenUnrelated = report.components.length - nodes.size - hiddenTests;
+  return { nodes, edges, hiddenTests, hiddenUnrelated: Math.max(0, hiddenUnrelated) };
+}
+
+/** The neighbors of a component that the map doesn't show yet. */
+export function hiddenNeighbors(index: Index, vis: Visible, id: string, showTests: boolean): string[] {
+  const out = new Set<string>();
+  const allowed = (x: string) => showTests || !index.components.get(x)?.isTest;
+  for (const e of index.report.edges) {
+    if (e.from === e.to) continue;
+    if (e.from === id && allowed(e.to) && !vis.nodes.has(e.to)) out.add(e.to);
+    if (e.to === id && allowed(e.from) && !vis.nodes.has(e.from)) out.add(e.from);
+  }
+  return [...out].sort();
+}
+
+// ---------------------------------------------------------------------------
+// Collapsed groups
+
+/** A target split into folders, drawn as a group around them. */
+export const isGroupOf = (index: Index, vis: Visible, id: string) => (index.children.get(id) ?? []).some((c) => vis.nodes.has(c));
+
+/** Above this many visible components, groups start collapsed. */
+export const COLLAPSE_ABOVE = 40;
+
+/** Groups collapsed when the map opens: all of them on a large map, none on a small one. */
+export function defaultCollapsed(index: Index, vis: Visible): Set<string> {
+  if (vis.nodes.size <= COLLAPSE_ABOVE) return new Set();
+  return new Set([...vis.nodes].filter((id) => isGroupOf(index, vis, id)));
+}
+
+/** The components a focus is about, which the map must show. */
+function focusComponents(index: Index, focus: Focus): string[] {
+  switch (focus?.type) {
+    case "component":
+    case "interface":
+      return [focus.id];
+    case "edge": {
+      const e = index.report.edges.find((x) => edgeKey(x) === focus.key);
+      return e ? [e.from, e.to] : [];
+    }
+    case "reviewItem": {
+      const e = index.reviewItems.get(focus.id);
+      return e ? [e.component] : [];
+    }
+    default:
+      return [];
+  }
+}
+
+/**
+ * `collapsed` without the groups that would hide the focus: the groups around it, and for an
+ * edge also its ends, which would otherwise draw it inside a bundle. Returns the same set when
+ * nothing changes.
+ */
+export function revealFocus(index: Index, collapsed: Set<string>, focus: Focus): Set<string> {
+  const open = new Set<string>();
+  for (const id of focusComponents(index, focus)) {
+    const first = focus?.type === "edge" ? id : index.components.get(id)?.parent;
+    for (let p = first; p; p = index.components.get(p)?.parent) {
+      if (collapsed.has(p)) open.add(p);
+    }
+  }
+  if (open.size === 0) return collapsed;
+  return new Set([...collapsed].filter((id) => !open.has(id)));
+}
+
+/** An edge as drawn: a report edge, or a bundle of them when an end is a collapsed group. */
+export interface MapEdge {
+  /** The report edge's key, or a bundle key. */
+  key: string;
+  from: string;
+  to: string;
+  status: Edge["status"];
+  refCount: number;
+  bundle: boolean;
+  members: Edge[];
+}
+
+export interface MapGraph {
+  nodes: Set<string>;
+  edges: MapEdge[];
+  /** Collapsed groups drawn as single nodes, with the number of components they hide. */
+  collapsed: Map<string, number>;
+}
+
+export const bundleKey = (from: string, to: string) => `bundle:${from}->${to}`;
+
+/** True when `id` is `root` or inside it. */
+export function within(index: Index, id: string, root: string): boolean {
+  for (let cur: string | undefined = id; cur; cur = index.components.get(cur)?.parent) if (cur === root) return true;
+  return false;
+}
+
+/** The report edges a bundle between two drawn nodes stands for. */
+export const bundleMembers = (index: Index, from: string, to: string) =>
+  index.report.edges.filter((e) => within(index, e.from, from) && within(index, e.to, to));
+
+/** One status for several edges: theirs when they agree, else changed. */
+export function mergeStatus(edges: Edge[]): Edge["status"] {
+  const statuses = new Set(edges.map((e) => e.status));
+  return statuses.size === 1 ? edges[0].status : "changed";
+}
+
+/** The map with collapsed groups drawn as one node each, and the edges into them bundled. */
+export function collapse(index: Index, vis: Visible, collapsed: ReadonlySet<string>): MapGraph {
+  const rep = (id: string) => {
+    let out = id;
+    for (let p = index.components.get(id)?.parent; p; p = index.components.get(p)?.parent) {
+      if (collapsed.has(p) && vis.nodes.has(p)) out = p;
+    }
+    return out;
+  };
+  const nodes = new Set<string>();
+  const hidden = new Map<string, number>();
+  for (const id of vis.nodes) {
+    const r = rep(id);
+    nodes.add(r);
+    if (r !== id) hidden.set(r, (hidden.get(r) ?? 0) + 1);
+  }
+  const byEnds = new Map<string, { from: string; to: string; members: Edge[] }>();
+  for (const e of vis.edges) {
+    const from = rep(e.from);
+    const to = rep(e.to);
+    if (from === to) continue;
+    const k = `${from}\n${to}`;
+    const b = byEnds.get(k) ?? { from, to, members: [] };
+    b.members.push(e);
+    byEnds.set(k, b);
+  }
+  const edges: MapEdge[] = [...byEnds.values()].map(({ from, to, members }) => {
+    const single = members.length === 1 && members[0].from === from && members[0].to === to;
+    return {
+      key: single ? edgeKey(members[0]) : bundleKey(from, to),
+      from,
+      to,
+      status: mergeStatus(members),
+      refCount: members.reduce((n, e) => n + (e.refCount ?? e.refs.length), 0),
+      bundle: !single,
+      members,
+    };
+  });
+  const collapsedNodes = new Map([...hidden].filter(([id]) => collapsed.has(id)));
+  return { nodes, edges, collapsed: collapsedNodes };
+}
+
+/** Change counts of a component together with everything inside it, for a collapsed group. */
+export function rollup(index: Index, id: string): { changedReviewItems: number; interfaceChanges: number; changeScore: number; changed: boolean } {
+  const out = { changedReviewItems: 0, interfaceChanges: 0, changeScore: 0, changed: false };
+  for (const c of index.report.components) {
+    if (!within(index, c.id, id)) continue;
+    out.changedReviewItems += c.changedReviewItems;
+    out.interfaceChanges += c.interfaceChanges;
+    out.changeScore = Math.max(out.changeScore, c.changeScore || 0);
+    out.changed ||= isChanged(index, c);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+
+export interface Related {
+  nodes: Set<string>;
+  edges: Set<string>;
+}
+
+/** What stays prominent around the focus. Null focus means everything is prominent. */
+export function related(index: Index, edges: Array<{ key: string; from: string; to: string }>, focus: Focus): Related | null {
+  focus = mapFocus(index, focus);
+  if (!focus) return null;
+  const nodes = new Set<string>();
+  const keys = new Set<string>();
+  if (focus.type === "component") {
+    nodes.add(focus.id);
+    for (const e of edges) {
+      if (e.from === focus.id || e.to === focus.id) {
+        keys.add(e.key);
+        nodes.add(e.from);
+        nodes.add(e.to);
+      }
+    }
+    // A group stays lit when one of its folders is the focus, and the reverse.
+    const c = index.components.get(focus.id);
+    if (c?.parent) nodes.add(c.parent);
+    for (const child of index.children.get(focus.id) ?? []) nodes.add(child);
+  } else if (focus.type === "edge" || focus.type === "bundle") {
+    const key = focus.type === "edge" ? focus.key : bundleKey(focus.from, focus.to);
+    const e = edges.find((x) => x.key === key);
+    if (e) {
+      keys.add(key);
+      nodes.add(e.from);
+      nodes.add(e.to);
+    } else if (focus.type === "bundle") {
+      nodes.add(focus.from);
+      nodes.add(focus.to);
+    }
+  }
+  // Parents of lit nodes are drawn around them, so keep them lit too.
+  for (const id of [...nodes]) {
+    const p = index.components.get(id)?.parent;
+    if (p) nodes.add(p);
+  }
+  return { nodes, edges: keys };
+}
+
+/**
+ * The map's focus for any focus: the component of an interface or review item view, so the map
+ * still shows where you are when you go back to it.
+ */
+export function mapFocus(index: Index, focus: Focus): Focus {
+  if (focus?.type === "interface") return { type: "component", id: focus.id };
+  if (focus?.type === "reviewItem") {
+    const e = index.reviewItems.get(focus.id);
+    return e ? { type: "component", id: e.component } : null;
+  }
+  if (focus?.type === "location") return null;
+  return focus;
+}
+
+/** Whether two reports cut the code into the same components. */
+export const sameComponents = (a: Index, b: Index) => a.components.size === b.components.size && [...a.components.keys()].every((id) => b.components.has(id));
+
+/**
+ * Where a focus lands when a refined report replaces the one it was made on. Review item ids don't depend
+ * on how far the analysis got, but component ids do: a Bazel package becomes the targets that own its
+ * files. A component focus follows the old component's review items, or failing that its paths, to the
+ * component that holds them now. A focus that names nothing in the new report goes back to the map.
+ */
+export function carryFocus(prev: Index, next: Index, focus: Focus): Focus {
+  const component = (id: string): string | undefined => {
+    if (next.components.has(id)) return id;
+    const item = (prev.reviewItemsByComponent.get(id) ?? []).find((e) => next.reviewItems.has(e.id));
+    if (item) return next.reviewItems.get(item.id)!.component;
+    const paths = prev.components.get(id)?.paths ?? [];
+    const under = (a: string, b: string) => a === b || a.startsWith(b + "/");
+    return next.report.components.find((c) => c.kind !== "external" && c.paths.some((p) => paths.some((q) => under(p, q) || under(q, p))))?.id;
+  };
+  switch (focus?.type) {
+    case undefined:
+      return null;
+    case "component":
+    case "interface": {
+      const id = component(focus.id);
+      return id === focus.id ? focus : id ? { type: focus.type, id } : null;
+    }
+    case "edge": {
+      const has = (key: string) => next.report.edges.some((e) => edgeKey(e) === key);
+      if (has(focus.key)) return focus;
+      const old = prev.report.edges.find((e) => edgeKey(e) === focus.key);
+      const from = old && component(old.from);
+      const to = old && component(old.to);
+      const key = from && to ? edgeKey({ from, to }) : undefined;
+      return key && has(key) ? { type: "edge", key } : null;
+    }
+    case "bundle":
+      // A bundle is drawn between collapsed groups, which the new components may not form.
+      return next.components.has(focus.from) && next.components.has(focus.to) ? focus : null;
+    case "reviewItem":
+      if (!next.reviewItems.has(focus.id)) return null;
+      return focus.region && !next.regions.has(focus.region) ? { type: "reviewItem", id: focus.id } : focus;
+    case "location":
+      return focus;
+  }
+}
+
+export interface ComponentEdges {
+  outgoing: Record<Edge["status"], Edge[]>;
+  incoming: Record<Edge["status"], Edge[]>;
+}
+
+const emptyByStatus = (): Record<Edge["status"], Edge[]> => ({ added: [], removed: [], changed: [], unchanged: [] });
+
+export function componentEdges(report: ChangeReport, id: string): ComponentEdges {
+  const out = { outgoing: emptyByStatus(), incoming: emptyByStatus() };
+  for (const e of report.edges) {
+    if (e.from === id) out.outgoing[e.status].push(e);
+    if (e.to === id) out.incoming[e.status].push(e);
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Start here
+
+/** Review item kinds as the review item's language names them. */
+export const kindLabel = reviewItemKindLabel;
+
+/** A contract flag without its language prefix: "swift:codable-shape" -> "codable-shape". */
+export const flagName = (flag: string): string => flag.replace(/^[a-z0-9]+:/, "");
+
+/** Flag weights for ranking a report without regions: concurrency and persisted models rank highest. */
+const flagWeight = (prefixed: string): number => {
+  const flag = flagName(prefixed);
+  if (/^(mainactor|nonisolated|sendable|async|conformance-isolation|kind-changed|default-isolation|strict-concurrency)/.test(flag)) return 3;
+  if (/^(serde-shape|send-bound|sync-bound)/.test(flag)) return 3;
+  if (/^(suspend-|serialized-shape|persisted-shape|permission-|exported-components)/.test(flag)) return 3;
+  if (/^(nullability-|data-class-shape|sealed-subclass|enum-entry|open-|final-|abstract-|intent-filters|min-sdk|target-sdk)/.test(flag)) return 2;
+  if (/^(trait-item|enum-variant|non-exhaustive|visibility-narrowed)/.test(flag)) return 2;
+  if (/^(codable-shape|swiftdata|coredata|core-data)/.test(flag)) return 3;
+  if (/^(protocol-requirement|access-changed|enum-case|conformance-|throws|typed-throws|entitlements|privacy|url-schemes|observable)/.test(flag)) return 2;
+  if (/^(interface-member|enum-member|abstract-member|supertype-|export-removed|package-exports)/.test(flag)) return 2;
+  if (/^(interface-method|field-tag-changed|field-added|field-removed|unexported|api-removed|api-signature-changed)/.test(flag)) return 2;
+  return 1;
+};
+
+const changeWeight: Record<string, number> = { removed: 1.5, signature: 1.2, added: 1, modifiers: 1, body: 0.6, cosmetic: 0 };
+
+export function reviewItemScore(e: ReviewItem): number {
+  if (e.change === "cosmetic") return 0;
+  const flags = e.contractFlags.reduce((s, f) => s + flagWeight(f), 0);
+  const base = flags + (changeWeight[e.change] ?? 0.5);
+  const crossUse = Math.min(e.usedBy?.length ?? 0, 10) * 0.1;
+  return (base + crossUse) * (e.isInterface ? 1.5 : 1);
+}
+
+export interface StartItem {
+  /** Top region id, or review item id in the interim ranking. */
+  id: string;
+  /** The review item the row names: the top region's review item, or the type it is a member of. */
+  reviewItem: ReviewItem;
+  /** Where the row leads: the highest-risk region. */
+  focus: Focus;
+  score: number;
+  reasons: string[];
+  /** Member review items folded into this item. */
+  members: ReviewItem[];
+  /** Review and removed regions behind the item. */
+  regionCount: number;
+  source: "regions" | "flags";
+}
+
+/** Reasons the analyzer gives a region that has no specific risk signal. */
+const FALLBACK_REASONS = new Set(["changed lines", "new declaration", "removed declaration", "removed lines", "signature changed", "modifiers changed", "changed", "new file", "removed file"]);
+
+export function isLowRisk(index: Index, e: ReviewItem): boolean {
+  const c = index.components.get(e.component);
+  return e.change === "cosmetic" || !!e.tags?.some((t) => t === "test" || t === "generated") || !!c?.isTest;
+}
+
+/** Highest region risk of a review item, or the contract-flag score before regions exist. */
+export function reviewItemRank(index: Index, e: ReviewItem): number {
+  if (!index.hasRegions) return reviewItemScore(e);
+  return Math.max(0, ...(index.regionsByReviewItem.get(e.id) ?? []).map((r) => regionRisk(index, r)));
+}
+
+/**
+ * The highest-risk places in the change. With regions, each item is a review item (with its changed
+ * members folded in) scored by its riskiest region; before regions exist, review items are ranked by
+ * their contract flags.
+ */
+export function startHere(index: Index, limit = 10): StartItem[] {
+  const { report } = index;
+  const fromRegions = index.hasRegions;
+  const candidates = report.reviewItems.filter((e) =>
+    fromRegions ? !isLowRisk(index, e) && index.regionsByReviewItem.has(e.id) : !isLowRisk(index, e) && reviewItemScore(e) > 0,
+  );
+  // Fold members into their listed parent, so one Codable type doesn't fill the whole list.
+  const listed = new Set(candidates.map((e) => e.id));
+  const rootOf = (e: ReviewItem): string => {
+    let cur = e;
+    while (cur.parent && listed.has(cur.parent)) cur = index.reviewItems.get(cur.parent)!;
+    return cur.id;
+  };
+  const groups = new Map<string, StartItem & { ranked: Array<{ risk: number; reasons: string[] }> }>();
+  for (const e of candidates) {
+    const root = rootOf(e);
+    let item = groups.get(root);
+    if (!item) {
+      const r = index.reviewItems.get(root)!;
+      item = { id: root, reviewItem: r, focus: { type: "reviewItem", id: root }, score: -1, reasons: [], members: [], regionCount: 0, source: fromRegions ? "regions" : "flags", ranked: [] };
+      groups.set(root, item);
+    }
+    if (e.id !== root) item.members.push(e);
+    if (fromRegions) {
+      for (const r of index.regionsByReviewItem.get(e.id)!) {
+        item.regionCount++;
+        const risk = regionRisk(index, r);
+        item.ranked.push({ risk, reasons: r.reasons });
+        if (risk > item.score) {
+          item.score = risk;
+          item.id = r.id;
+          item.focus = { type: "reviewItem", id: r.reviewItem, region: r.id };
+        }
+      }
+    } else {
+      item.score = Math.max(item.score, reviewItemScore(e));
+      item.ranked.push({ risk: reviewItemScore(e), reasons: e.contractFlags });
+    }
+  }
+  return [...groups.values()]
+    .map(({ ranked, ...g }) => {
+      const reasons: string[] = [];
+      let usage = 0;
+      for (const r of ranked.sort((a, b) => b.risk - a.risk)) {
+        for (const x of r.reasons) {
+          const used = /^used from (\d+) /.exec(x);
+          if (used) usage = Math.max(usage, Number(used[1]));
+          else if (!reasons.includes(x) && !FALLBACK_REASONS.has(x)) reasons.push(x);
+        }
+      }
+      if (usage) reasons.push(`used from ${usage} component${usage === 1 ? "" : "s"}`);
+      return { ...g, reasons: reasons.length ? reasons : [ranked[0]?.reasons[0] ?? g.reviewItem.change] };
+    })
+    .sort((a, b) => b.score - a.score || a.reviewItem.qualifiedName.localeCompare(b.reviewItem.qualifiedName))
+    .slice(0, limit);
+}
+
+/** Where the region shortcuts go from the current focus: the next or previous region in risk order. */
+export function stepRegion(index: Index, focus: Focus, dir: 1 | -1): Focus {
+  const order = index.riskOrder;
+  if (order.length === 0) return focus;
+  let target: number;
+  const at = focus?.type === "reviewItem" && focus.region ? order.findIndex((r) => r.id === focus.region) : -1;
+  const reviewItemFirst = focus?.type === "reviewItem" ? order.findIndex((r) => r.reviewItem === focus.id) : -1;
+  if (at >= 0) target = at + dir;
+  // On a review item with no region in focus, next enters its riskiest region.
+  else if (reviewItemFirst >= 0) target = dir === 1 ? reviewItemFirst : reviewItemFirst - 1;
+  else target = dir === 1 ? 0 : order.length - 1;
+  if (target < 0 || target >= order.length) return focus;
+  return toFocus(order[target]);
+}
+
+const toFocus = (r: Region): Focus => ({ type: "reviewItem", id: r.reviewItem, region: r.id });
+
+/** 1-based position of the focused region in risk order, or 0. */
+export function regionPosition(index: Index, focus: Focus): number {
+  if (focus?.type !== "reviewItem" || !focus.region) return 0;
+  return index.riskOrder.findIndex((r) => r.id === focus.region) + 1;
+}
+
+/** Review items of a component for the side panel: interface changes first, cosmetic counted separately. */
+export function componentReviewItems(index: Index, id: string): { shown: ReviewItem[]; cosmetic: number; lowRisk: number } {
+  const all = index.reviewItemsByComponent.get(id) ?? [];
+  const cosmetic = all.filter((e) => e.change === "cosmetic").length;
+  const lowRisk = all.filter((e) => e.change !== "cosmetic" && isLowRisk(index, e)).length;
+  const shown = all
+    .filter((e) => e.change !== "cosmetic" && !isLowRisk(index, e))
+    .sort((a, b) => Number(b.isInterface) - Number(a.isInterface) || reviewItemRank(index, b) - reviewItemRank(index, a));
+  return { shown, cosmetic, lowRisk };
+}
+
+/** "spm:Features/Checkout" → "Checkout" when drawn inside its "Features" group. */
+export function shortName(index: Index, c: Component): string {
+  const p = c.parent ? index.components.get(c.parent) : undefined;
+  if (p && c.name.startsWith(p.name + "/")) return c.name.slice(p.name.length + 1);
+  return c.name;
+}
+
+/** Human form of a contract flag: "async-added" → "async added". */
+export function flagLabel(flag: string): string {
+  const f = flagName(flag);
+  const i = f.indexOf(":");
+  const name = (i < 0 ? f : f.slice(0, i)).replace(/-/g, " ");
+  return i < 0 ? name : `${name}: ${f.slice(i + 1).replace("->", " → ")}`;
+}

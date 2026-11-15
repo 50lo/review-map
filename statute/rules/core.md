@@ -38,22 +38,27 @@ boundary:
   - "reviewmap.yml is read from the head commit's tree, not from the working tree."
 ```
 
-# CORE-003 References matched by name always come with a warning
+# CORE-003 Without an index, a language shows only what syntax proves, and the report says so
 
-When references in a language are matched by name instead of resolved through that language's index, the change report carries a warning that names the language: `index-unavailable` when no index could be built, `index-partial` with the uncovered files when the index missed some of them.
+The main change report never matches references by name. A language whose references are not resolved through its index (no index could be built, indexing was cancelled, or indexes are turned off) ends syntax-only: its final report shows the same links as the preliminary view, only those that syntax proves (an import that names one module or one declaration, and dependencies that BUILD files declare), and an `index-unavailable` warning names the language and the reason. Files an index misses at either side are syntax-only in the same way and are listed in an `index-partial` warning. The checks that claim no callers or no test references (`unused-api`, `orphaned`, `untested`) run for a language only when its index covers every file of that language that could hold such a reference; otherwise the report names the checks that did not run and why: in the `index-unavailable` warning for a language without an index, and in a `checks-held-back` warning for a partial index. References matched by name appear only in the comparison report the user asks for, whose `analysis.variant` is `name-based`.
 
 ```yaml
 agreed: agreed            # proposed | agreed | retired
 built: built              # planned | built
-scope: "Index mode in Analyzer.run and ChangeReportBuilder.addIndex, for every language."
+scope: "Session::report and Session::build, Builder::add_index and Builder::resolve_references, the coverage of the structural checks, and region context, for every language. The comparison report is outside it."
 terms: [Change report, Dependency]
 exceptions: []
 protects:
-  - "A failed index build falls back to name matching and adds an index-unavailable warning for that language."
-  - "Files with no index data are matched by name and listed in an index-partial warning."
+  - "An index build that fails or is cancelled leaves the language with links from imports and declared dependencies only, and an index-unavailable warning that names the language and the reason. No call is linked by name."
+  - "With indexes turned off, the report is syntax-only with an index-unavailable warning, not name-based."
+  - "A file the index covers at only one side gets no name-matched links and is listed in an index-partial warning."
+  - "A new public function whose only caller is in a file the index misses is not reported as unused-api, and the report says that unused-api was held back."
 boundary:
-  - "The warning carries this guarantee, not analyzer.resolution, which reads index when any language was indexed."
-  - "With index mode off, the whole report is name-based (analyzer.resolution is name-based) and no index warning is added."
+  - "While a language's index is still to come, its resolution is preliminary and no index warning is added for it. Once it is known there will be none (the build failed, indexing was cancelled, or indexes are off, which is known from the first report), its resolution is syntax, whatever the report's stage."
+  - "Coverage for the checks is judged per language at head, over every file of the language: its non-test files (generated ones included) for unused-api and orphaned, and its test files for untested. A file the index misses anywhere in the repository holds them back, even in another Bazel workspace or outside the review scope."
+  - "index-partial lists the non-test, non-generated files the index misses; checks-held-back gives the counts that held the checks back."
+  - "analyzer.resolution reads index when any language was indexed, so the per-language warnings carry this guarantee."
+  - "The comparison report (analysis.variant name-based) matches every reference by name, runs every check on name occurrences, and carries no index warning."
 ```
 
 # CORE-004 A failed LLM reply keeps the deterministic report

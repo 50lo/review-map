@@ -1,0 +1,8 @@
+load("@build_bazel_rules_swift//swift:swift.bzl", "swift_library")
+
+swift_library(
+    name = "Cache",
+    srcs = glob(["*.swift"]),
+    module_name = "Cache",
+    visibility = ["//visibility:public"],
+)

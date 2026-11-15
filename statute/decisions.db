@@ -37,8 +37,11 @@
 - id: D261106-639at
   timestamp: 2026-11-06T10:05:01Z
   actor: agent
-  status: proposed
-  approved_by: null
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-15T20:36:35Z
   summary: Use the Review item and Change report names everywhere, including the change report's JSON.
   rationale: Code, viewer text, LLM prompts and docs now say review item and change report instead of entity and model. The JSON keys become reviewItems, reviewItem, and changedReviewItems, and the report version goes to 4, replacing the earlier choice to preserve the JSON schema. Review item maps to ReviewItemKind instead of EntityKind, and Declaration's not entry names the term Review item.
   establishes: []
@@ -65,5 +68,20 @@
   - CORE-005
   - CORE-006
   changes: []
+  retires: []
+  terms: []
+- id: D261115-bbchl
+  timestamp: 2026-11-15T11:33:30Z
+  actor: user
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-15T20:30:15Z
+  summary: 'Change CORE-003: the main change report never matches references by name. A language without a usable index (the build failed, indexing was cancelled, or indexes are off), and every file an index misses, stays syntax-only with a warning that names the language and the reason. unused-api, orphaned and untested run only when the index covers every file that could hold the reference. Name matching stays in the labelled comparison report.'
+  rationale: 'The user''s goal is that everything the review shows is true. Name matching produced the false positives that made index mode the prototype''s default, and as a fallback it showed those links again exactly when the index failed. Chosen by the user on 2026-11-15: syntax-only also for partial indexes and with indexes turned off, and the checks held back unless coverage is complete, accepting that untested rarely runs when test targets are outside the review scope and that an uncovered file anywhere holds the checks back. Rejected: keeping name matching for uncovered files; letting the absence of a name in uncovered files stand in for coverage, which misses implicit uses such as operators and delegates. The comparison report stays because the rebuild proposal asks for indexed and non-indexed results side by side during validation. The prototype (Sources/) keeps the old behaviour as the comparison baseline, so its CORE-003 links are removed. Conformers and overrides still resolve supertype names from inheritance clauses in indexed languages; that is recorded as a gap, and they are held back for syntax-only languages.'
+  establishes: []
+  changes:
+  - CORE-003
   retires: []
   terms: []
