@@ -117,7 +117,7 @@ struct Analyze: ParsableCommand {
 }
 
 struct IndexArgs: ParsableArguments {
-    @Flag(inversion: .prefixedNo, help: "Resolve references exactly from each language's index instead of by name: a build's index store for Swift, scip-typescript for TypeScript. Indexes base and head once per commit (default: index.enabled in reviewmap.yml).")
+    @Flag(inversion: .prefixedNo, help: "Resolve references exactly from each language's index instead of by name: a build's index store for Swift, a SCIP indexer for TypeScript, Go, Rust, and Kotlin. Indexes base and head once per commit. A language whose index can't be built is matched by name, with a warning (default: index.enabled in reviewmap.yml, else on).")
     var index: Bool?
 
     @Option(name: .customLong("index-builder"), help: "Swift: bazel, xcodebuild, or swift (default: bazel for a Bazel workspace with targets, else xcodebuild where it exists, else swift). Kotlin: gradle (default where there is a Gradle build) or bazel.")

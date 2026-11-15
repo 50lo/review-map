@@ -57,7 +57,7 @@ final class TypeScriptIndexTests: XCTestCase {
         XCTAssertEqual(try reviewItem(m, "Store.load()").usedBy.map(\.symbol), ["start()"])
         XCTAssertEqual(try reviewItem(m, "Cache.load()").usedBy, [], "the app never calls Cache.load()")
 
-        let named = try analyze(index: IndexOptions())
+        let named = try analyze(index: IndexOptions(enabled: false))
         XCTAssertEqual(named.analyzer.resolution, "name-based")
         XCTAssertEqual(try reviewItem(named, "Cache.load()").usedBy.map(\.symbol), ["start()"], "name matching over-counts")
     }

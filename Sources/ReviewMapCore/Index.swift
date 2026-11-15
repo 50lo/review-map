@@ -6,7 +6,7 @@ import Foundation
 // name at both sides, so the two sides are always resolved the same way.
 
 public struct IndexOptions: Equatable {
-    /// Nil follows `index.enabled` in reviewmap.yml.
+    /// Nil follows `index.enabled` in reviewmap.yml, and is on when that is not set either.
     public var enabled: Bool?
     /// Swift: "bazel", "xcodebuild", or "swift". Nil picks Bazel for a Bazel workspace with targets (given or from a
     /// rules_xcodeproj rule), else xcodebuild where it exists (macOS), else swift build. Kotlin: "gradle" or

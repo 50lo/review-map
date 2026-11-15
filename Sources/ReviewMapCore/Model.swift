@@ -131,7 +131,7 @@ public struct RegionLLM: Codable, Equatable {
 
 public struct AnalyzerInfo: Codable, Equatable {
     public var version: String
-    /// "name-based" (default), or "index" when index mode resolved at least one language.
+    /// "index" when index mode resolved at least one language, else "name-based" (index mode off, or no index could be built).
     public var resolution: String
     /// Ids of the languages with source files in the change ("swift").
     public var languages: [String]?

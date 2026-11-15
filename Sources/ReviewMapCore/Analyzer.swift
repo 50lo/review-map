@@ -10,11 +10,12 @@ public struct AnalyzeOptions {
     public var maxRefsPerEdge: Int
     /// Evaluate Package.swift with `swift package dump-package` (runs repository code) instead of parsing its syntax.
     public var dumpPackage: Bool
-    /// Exact references from a build's index store instead of name matching.
+    /// Exact references from each language's index instead of name matching. The library default is off;
+    /// the CLI passes `enabled: nil`, which follows reviewmap.yml and is otherwise on.
     public var index: IndexOptions
 
     public init(repo: String, base: String, head: String, useMergeBase: Bool = true,
-                configPath: String? = nil, maxRefsPerEdge: Int = 50, dumpPackage: Bool = false, index: IndexOptions = IndexOptions()) {
+                configPath: String? = nil, maxRefsPerEdge: Int = 50, dumpPackage: Bool = false, index: IndexOptions = IndexOptions(enabled: false)) {
         self.repo = repo
         self.base = base
         self.head = head
@@ -82,7 +83,7 @@ public enum Analyzer {
         let indexOptions = options.index.merged(with: config.index)
         if let injected {
             for lang in languages { if let idx = injected(lang, baseDir, headDir) { builder.addIndex(idx, language: lang) } }
-        } else if indexOptions.enabled == true {
+        } else if indexOptions.enabled != false {
             for lang in languages {
                 let files = { (s: SideData) in s.files.filter { $0.value.language == lang.id }.keys.sorted() }
                 do {

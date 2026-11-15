@@ -44,7 +44,7 @@ final class IndexTests: XCTestCase {
 
     func namedReport() throws -> ChangeReport {
         if let m = Self.named { return m }
-        let m = try analyze(index: IndexOptions())
+        let m = try analyze(index: IndexOptions(enabled: false))
         Self.named = m
         return m
     }
@@ -133,6 +133,27 @@ final class IndexTests: XCTestCase {
         let off = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main", configPath: config,
                                                   index: IndexOptions(enabled: false, cacheDir: Self.cache!)))
         XCTAssertEqual(off.analyzer.resolution, "name-based", "--no-index wins over reviewmap.yml")
+    }
+
+    func testIndexModeIsOnUnlessTurnedOff() throws {
+        let repo = try fixtureRepo()
+        let cache = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-index-default-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(atPath: cache) }
+        // Neither the CLI nor reviewmap.yml says: index mode runs. An unknown builder fails, so the
+        // attempt shows as an index-unavailable warning, with no toolchain needed.
+        let byDefault = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main",
+                                                        index: IndexOptions(builder: "none", cacheDir: cache)))
+        XCTAssertTrue(byDefault.warnings.contains { $0.kind == "index-unavailable" })
+        XCTAssertEqual(byDefault.analyzer.resolution, "name-based")
+        // reviewmap.yml turns it off when the CLI doesn't say.
+        let config = (NSTemporaryDirectory() as NSString).appendingPathComponent("rm-index-\(UUID().uuidString).yml")
+        defer { try? FileManager.default.removeItem(atPath: config) }
+        try "index:\n  enabled: false\n".write(toFile: config, atomically: true, encoding: .utf8)
+        let off = try Analyzer.run(AnalyzeOptions(repo: repo, base: "base", head: "main", configPath: config,
+                                                  index: IndexOptions(builder: "none", cacheDir: cache)))
+        XCTAssertFalse(off.warnings.contains { $0.kind.hasPrefix("index-") })
+        // The library default stays off, so callers that pass no options get name matching.
+        XCTAssertEqual(AnalyzeOptions(repo: repo, base: "base", head: "main").index.enabled, false)
     }
 }
 

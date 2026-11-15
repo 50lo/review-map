@@ -18,7 +18,7 @@ import Yams
 ///         components: ["Networking", "Persistence"]
 ///     exclude: ["**/Pods/**"]
 ///     generated: ["**/*.generated.swift"]
-///     index:            # exact references from a build (see IndexOptions)
+///     index:            # exact references from a build (see IndexOptions); on unless enabled: false
 ///       enabled: true
 ///       project: App.xcworkspace
 ///       scheme: App
