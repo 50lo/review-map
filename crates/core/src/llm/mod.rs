@@ -3,7 +3,8 @@
 //! regions, keeps and ranks context regions, and writes one-line summaries of components and changed review
 //! items, in one batch or more per component (`batch`). Then one structural review of the whole change looks
 //! at its shape (`review`). Both run a coding-agent CLI (`claude -p` or `codex exec`, see `cli`), validate
-//! every reply strictly against the report, and cache accepted results.
+//! every reply strictly against the report, and cache accepted results in the app's cache
+//! (`<cache root>/llm`), keyed by everything that shaped them: the prompt, tool, command, model, and REVIEW.md.
 //!
 //! CORE-004: the deterministic report never depends on the LLM. A reply that fails validation, or a call
 //! that fails, is dropped: the deterministic scores and findings stay, and the report says so with an
@@ -79,9 +80,6 @@ pub struct LlmOptions {
     /// one, the description is the commit messages.
     #[serde(default = "default_true")]
     pub pull_request: bool,
-    /// Where accepted replies are cached. Default: `<cache root>/llm`. It must be outside the reviewed repository.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cache_dir: Option<PathBuf>,
 }
 
 impl Default for LlmOptions {
@@ -95,7 +93,6 @@ impl Default for LlmOptions {
             max_batch_chars: default_batch_chars(),
             structural_review: true,
             pull_request: true,
-            cache_dir: None,
         }
     }
 }
@@ -177,26 +174,6 @@ impl Cache {
     }
 }
 
-/// A path made absolute and free of `..` and symlinks as far as it exists, so that it can be compared with
-/// the repository's root.
-fn resolved(path: &Path) -> PathBuf {
-    let absolute = if path.is_absolute() { path.to_path_buf() } else { std::env::current_dir().unwrap_or_default().join(path) };
-    let mut existing = absolute.as_path();
-    let mut rest: Vec<&std::ffi::OsStr> = Vec::new();
-    loop {
-        if let Ok(real) = std::fs::canonicalize(existing) {
-            return rest.iter().rev().fold(real, |p, part| p.join(part));
-        }
-        match (existing.parent(), existing.file_name()) {
-            (Some(parent), Some(name)) => {
-                rest.push(name);
-                existing = parent;
-            }
-            _ => return absolute,
-        }
-    }
-}
-
 const DESCRIPTION_CHARS: usize = 8_000;
 const REVIEW_NOTES_CHARS: usize = 20_000;
 
@@ -250,14 +227,8 @@ impl<'a> Annotator<'a> {
         if options.tool != "claude" && options.tool != "codex" {
             return unavailable(format!("Unknown LLM tool {}. Use claude or codex. The LLM pass was skipped.", options.tool));
         }
-        let root = resolved(Path::new(&report.repo.root));
-        let cache_dir = resolved(&options.cache_dir.clone().unwrap_or_else(|| crate::store::cache_root().join("llm")));
-        if cache_dir.starts_with(&root) {
-            return unavailable(format!(
-                "The LLM cache directory {} is inside the reviewed repository. Choose one outside it. The LLM pass was skipped.",
-                cache_dir.display()
-            ));
-        }
+        // The app's own cache, never a place a request names, so it is never inside the reviewed repository (CORE-002).
+        let cache_dir = crate::store::cache_root().join("llm");
         if let Err(e) = std::fs::create_dir_all(&cache_dir) {
             return unavailable(format!("Could not make the LLM cache directory {}: {e}. The LLM pass was skipped.", cache_dir.display()));
         }
@@ -266,7 +237,10 @@ impl<'a> Annotator<'a> {
         let lines = SourceLines::new(sources);
         let review_notes: Option<String> = sources.text(Side::Head, "REVIEW.md").map(|t| t.chars().take(REVIEW_NOTES_CHARS).collect());
         let builder = PromptBuilder::new(report, &lines, review_notes.as_deref());
-        let fingerprint = [PROMPT_VERSION, &options.tool, options.model.as_deref().unwrap_or(""), review_notes.as_deref().unwrap_or("")].join("\u{1}");
+        // Everything that shapes a reply besides the prompt. A command run in place of the tool may be another
+        // agent, so its replies are kept apart from the tool's and from other commands'.
+        let command = options.command.as_ref().map(|c| c.to_string_lossy().to_string()).unwrap_or_default();
+        let fingerprint = [PROMPT_VERSION, &options.tool, &command, options.model.as_deref().unwrap_or(""), review_notes.as_deref().unwrap_or("")].join("\u{1}");
 
         // The batches, after taking what the cache has.
         let mut batches: Vec<Batch> = Vec::new();

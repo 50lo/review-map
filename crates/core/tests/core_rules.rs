@@ -387,7 +387,7 @@ fn core_004_a_rejected_batch_leaves_the_other_batches_and_every_deterministic_sc
     let dir = tempfile::tempdir().unwrap();
     // lib's batch gets a risk outside 0…1 on every attempt; app's batch and the structural review are fine.
     let wrapper = fake_llm_wrapper(dir.path(), "lib-invalid", "ok", Some(("^## Component lib ", "invalid")));
-    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join("cache")));
+    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper));
     assert_deterministic_kept(&before, &after);
     let run = after.llm.as_ref().expect("the pass ran");
     assert_eq!((run.batches, run.failed, run.review.as_deref()), (2, 1, Some("ok")));
@@ -409,7 +409,7 @@ fn core_004_a_rejected_structural_review_adds_no_findings_and_keeps_the_determin
     let dir = tempfile::tempdir().unwrap();
     // The structural review answers with an unknown kind on every attempt; the batches are fine.
     let wrapper = fake_llm_wrapper(dir.path(), "review-invalid", "ok", Some(("^You are reviewing the structure", "invalid")));
-    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join("cache")));
+    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper));
     assert!(kinds(&before).contains("cycle"), "a deterministic finding to keep: {:?}", kinds(&before));
     assert_deterministic_kept(&before, &after);
     let run = after.llm.as_ref().expect("the pass ran");
@@ -428,7 +428,7 @@ fn core_004_a_failing_cli_keeps_the_deterministic_report() {
     // fail: the CLI exits with an error; error: claude's is_error result; invalid: every reply is out of range.
     for mode in ["fail", "error", "invalid"] {
         let wrapper = fake_llm_wrapper(dir.path(), &format!("{mode}-llm"), mode, None);
-        let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join(format!("cache-{mode}"))));
+        let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper));
         assert_deterministic_kept(&before, &after);
         let run = after.llm.as_ref().expect("the pass ran");
         assert_eq!((run.failed, run.batches, run.review.as_deref()), (2, 2, Some("rejected")), "{mode}");
@@ -441,8 +441,7 @@ fn core_004_a_failing_cli_keeps_the_deterministic_report() {
 #[test]
 fn core_004_a_missing_cli_leaves_the_report_as_without_the_llm() {
     let repo = llm_change();
-    let dir = tempfile::tempdir().unwrap();
-    let (before, after) = run_with_llm(request(&repo), llm_options(std::path::Path::new("/nonexistent/fake-llm"), dir.path()));
+    let (before, after) = run_with_llm(request(&repo), llm_options(std::path::Path::new("/nonexistent/fake-llm")));
     let mut expected = before.clone();
     expected.warnings.push(llm_warnings(&after, "llm-unavailable").first().map(|w| (*w).clone()).expect("an llm-unavailable warning"));
     assert_eq!(after, expected, "the same report, plus one llm-unavailable warning");
@@ -539,7 +538,7 @@ fn core_005_an_llm_finding_without_a_known_anchor_is_rejected() {
     )
     .unwrap();
     std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
-    let (_, after) = run_with_llm(request(&repo), llm_options(&script, &dir.path().join("cache")));
+    let (_, after) = run_with_llm(request(&repo), llm_options(&script));
     assert_eq!(after.llm.as_ref().and_then(|r| r.review.as_deref()), Some("rejected"));
     let rejected = llm_warnings(&after, "llm-rejected");
     assert_eq!(rejected.len(), 1, "{:?}", after.warnings);

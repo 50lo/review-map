@@ -25,14 +25,13 @@ boundary:
 Analyzing a change reads the reviewed repository and writes nothing into it: not its working tree, its index, its refs, or `.git`. The base and head are exported to a temporary directory, index builds run in those copies, and the change report, caches and indexes go outside the repository.
 
 ```yaml
-agreed: agreed            # proposed | agreed | retired
+agreed: proposed          # proposed | agreed | retired
 built: built              # planned | built
 scope: "Analyzer.run, GitRepo.export, index builds, and the LLM annotator's cache."
 terms: [Change, Change report]
 exceptions:
   - "A path the user names with -o is written even if it is inside the repository."
 protects:
-  - "An LLM cache directory inside the repository is refused with an error."
   - "Uncommitted files in the working tree stay as they are and are not analyzed."
 boundary:
   - "reviewmap.yml is read from the head commit's tree, not from the working tree."

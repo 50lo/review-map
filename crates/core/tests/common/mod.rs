@@ -222,20 +222,16 @@ pub fn fake_llm() -> PathBuf {
     std::fs::canonicalize(&path).unwrap_or_else(|_| panic!("{} is missing", path.display()))
 }
 
-/// LLM options that run `command` and nothing else: a cache of the test's own, so that no test reads replies
-/// another test cached, and no `gh`, so the description is the commit messages on every machine.
-pub fn llm_options(command: &Path, cache: &Path) -> reviewmap_core::llm::LlmOptions {
-    reviewmap_core::llm::LlmOptions {
-        command: Some(command.to_path_buf()),
-        pull_request: false,
-        cache_dir: Some(cache.to_path_buf()),
-        jobs: 2,
-        ..Default::default()
-    }
+/// LLM options that run `command` and nothing else, without `gh`, so the description is the commit messages
+/// on every machine. Replies are cached in the test home's cache (see `home`), keyed by the command among the
+/// rest, so a test that runs a command of its own (a wrapper in its own temporary directory) never reads
+/// replies that another test cached.
+pub fn llm_options(command: &Path) -> reviewmap_core::llm::LlmOptions {
+    reviewmap_core::llm::LlmOptions { command: Some(command.to_path_buf()), pull_request: false, jobs: 2, ..Default::default() }
 }
 
 /// A script in `dir` that runs the fake with `FAKE_LLM_MODE` set to `mode`, or to `when_matched` for the
-/// prompts that contain `pattern` (a grep pattern).
+/// prompts that contain `pattern` (a grep pattern). Each run adds a line to `<dir>/<name>.calls`.
 pub fn fake_llm_wrapper(dir: &Path, name: &str, mode: &str, when_matched: Option<(&str, &str)>) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let fake = fake_llm();
@@ -243,11 +239,20 @@ pub fn fake_llm_wrapper(dir: &Path, name: &str, mode: &str, when_matched: Option
         Some((pattern, other)) => format!("if printf '%s\\n' \"$prompt\" | grep -q -- '{pattern}'; then mode={other}; fi\n"),
         None => String::new(),
     };
-    let script = format!("#!/bin/sh\nprompt=$(cat)\nmode={mode}\n{pick}printf '%s\\n' \"$prompt\" | FAKE_LLM_MODE=$mode '{}' \"$@\"\n", fake.display());
     let path = dir.join(name);
+    let script = format!(
+        "#!/bin/sh\necho run >> '{}.calls'\nprompt=$(cat)\nmode={mode}\n{pick}printf '%s\\n' \"$prompt\" | FAKE_LLM_MODE=$mode '{}' \"$@\"\n",
+        path.display(),
+        fake.display()
+    );
     std::fs::write(&path, script).expect("the wrapper");
     std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("the wrapper is executable");
     path
+}
+
+/// How many times a wrapper made by `fake_llm_wrapper` ran.
+pub fn fake_llm_calls(wrapper: &Path) -> usize {
+    std::fs::read_to_string(format!("{}.calls", wrapper.display())).map(|t| t.lines().count()).unwrap_or(0)
 }
 
 /// Runs a review with the LLM pass and returns the final report before the pass and the one after it.
