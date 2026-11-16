@@ -14,7 +14,15 @@ parent: rm-8hfq
 
 ## Decision (2026-11-17)
 
-The user chose **option A**: skip building a language's index when the review has no changed file of that language. Recorded in this bean only; the Statute decision that adds this reason to CORE-003 is not created yet (see "Where") and must be proposed and approved by the user before the code is merged.
+The user chose **option A**: skip building a language's index when the review has no changed file of that language. The Statute decision **D261116-tnmgj** (proposed, actor user, 2026-11-17) changes CORE-003 in `statute/rules/core.md`:
+
+- the statement adds "no file of the language changed in the review, so its index was not built" to the reasons a language ends syntax-only;
+- `scope` adds "which languages a review builds an index for (Session::open, Session::refine)";
+- a new `protects` case: a Rust-only change in a repository that also has Swift and TypeScript builds no Swift or TypeScript index, both are syntax-only, each has an `index-unavailable` warning saying none of its files changed, nothing is matched by name;
+- the preliminary boundary: like "indexes are off", this reason is known from the first report, so the language is `syntax` from then on;
+- a new boundary: a file of the language changed when its path is added, deleted or renamed, or its content differs, test and generated files included; files that `reviewmap.yml` excludes don't count; one changed file anywhere in the repository means the language is indexed as it would be otherwise (this reason never leaves part of a language unindexed; TypeScript's existing per-unit indexing, where unchanged units are missed and listed in `index-partial`, is a separate behaviour and stays); it applies whether indexes are on by default, by `reviewmap.yml` or by `--index`.
+
+CORE-003 stays `proposed` until the user approves D261116-tnmgj (`statute approve`, only on the user's explicit approval). Merge the code only after that.
 
 ## What
 
@@ -42,10 +50,10 @@ Measured on 2026-11-17 on this repository (`docs/rebuild-step5-speed.md`, B5), R
 
 - The user has chosen A, B or C, and the choice is recorded in this bean. For A or B, a Statute decision changing CORE-003 is proposed and approved by the user before the code is merged; for C, record why the inconsistency stays.
 - If A: `f1df7b4^..f1df7b4 --target //app:bundle` from empty caches takes at most 25 s, runs no Swift index build, and its report differs from today's only in Swift's `resolution` (`syntax` instead of `index`), Swift's `indexedFiles`, the `index-unavailable`/`index-partial`/`checks-held-back` warnings for Swift, and edge reference details among Swift components, each difference listed in the bean when done. A UI-only change still indexes TypeScript and, if a Swift file changed, Swift.
-- If A: a CORE-003 test asserts that a language with no changed file is syntax-only with an `index-unavailable` warning that names that reason.
+- A CORE-003 test `core_003_a_language_without_changed_files_is_not_indexed` in `crates/core/tests/core_rules.rs` covers the new protects case (a Rust-only change: no index build is attempted for Swift or TypeScript, both `syntax`, each `index-unavailable` warning names the reason) and the boundary (one changed test file of a language means it is indexed). Link it: `statute link CORE-003 crates/core/tests/core_rules.rs#core_003_a_language_without_changed_files_is_not_indexed --test`, and link the code that decides which languages are indexed (`statute link CORE-003 crates/core/src/session.rs#<function>`). Then run the `change` skill (AGENTS.md).
 - `bazel test //...` passes.
 
 ## Dependencies and constraints
 
-- The user's product decision is made (option A). Before code: propose the CORE-003 decision with `statute decide` and get the user's explicit approval. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
+- The user's product decision is made (option A) and D261116-tnmgj is proposed. Before merging code: the user approves D261116-tnmgj. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
 - No `app/src` change: the UI already shows `index-unavailable` warnings and per-language coverage.
