@@ -57,6 +57,8 @@ Suggested order: rm-6cla before rm-b5d2 (both edit the dim CSS), and rm-kifb bef
 - rm-xn0c: Show where an external package is declared and who uses it
 - rm-9zgs: A directory that moved from SwiftPM to Bazel shows as two changed components (bug)
 - rm-b5d2: Make the map legend reachable from the map, and dimmed text readable
+- rm-ezdq: Make notes export reachable from anywhere and offer it when the review is done
+- rm-yrsa: Show each fact once in the edge panel: findings from the link's point of view
 
 ## Acceptance criteria
 
