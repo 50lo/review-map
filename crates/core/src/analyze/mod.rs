@@ -10,6 +10,7 @@ pub mod finish;
 pub mod matching;
 pub mod references;
 pub mod regions;
+pub mod settings;
 pub mod supertypes;
 
 use crate::git::{Repo, Tree};
@@ -218,6 +219,17 @@ pub struct BuildOptions {
 /// (side, from, to) -> refs.
 pub type EdgeRefs = BTreeMap<String, BTreeMap<String, Vec<Ref>>>;
 
+/// One line of a build settings review item that a changed setting is written on.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SettingSpot {
+    /// The flags of the settings on the line, with the language prefix.
+    pub flags: Vec<String>,
+    pub side: Side,
+    pub line: u32,
+    /// For a setting removed from a file that still sets others: the last head line before where it was.
+    pub anchor: Option<u32>,
+}
+
 pub struct Builder<'a> {
     pub base: &'a SideData,
     pub head: &'a SideData,
@@ -236,6 +248,8 @@ pub struct Builder<'a> {
     pub pairs: Vec<Pair>,
     pub pair_of: HashMap<DeclKey, usize>,
     pub file_review_items: Vec<ReviewItem>,
+    /// Build settings review item id -> where each of its changed settings is written, for its regions.
+    pub setting_spots: HashMap<String, Vec<SettingSpot>>,
     pub warnings: BTreeSet<Warning>,
     edge_refs: [EdgeRefs; 2],
     /// pair index -> usages
@@ -311,6 +325,7 @@ impl<'a> Builder<'a> {
             pairs: Vec::new(),
             pair_of: HashMap::new(),
             file_review_items: Vec::new(),
+            setting_spots: HashMap::new(),
             warnings,
             edge_refs: [EdgeRefs::new(), EdgeRefs::new()],
             used_by: HashMap::new(),

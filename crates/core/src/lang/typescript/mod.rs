@@ -297,13 +297,21 @@ impl Language for TypeScriptLanguage {
                     }
                 }
             }
+            let mut key_files: BTreeMap<String, String> = BTreeMap::new();
             if let Some(config) = project.tsconfigs.get(&u.dir) {
                 for (k, v) in &config.own_options {
-                    settings.insert(format!("tsconfig {k}"), stringify(v));
+                    let key = format!("tsconfig {k}");
+                    settings.insert(key.clone(), stringify(v));
+                    // A package's compiler options are set in its tsconfig.json, not in its package.json.
+                    if config.path != u.manifest {
+                        key_files.insert(key, config.path.clone());
+                    }
                 }
             }
             // Registered even when empty, so a project's first setting, or its last, is compared too.
-            layout.target_settings.insert(u.id.clone(), TargetSettings { file: u.manifest.clone(), settings, language: "typescript".to_string() });
+            layout
+                .target_settings
+                .insert(u.id.clone(), TargetSettings { file: u.manifest.clone(), settings, language: "typescript".to_string(), key_files, rule_line: None });
         }
     }
 

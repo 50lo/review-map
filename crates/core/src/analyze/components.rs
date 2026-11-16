@@ -34,12 +34,24 @@ pub struct DeclaredDep {
     pub symbol: String,
 }
 
-/// Target-level build settings that change how code compiles, and the BUILD file that sets them.
+/// Target-level build settings that change how code compiles, and the files that set them.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TargetSettings {
+    /// The file that sets the target's settings: its BUILD file, or its package.json.
     pub file: String,
     pub settings: BTreeMap<String, String>,
     pub language: String,
+    /// Settings set in another file than `file`, by key (a project's tsconfig.json options).
+    pub key_files: BTreeMap<String, String>,
+    /// The line of the rule that declares a Bazel target in `file`, when Bazel reported it.
+    pub rule_line: Option<u32>,
+}
+
+impl TargetSettings {
+    /// The file that sets `key`.
+    pub fn file_of(&self, key: &str) -> &str {
+        self.key_files.get(key).unwrap_or(&self.file)
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -325,7 +337,13 @@ fn add_targets(source: &SideSource, languages: &[&'static dyn Language], ws: &Wo
         if !t.settings.is_empty() {
             layout
                 .target_settings
-                .insert(id.clone(), TargetSettings { file: join(wsdir, &t.build_file), settings: t.settings.clone(), language: language.to_string() });
+                .insert(id.clone(), TargetSettings {
+                    file: join(wsdir, &t.build_file),
+                    settings: t.settings.clone(),
+                    language: language.to_string(),
+                    key_files: BTreeMap::new(),
+                    rule_line: (t.build_line > 0).then_some(t.build_line),
+                });
         }
     }
 
