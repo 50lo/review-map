@@ -7,10 +7,18 @@ import * as backend from "./backend";
 const cache = new Map<string, Promise<string | null>>();
 let editor: string | null = null;
 
-/** Forgets cached sources. Call when another review is shown. */
+/** Forgets cached sources and sets the editor that Open uses. */
 export function resetSources(editorName: string | null) {
   cache.clear();
   editor = editorName;
+}
+
+/**
+ * Forgets cached sources. Call when another review is shown: the cache is keyed by side and path, which
+ * name different contents in another repository or at other commits.
+ */
+export function forgetSources() {
+  cache.clear();
 }
 
 export function getSource(side: Side, file: string): Promise<string | null> {

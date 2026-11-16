@@ -10,7 +10,7 @@ import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
 import { ReviewItemPage, InterfacePage, LocationPage } from "./Pages";
 import { initReview } from "./review";
 import { Sidebar } from "./Sidebar";
-import { resetSources } from "./source";
+import { forgetSources, resetSources } from "./source";
 import { StartScreen, StatusBar } from "./Shell";
 
 // Focus lives in the URL hash, so browser back/forward walk the focus history.
@@ -98,18 +98,32 @@ export function App() {
   const [starting, setStarting] = useState(false);
   const jobId = useRef(0);
   const shownKey = useRef("");
+  /** Reports are applied one at a time, in the order they arrive. */
+  const applying = useRef<Promise<void>>(Promise.resolve());
 
   // A report of the review on screen replaces what is shown; the first report of another review also
-  // loads that review's marks and notes, and forgets the focus of the previous one.
-  const show = useCallback(async (raw: ChangeReport) => {
-    const next = validate(raw);
-    const key = reviewKey(next);
-    if (key !== shownKey.current) {
-      if (shownKey.current) history.replaceState(null, "", location.pathname + location.search);
-      shownKey.current = key;
-      await initReview(next);
-    }
-    setReport(next);
+  // loads that review's marks and notes, forgets its cached sources, and forgets the focus of the previous
+  // one. Loading the marks waits, so later reports queue behind it: a preliminary report must never
+  // replace a refined one that arrived during the wait. A report of a job that has since been replaced
+  // is dropped.
+  const show = useCallback((raw: ChangeReport): Promise<void> => {
+    const job = jobId.current;
+    const apply = async () => {
+      if (job !== jobId.current) return;
+      const next = validate(raw);
+      const key = reviewKey(next);
+      if (key !== shownKey.current) {
+        if (shownKey.current) history.replaceState(null, "", location.pathname + location.search);
+        shownKey.current = key;
+        forgetSources();
+        await initReview(next);
+        if (job !== jobId.current) return;
+      }
+      setReport(next);
+    };
+    const run = applying.current.then(apply);
+    applying.current = run.catch(() => undefined);
+    return run;
   }, []);
 
   useEffect(() => {

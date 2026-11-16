@@ -25,22 +25,44 @@ export interface ReviewState {
 
 const empty = (): ReviewState => ({ reviewed: {}, notes: {} });
 
+interface Target {
+  root: string;
+  head: string;
+  headSha: string;
+}
+
 let state: ReviewState = empty();
-let target: { root: string; head: string; headSha: string } | null = null;
+let target: Target | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
+/** The save the timer will make: the review it belongs to and its state, captured when it was scheduled. */
+let pendingSave: { target: Target; state: ReviewState } | null = null;
 const listeners = new Set<() => void>();
 
 /** Loads the saved state for this report. Call once per review, before rendering the viewer. */
 export async function initReview(report: ChangeReport): Promise<void> {
-  target = { root: report.repo.root, head: report.repo.head, headSha: report.repo.headSha || "unknown" };
+  // Edits made just before another review opens still belong to the review they were made in.
+  await flushReview();
+  const next: Target = { root: report.repo.root, head: report.repo.head, headSha: report.repo.headSha || "unknown" };
+  target = next;
   let loaded: Partial<ReviewState> | undefined;
   try {
-    loaded = ((await backend.loadReviewState(target.root, target.head, target.headSha)) as Partial<ReviewState> | null) ?? undefined;
+    loaded = ((await backend.loadReviewState(next.root, next.head, next.headSha)) as Partial<ReviewState> | null) ?? undefined;
   } catch {
     /* no saved state */
   }
+  // Another review may have opened while this one loaded; its state wins.
+  if (target !== next) return;
   state = { reviewed: loaded?.reviewed ?? {}, notes: loaded?.notes ?? {} };
   emit();
+}
+
+/** Makes the pending save now, if there is one. */
+export async function flushReview(): Promise<void> {
+  clearTimeout(saveTimer);
+  saveTimer = undefined;
+  const p = pendingSave;
+  pendingSave = null;
+  if (p) await save(p.target, p.state);
 }
 
 /** Replaces the state, for tests. */
@@ -57,13 +79,14 @@ function update(next: ReviewState) {
   state = next;
   emit();
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(save, 300);
+  saveTimer = undefined;
+  pendingSave = target ? { target, state: next } : null;
+  if (pendingSave) saveTimer = setTimeout(() => void flushReview(), 300);
 }
 
-async function save() {
-  if (!target) return;
+async function save(t: Target, s: ReviewState) {
   try {
-    await backend.saveReviewState(target.root, target.head, target.headSha, state);
+    await backend.saveReviewState(t.root, t.head, t.headSha, s);
   } catch {
     /* the next change retries */
   }

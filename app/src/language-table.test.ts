@@ -19,6 +19,14 @@ describe("viewer language table", () => {
     }
   }
 
+  it("highlights new text for a key that another review used", async () => {
+    // Code views key tokens by side and path, which name other contents in another review.
+    const first = await highlightFile("head:src/a.ts", "src/a.ts", "let first = 1");
+    const second = await highlightFile("head:src/a.ts", "src/a.ts", "let second = 2");
+    expect(first[0].map((token) => token.text).join("")).toBe("let first = 1");
+    expect(second[0].map((token) => token.text).join("")).toBe("let second = 2");
+  });
+
   it.each([
     ["App.xcodeproj", "swift"], ["ios/App.xcodeproj/project.pbxproj", "swift"],
     ["Package.swift", "swift"], ["ios/Package.resolved", "swift"],

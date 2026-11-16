@@ -22,22 +22,25 @@ const getHighlighter = () =>
   }));
 
 const MAX_CHARS = 400_000;
-const cache = new Map<string, Promise<Tok[][]>>();
+/** Tokens by key, with the text they were made from: the same key can name other text in another review. */
+const cache = new Map<string, { text: string; tokens: Promise<Tok[][]> }>();
 
 const plain = (text: string): Tok[][] => text.split("\n").map((l) => [{ text: l }]);
 
 /** The Shiki language for a file, by extension. */
 export const languageOf = highlightLanguageOf;
 
-/** Lines of tokens for a whole file. Highlighting needs the whole file, because state carries across lines. */
+/**
+ * Lines of tokens for a whole file. Highlighting needs the whole file, because state carries across lines.
+ * Cached tokens are reused only for the same text, so a key reused by another review is highlighted again.
+ */
 export function highlightFile(key: string, file: string, text: string): Promise<Tok[][]> {
-  let p = cache.get(key);
-  if (!p) {
-    const lang = languageOf(file);
-    p = !lang || text.length > MAX_CHARS ? Promise.resolve(plain(text)) : tokenize(text, lang).catch(() => plain(text));
-    cache.set(key, p);
-  }
-  return p;
+  const hit = cache.get(key);
+  if (hit && hit.text === text) return hit.tokens;
+  const lang = languageOf(file);
+  const tokens = !lang || text.length > MAX_CHARS ? Promise.resolve(plain(text)) : tokenize(text, lang).catch(() => plain(text));
+  cache.set(key, { text, tokens });
+  return tokens;
 }
 
 async function tokenize(text: string, lang: string): Promise<Tok[][]> {
