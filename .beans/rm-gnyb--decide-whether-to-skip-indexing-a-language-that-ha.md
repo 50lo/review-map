@@ -22,7 +22,7 @@ The user chose **option A**: skip building a language's index when the review ha
 - the preliminary boundary: like "indexes are off", this reason is known from the first report, so the language is `syntax` from then on;
 - a new boundary: a file of the language changed when its path is added, deleted or renamed, or its content differs, test and generated files included; files that `reviewmap.yml` excludes don't count; one changed file anywhere in the repository means the language is indexed as it would be otherwise (this reason never leaves part of a language unindexed; TypeScript's existing per-unit indexing, where unchanged units are missed and listed in `index-partial`, is a separate behaviour and stays); it applies whether indexes are on by default, by `reviewmap.yml` or by `--index`.
 
-CORE-003 stays `proposed` until the user approves D261116-tnmgj (`statute approve`, only on the user's explicit approval). Merge the code only after that.
+The user approved D261116-tnmgj on 2026-11-17, so CORE-003 is `agreed` with the new text. Its `built` field still says `built` (the CLI sets it; agents don't edit it), but the code does not do this yet: until this bean is done, a Rust-only change still builds Swift's index. Close that gap with this bean, and run the `change` skill afterwards so the rule's review matches the code.
 
 ## What
 
@@ -48,12 +48,12 @@ Measured on 2026-11-17 on this repository (`docs/rebuild-step5-speed.md`, B5), R
 
 ## Acceptance criteria
 
-- The user has chosen A, B or C, and the choice is recorded in this bean. For A or B, a Statute decision changing CORE-003 is proposed and approved by the user before the code is merged; for C, record why the inconsistency stays.
+- The user has chosen A, B or C, and the choice is recorded in this bean. Done: option A, D261116-tnmgj approved.
 - If A: `f1df7b4^..f1df7b4 --target //app:bundle` from empty caches takes at most 25 s, runs no Swift index build, and its report differs from today's only in Swift's `resolution` (`syntax` instead of `index`), Swift's `indexedFiles`, the `index-unavailable`/`index-partial`/`checks-held-back` warnings for Swift, and edge reference details among Swift components, each difference listed in the bean when done. A UI-only change still indexes TypeScript and, if a Swift file changed, Swift.
 - A CORE-003 test `core_003_a_language_without_changed_files_is_not_indexed` in `crates/core/tests/core_rules.rs` covers the new protects case (a Rust-only change: no index build is attempted for Swift or TypeScript, both `syntax`, each `index-unavailable` warning names the reason) and the boundary (one changed test file of a language means it is indexed). Link it: `statute link CORE-003 crates/core/tests/core_rules.rs#core_003_a_language_without_changed_files_is_not_indexed --test`, and link the code that decides which languages are indexed (`statute link CORE-003 crates/core/src/session.rs#<function>`). Then run the `change` skill (AGENTS.md).
 - `bazel test //...` passes.
 
 ## Dependencies and constraints
 
-- The user's product decision is made (option A) and D261116-tnmgj is proposed. Before merging code: the user approves D261116-tnmgj. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
+- The user's product decision is made (option A) and D261116-tnmgj is approved; nothing blocks the code. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
 - No `app/src` change: the UI already shows `index-unavailable` warnings and per-language coverage.
