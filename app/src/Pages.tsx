@@ -619,11 +619,28 @@ function NoteBox({ r, label, editing, setEditing }: { r: Region; label: string; 
       </div>
     );
   }
+  const save = () => {
+    setNote(r, label, text);
+    setEditing(null);
+  };
   return (
     <div className="note editing">
-      <textarea autoFocus rows={3} value={text} placeholder="A concern or question about this region" onChange={(ev) => setText(ev.target.value)} />
+      <textarea
+        autoFocus
+        rows={3}
+        value={text}
+        placeholder="A concern or question about this region"
+        onChange={(ev) => setText(ev.target.value)}
+        onKeyDown={(ev) => {
+          // ⌘↩ saves, as in most macOS editors. Plain Return still starts a new line.
+          if (ev.key === "Enter" && ev.metaKey && !ev.nativeEvent.isComposing) {
+            ev.preventDefault();
+            save();
+          }
+        }}
+      />
       <span className="note-actions">
-        <button className="btn primary" onClick={() => { setNote(r, label, text); setEditing(null); }}>
+        <button className="btn primary" title="Save (⌘↩)" onClick={save}>
           Save
         </button>
         <button className="btn" onClick={() => setEditing(null)}>
