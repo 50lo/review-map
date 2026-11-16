@@ -8,3 +8,5 @@ app/dist
 helper/.build
 # Test fixtures that are Bazel workspaces of their own.
 crates/core/tests/fixtures
+# Claude Code's local files, including the git worktrees of other sessions, each a checkout of this workspace.
+.claude

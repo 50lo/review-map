@@ -8,9 +8,16 @@
 # Xcode update or switch redo the detection, and leaves the rest of the cache alone.
 set -eu
 
+# Bazelisk puts this directory first on the PATH it gives this script, so everything Bazel starts with that
+# PATH (tests that run Bazel in other workspaces, `bazel run` targets) would find this script as `bazel`, in a
+# workspace that isn't this one and without BAZEL_REAL. So the directory comes off the PATH here, and a run
+# without BAZEL_REAL hands over to the next `bazel` on the PATH.
+here=$(cd "$(dirname "$0")" && pwd)
+PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | grep -vxF "$here" | paste -sd ':' -)
+export PATH
+
 if [ -z "${BAZEL_REAL:-}" ]; then
-  echo "tools/bazel: BAZEL_REAL is not set; run Bazel through Bazelisk" >&2
-  exit 1
+  exec bazel "$@"
 fi
 
 # A value set by the caller wins.
