@@ -47,8 +47,8 @@ The "Indexed / By name" control is a validation tool. `docs/rebuild-phase1-propo
 
 ## Acceptance criteria
 
-- [ ] File → New Review… and ⌘N return to the start screen. They are disabled while a review is running.
-- [ ] View → Show Name-Matched Comparison switches to the comparison report and back. Its check mark matches what is on screen. It is disabled while running or while the comparison is loading. A failure to load shows the error, as today.
+- [x] File → New Review… and ⌘N return to the start screen. They are disabled while a review is running.
+- [x] View → Show Name-Matched Comparison switches to the comparison report and back. Its check mark matches what is on screen. It is disabled while running or while the comparison is loading. A failure to load shows the error, as today.
 - [x] While the comparison report is shown, the banner is visible on every level (map, interface view, review item), and "Back to indexed" returns to the indexed report.
 - [x] The status bar no longer has the segmented control or the "New review" link.
 - [x] Quit still stops the app's Bazel servers. Check that `<REVIEWMAP_HOME>/cache/logs/app.log` records the shutdown, or that no Bazel server for the app's output bases keeps running after Quit.
@@ -85,6 +85,11 @@ The "Indexed / By name" control is a validation tool. `docs/rebuild-phase1-propo
   - `new-review` returned to the start screen and disabled both items.
   - With `name_based_report` made to fail: the item was disabled while loading, then re-enabled and left unchecked. The status bar showed "Stopped: <error>", as before.
 
-## Not checked
+## Checked by hand in the app
 
-The request to control the app window (`dev.reviewmap.app`) with computer use was declined, so nobody has looked at the native menu itself yet. Not seen: the items in the File and View menus, ⌘N, the check mark drawn by macOS, clicking either item to send the `menu` event, the disabled look while running, and copy and paste through the Edit menu. That's why the first two criteria are still unticked. A person needs to check them in the bundle in about a minute: start a review, look at File and View while it runs and after, press ⌘N, then turn the comparison on and off from View and with "Back to indexed".
+My request to control the app window with computer use was declined, so the user checked the native menu by hand on 2026-11-17. The bundle was the one from `scripts/build-app.sh`, with `REVIEWMAP_HOME=/tmp/rm-kifb-home`, reviewing `--base 0cd5916 --head 0e57fa4`. The user reported that everything works as expected: the File and View items, ⌘N, the check mark, the disabled look while running, the banner with "Back to indexed", and copy and paste. The app log of that run agrees:
+- both items were disabled while the review ran and enabled when it finished;
+- the comparison item was disabled while the comparison loaded, then the comparison report was shown;
+- the comparison was turned off, on from the cache and off again;
+- New Review disabled both items and returned to the start screen, and a second review ran from there;
+- after Quit, the log records the shutdown and no Bazel server for that home was left running.
