@@ -1,12 +1,13 @@
 ---
 # rm-yrsa
 title: 'Show each fact once in the edge panel: findings from the link''s point of view'
-status: todo
+status: completed
 type: task
+priority: normal
 tags:
     - ui
 created_at: 2026-11-16T20:46:11Z
-updated_at: 2026-11-16T20:46:11Z
+updated_at: 2026-11-16T21:12:35Z
 parent: rm-w7ge
 ---
 
@@ -122,15 +123,15 @@ The edge panel is the one a reviewer opens most often to answer "what does this 
 
 ## Acceptance criteria
 
-- [ ] An `added` link into a package with a `new-external` finding, no lockfile entry and no other new users (the `helper → swift-syntax` case) shows: the title, `● added · 1 reference · LOW new dependency`, and REFERENCES. There is no "Now references" line, no FINDINGS section and no anchor link.
-- [ ] The same finding with a lockfile entry (`externalDeps` `added`, `to: "600.0.1"`) and two other components with `added` links to the package shows one finding line: `MEDIUM new dependency  New in the lockfile at 600.0.1 · also new in <A>, <B>`.
-- [ ] A `changed` link still shows "Now references" and "No longer references" with its added and removed symbols.
-- [ ] A `layering` finding on the edge panel shows its message, its layer line and its suggestion. It doesn't show evidence lines for references listed under REFERENCES, or anchor links to the link or its two ends.
-- [ ] A `cycle` finding on the edge panel looks as it does today, apart from having no anchor links to this link or its two ends.
-- [ ] The same findings on a component panel, the bundle panel and the Overview look exactly as they do today.
-- [ ] Clicking the chip, or a one-line finding, still goes where the finding leads today (`findingFocus`).
-- [ ] Vitest covers `edgeFindingView` for: `new-external` with no context, with a lockfile entry, with other users (including more than 3), `layering` (reference lines dropped, layer line kept) and `cycle`. `bazel test //app:test` and `bazel test //...` pass.
-- [ ] Checked by eye in the dev preview (`REVIEWMAP_REPORT=<report> bazel run //app:dev`) on a report with a `helper → swift-syntax`-like link. To get one, run `reviewmap . --base 0cd5916 --head 0e57fa4 --report <file>` in this repository.
+- [x] An `added` link into a package with a `new-external` finding, no lockfile entry and no other new users (the `helper → swift-syntax` case) shows: the title, `● added · 1 reference · LOW new dependency`, and REFERENCES. There is no "Now references" line, no FINDINGS section and no anchor link.
+- [x] The same finding with a lockfile entry (`externalDeps` `added`, `to: "600.0.1"`) and two other components with `added` links to the package shows one finding line: `MEDIUM new dependency  New in the lockfile at 600.0.1 · also new in <A>, <B>`.
+- [x] A `changed` link still shows "Now references" and "No longer references" with its added and removed symbols.
+- [x] A `layering` finding on the edge panel shows its message, its layer line and its suggestion. It doesn't show evidence lines for references listed under REFERENCES, or anchor links to the link or its two ends.
+- [x] A `cycle` finding on the edge panel looks as it does today, apart from having no anchor links to this link or its two ends.
+- [x] The same findings on a component panel, the bundle panel and the Overview look exactly as they do today. (Component panel and Overview checked by eye. The bundle panel was checked by code only: it passes no `shape`, so it takes the same path as before.)
+- [x] Clicking the chip, or a one-line finding, still goes where the finding leads today (`findingFocus`).
+- [x] Vitest covers `edgeFindingView` for: `new-external` with no context, with a lockfile entry, with other users (including more than 3), `layering` (reference lines dropped, layer line kept) and `cycle`. `bazel test //app:test` and `bazel test //...` pass.
+- [x] Checked by eye in the dev preview (`REVIEWMAP_REPORT=<report> bazel run //app:dev`) on a report with a `helper → swift-syntax`-like link. To get one, run `reviewmap . --base 0cd5916 --head 0e57fa4 --report <file>` in this repository.
 
 ## Dependencies and constraints
 
@@ -140,3 +141,58 @@ The edge panel is the one a reviewer opens most often to answer "what does this 
 - Related: rm-8byb (group changed external packages into one map node) changes how external packages are drawn on the map. It doesn't change the edge panel, but if it lands first, check that the edge panel still opens for links into the grouped node.
 - Related: rm-xn0c (show where an external package is declared and who uses it) improves the external package's own panel, where the full `new-external` finding stays. The two don't touch the same panel.
 - Run `statute show` on the files you touch before changing them, and the `statute:change` skill after.
+
+## Summary of Changes
+
+- `app/src/findings.ts`: new pure helper `edgeFindingView(index, edge, f)` returning `EdgeFindingView`:
+  - `{ kind: "chip" }`
+  - `{ kind: "line"; context }`
+  - `{ kind: "full"; evidence; anchors }`
+
+  How each kind is handled:
+  - **`new-external`:** becomes a line when there is context, otherwise a chip. The context is built from report data only:
+    - "New in the lockfile[ at <to>]" when `report.externalDeps` has an `added` entry with `"ext:" + name === edge.to`;
+    - "also new in A, B, C and N more" from the other `added` edges into `edge.to`. These are named with the component-name lookup the title uses, deduplicated, and exclude this edge's own `from` and any name equal to it.
+  - **Every other kind:** `full`, with anchors that are this edge or either end component removed.
+  - **`layering`:** also drops the evidence lines (never the first, which is the layer line) that end with ` at <file>:<line>` or ` in <file>` (line 0) of one of this edge's refs. References of other links in the same finding stay.
+- `app/src/FindingsSection.tsx`:
+  - New `FindingChip` (severity + kind label) and `FindingLine` (chip + context). Both are buttons that go to `findingFocus(index, f)`, with the full message as tooltip.
+  - `FindingItem`, `FindingList` and `FindingsSection` take an optional `shape?: (f) => { evidence, anchors } | undefined`. Without it they render exactly as before, so component panels, `BundlePanel` and the Overview are unchanged.
+- `app/src/Sidebar.tsx` (`EdgePanel`):
+  - The status line shows `● added · N reference(s)` (or `removed`), with N = `edge.refCount ?? edge.refs.length`, followed by ` · <chip>` for each chip finding.
+  - One-line findings go under the status line.
+  - "Now references" / "No longer references" show only on `changed` links.
+  - FINDINGS lists only the `full` findings, through `shape`, and disappears when there are none.
+- `app/src/styles.css`: `.finding-chip`, `.finding-line`, `.finding-context`.
+- `app/src/findings.test.ts`: 9 Vitest cases for `edgeFindingView`:
+  - `new-external`: no context, lockfile with version, lockfile without version or with a non-added entry, other users with the lockfile, more than 3 users;
+  - `layering`: reference lines dropped, layer line and another link's reference kept, no suffix false-match;
+  - `cycle`;
+  - an LLM finding.
+
+## What was checked
+
+- `bazel test //app:test` passed (162 tests, 9 new). `bazel test //...` passed (all 9 targets, including `//app:ts_typecheck_test`). `statute check` reports no stale or missing links, and no rules are linked to the files touched.
+- Dev preview on `reviewmap . --base 0cd5916 --head 0e57fa4 --report <file>`, using the `reviewmap` already built in the main checkout (the core is unchanged):
+  - **`reviewmap-swift-helper → swift-syntax`:** shows `● added · 3 references · LOW new dependency`, then REFERENCES 3. There is no "Now references", no FINDINGS and no anchor link. This report counts 3 references (two `BUILD.bazel` deps and `SwiftExtractor.swift:3`), not 1.
+  - **`dist → react`:** shows a line `LOW new dependency also new in prototype_fixture_typescript`. Clicking it went to `findingFocus` (the edge `//:prototype_fixture_typescript → ext:react`).
+  - **Elsewhere:** the `swift-syntax` component panel and the Overview's Structural review (Show all 22) still show the `new-external` findings in full, with message, evidence and anchors.
+- The real report has only `new-external` findings and no `changed` links. A modified copy of it added: a lockfile entry `swift-syntax` 600.0.1, the two `ReviewMapCore` links into swift-syntax set to `added`, one `changed` link (`App → Feed` in the swift-bazel base fixture), a fake `layering` finding on it and a fake `cycle` finding on `Feed → Storage`. On that copy:
+  - **helper panel:** shows `MEDIUM new dependency New in the lockfile at 600.0.1 · also new in ReviewMapCore, ReviewMapCore/Swift`.
+  - **`changed` link:** keeps "Now references" and "No longer references".
+  - **`layering`:** shows its message, layer line, the other link's reference and the suggestion. Its two reference lines and its anchors to the link and its ends are gone.
+  - **`cycle`:** shows its full evidence, and the only anchor left is `App`.
+  - **`App` component panel:** the layering finding is unchanged (full evidence and anchors).
+- Screenshots are in the coordinating session's notes folder, under `rm-yrsa-screenshots/`.
+
+## Not checked
+
+- No real `layering` or `cycle` finding, and no real `changed` link, exists in the 0cd5916..0e57fa4 report. Those cases were checked only on the modified copy described above.
+- `BundlePanel` was not opened in the preview. It still calls `FindingsSection` without `shape`, so it renders as before.
+- The chip click was not checked by eye. On the only real chip (`helper → swift-syntax`), `findingFocus` resolves to the same link, so a click shows nothing. The chip uses the same `findingFocus` target as the one-line finding, whose click was checked, and a unit test covers the target.
+- Known limitation: references at line 0 (manifest) are matched by ` in <file>`. Two targets in one Bazel package share a `BUILD.bazel`, and one layering finding can group links from both. On link A's panel, a manifest line of link B in the same `BUILD.bazel` would then be dropped although A's REFERENCES doesn't list it. Code references (`file:line`) don't have this problem.
+- Dark mode and the packaged app (as opposed to the dev preview) were not looked at.
+
+## Follow-up noticed (not in scope)
+
+- `findingsForComponent` in `app/src/findings.ts` matches only component anchors (and review items). Its doc comment says it also matches "an edge out of or into it". So the `reviewmap-swift-helper` component panel shows no FINDINGS, although the `new-external` finding reaches `helper` through an edge anchor. This predates rm-yrsa.
