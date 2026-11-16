@@ -22,8 +22,57 @@ pub struct ChangeReport {
     pub review_items: Vec<ReviewItem>,
     pub regions: Vec<Region>,
     pub warnings: Vec<Warning>,
-    /// Structural review: the deterministic checks' findings.
+    /// Structural review: the deterministic checks' findings, then the LLM's.
     pub findings: Vec<Finding>,
+    /// Set when the LLM pass ran (see `crate::llm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmRun>,
+}
+
+/// How the LLM pass went.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LlmRun {
+    /// "claude" or "codex".
+    pub tool: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    /// The file name of the command run instead of the tool, when one was given.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
+    pub prompt_version: String,
+    /// Annotation batches, cached components included.
+    pub batches: usize,
+    /// Components whose annotations all came from the cache.
+    pub cached: usize,
+    /// Batches whose reply was rejected; their regions keep the deterministic scores (CORE-004).
+    pub failed: usize,
+    /// Whether the head commit's REVIEW.md was in the prompts.
+    pub review_notes: bool,
+    /// The structural review: "ok", "cached", "rejected", or "skipped".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review: Option<String>,
+    /// Where the change's description came from: "pr" or "commits".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+}
+
+/// The LLM's one-line summary of a component or a review item.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct LlmSummary {
+    pub summary: String,
+}
+
+/// The LLM's view of a region: review and removed regions get a risk, context regions keep and rank.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default)]
+pub struct RegionLlm {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub risk: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep: Option<bool>,
+    /// Kept context regions of a review item, from 1 (most needed).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rank: Option<u32>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -152,6 +201,8 @@ pub struct Component {
     pub interface_changes: usize,
     /// 0..1, drives emphasis on the map.
     pub change_score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmSummary>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -338,6 +389,8 @@ pub struct ReviewItem {
     /// Added review items: existing declarations with similar names, which the new code may duplicate.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub similar: Option<Vec<Usage>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmSummary>,
 }
 
 /// A line range the reviewer should read. `review` regions are changed head lines, `removed` regions are
@@ -372,6 +425,8 @@ pub struct Region {
     /// Removed regions inside a changed review item: the head line the removed code followed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub anchor: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<RegionLlm>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -410,9 +465,10 @@ impl Warning {
 pub struct Finding {
     /// "<check>:<n>", stable within one change report.
     pub id: String,
-    /// "check" for the deterministic checks.
+    /// "check" for the deterministic checks, "llm" for the LLM's structural review.
     pub source: String,
-    /// "cycle", "layering", "new-external", "unused-api", "orphaned", "conformers", "untested".
+    /// Checks: "cycle", "layering", "new-external", "unused-api", "orphaned", "conformers", "untested".
+    /// LLM: "intent", "placement", "missing", "duplicate", "complexity".
     pub kind: String,
     /// "high", "medium", or "low".
     pub severity: String,

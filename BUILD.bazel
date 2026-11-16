@@ -5,6 +5,8 @@ exports_files([
     "Cargo.toml",
     "Package.resolved",
     "Package.swift",
+    # The stand-in for the LLM CLIs, the only LLM the tests run (crates/core/tests).
+    "scripts/fake-llm.sh",
 ])
 
 # Prototype fixtures that the rebuild's tests read in place: a fixture repository for the Swift tests

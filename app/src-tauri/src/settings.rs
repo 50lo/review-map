@@ -7,10 +7,16 @@
 //!   "tools": { "bazel": "/opt/homebrew/bin/bazelisk", "java": "/path/to/jdk/bin/java",
 //!              "node": "/path/to/node/bin/node", "yarn": "/path/to/yarn" },  // npx and corepack come from node's directory
 //!   "cacheLimitGb": 30,                        // syntax, index, and Bazel action caches together
-//!   "idleWorkspaceDays": 30                    // app-owned Bazel workspaces of repositories unused this long are removed
+//!   "idleWorkspaceDays": 30,                   // app-owned Bazel workspaces of repositories unused this long are removed
+//!   "llm": { "tool": "claude", "model": "sonnet" }  // the LLM pass for every review; off when missing
 //! }
 //! ```
+//!
+//! `llm` takes the fields of `reviewmap_core::llm::LlmOptions`: `tool` ("claude" or "codex"), and optionally
+//! `command` (an executable to run instead, such as scripts/fake-llm.sh), `model`, `jobs`, `timeoutSecs`,
+//! `structuralReview`, and `pullRequest`. `reviewmap --llm …` and `--no-llm` override it for one review.
 
+use reviewmap_core::llm::LlmOptions;
 use reviewmap_core::session::ReviewRequest;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -43,6 +49,9 @@ pub struct Settings {
     pub idle_workspace_days: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recent: Vec<Recent>,
+    /// The LLM pass to run on every review. None: off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<LlmOptions>,
 }
 
 impl Settings {

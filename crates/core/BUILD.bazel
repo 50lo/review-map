@@ -30,13 +30,18 @@ rust_test(
 )
 
 # What every acceptance test (tests/*.rs) has: the helpers in tests/common, which find the checkout through
-# their own runfile, and the Swift helper, which the Swift tests run.
+# their own runfile, the Swift helper, which the Swift tests run, and scripts/fake-llm.sh, which stands in for
+# claude and codex: no test runs a real coding agent.
 TEST_DATA = [
     "tests/common/mod.rs",
     "//helper:reviewmap-swift-helper",
+    "//:scripts/fake-llm.sh",
 ]
 
-TEST_ENV = {"REVIEWMAP_SWIFT_HELPER": "$(rootpath //helper:reviewmap-swift-helper)"}
+TEST_ENV = {
+    "REVIEWMAP_FAKE_LLM": "$(rootpath //:scripts/fake-llm.sh)",
+    "REVIEWMAP_SWIFT_HELPER": "$(rootpath //helper:reviewmap-swift-helper)",
+}
 
 [rust_test(
     name = name,
@@ -52,6 +57,7 @@ TEST_ENV = {"REVIEWMAP_SWIFT_HELPER": "$(rootpath //helper:reviewmap-swift-helpe
     deps = all_crate_deps(normal_dev = True) + [":reviewmap_core"],
 ) for name, data in [
     ("core_rules", []),
+    ("llm", []),
     ("swift_rules", ["//:prototype_fixture_basic"]),
 ]]
 

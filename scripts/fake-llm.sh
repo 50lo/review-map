@@ -1,8 +1,9 @@
 #!/bin/sh
-# A stand-in for `claude -p --output-format json` and `codex exec`, for testing the LLM annotator
-# without a model. It reads the prompt on stdin, fills the <reply-template> with canned values
-# picked by a hash of each id, and prints the reply the way the real CLI does. The structural
-# review prompt has no template; its reply is one canned finding on the first component listed.
+# A stand-in for `claude -p --output-format json` and `codex exec`, for testing the LLM pass
+# (crates/core/src/llm) without a model: the tests run it, and no build or test runs a real agent.
+# It reads the prompt on stdin, fills the <reply-template> with canned values picked by a hash of
+# each id, and prints the reply the way the real CLI does. The structural review prompt has no
+# template; its reply is one canned finding on the first component listed under "## Components".
 #
 #   reviewmap <repo> --llm-command scripts/fake-llm.sh             # imitates claude
 #   reviewmap <repo> --llm codex --llm-command scripts/fake-llm.sh # imitates codex

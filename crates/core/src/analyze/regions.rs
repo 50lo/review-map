@@ -143,6 +143,7 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
             component: None,
             lines: None,
             anchor,
+            llm: None,
         };
         let Some(pair) = pair.filter(|_| e.kind != ItemKind::File && e.kind != ItemKind::Target) else {
             // Non-code contracts: one region over the file or setting, scored by its flags.
@@ -592,6 +593,7 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
                 component: Some(it.component),
                 lines: it.lines,
                 anchor: None,
+                llm: None,
             })
             .collect()
     }

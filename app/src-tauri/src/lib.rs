@@ -10,6 +10,7 @@ mod editor;
 mod settings;
 
 use reviewmap_core::git::Repo;
+use reviewmap_core::llm::LlmOptions;
 use reviewmap_core::model::{ChangeReport, Side};
 use reviewmap_core::proc::Cancel;
 use reviewmap_core::session::{self, Event, ReviewRequest, Session};
@@ -236,9 +237,13 @@ fn current_state(state: State<AppState>) -> Snapshot {
 }
 
 #[tauri::command]
-fn start_review(app: AppHandle, request: ReviewRequest) -> Result<u64, String> {
+fn start_review(app: AppHandle, mut request: ReviewRequest) -> Result<u64, String> {
     if request.repo.as_os_str().is_empty() {
         return Err("Give the path of a repository.".to_string());
+    }
+    // A review started in the window follows the settings for the LLM pass.
+    if request.llm.is_none() {
+        request.llm = settings::load().llm;
     }
     Repo::discover(&request.repo).map_err(|e| format!("{e:#}"))?;
     Ok(start(&app, request))
@@ -361,8 +366,10 @@ fn repo_defaults(path: String) -> Result<RepoDefaults, String> {
 
 // MARK: Launching
 
-/// The review in a command line: what `reviewmap` passes. None when the arguments name no repository.
-fn request_from_args(args: &[String]) -> Option<ReviewRequest> {
+/// The review in a command line: what `reviewmap` passes. None when the arguments name no repository. The LLM
+/// pass follows `llm_setting` unless the launch says otherwise: `--no-llm` turns it off, and `--llm`,
+/// `--llm-command`, and `--llm-model` change what the setting says (a different tool starts from its defaults).
+fn request_from_args(args: &[String], llm_setting: Option<&LlmOptions>) -> Option<ReviewRequest> {
     let mut request: Option<ReviewRequest> = None;
     let mut pending: Vec<(String, String)> = Vec::new();
     let mut flags: Vec<String> = Vec::new();
@@ -370,7 +377,7 @@ fn request_from_args(args: &[String]) -> Option<ReviewRequest> {
     while i < args.len() {
         let arg = &args[i];
         match arg.as_str() {
-            "--repo" | "--base" | "--head" | "--cwd" | "--target" if i + 1 < args.len() => {
+            "--repo" | "--base" | "--head" | "--cwd" | "--target" | "--llm" | "--llm-command" | "--llm-model" if i + 1 < args.len() => {
                 pending.push((arg.clone(), args[i + 1].clone()));
                 i += 1;
             }
@@ -385,8 +392,28 @@ fn request_from_args(args: &[String]) -> Option<ReviewRequest> {
         }
     }
     let mut request = request?;
+    let mut llm: Option<LlmOptions> = None;
+    let mut llm_given = false;
+    let base = || llm_setting.cloned().unwrap_or_default();
+    // The tool first, so that a different tool starts from its defaults before the command and model apply.
+    if let Some((_, tool)) = pending.iter().find(|(k, _)| k == "--llm") {
+        let o = llm.get_or_insert_with(base);
+        if o.tool != *tool {
+            *o = LlmOptions { tool: tool.clone(), ..LlmOptions::default() };
+        }
+        llm_given = true;
+    }
     for (key, value) in pending {
         match key.as_str() {
+            "--llm" => {}
+            "--llm-command" => {
+                llm.get_or_insert_with(base).command = Some(PathBuf::from(value));
+                llm_given = true;
+            }
+            "--llm-model" => {
+                llm.get_or_insert_with(base).model = Some(value);
+                llm_given = true;
+            }
             "--base" => request.base = value,
             "--head" => request.head = Some(value),
             "--cwd" => request.cwd = Some(PathBuf::from(value)),
@@ -395,7 +422,7 @@ fn request_from_args(args: &[String]) -> Option<ReviewRequest> {
             _ => {}
         }
     }
-    for flag in flags {
+    for flag in &flags {
         match flag.as_str() {
             "--no-merge-base" => request.use_merge_base = false,
             "--no-index" => request.index = Some(false),
@@ -403,6 +430,13 @@ fn request_from_args(args: &[String]) -> Option<ReviewRequest> {
             _ => {}
         }
     }
+    request.llm = if flags.iter().any(|f| f == "--no-llm") {
+        None
+    } else if llm_given {
+        llm
+    } else {
+        llm_setting.cloned()
+    };
     Some(request)
 }
 
@@ -423,7 +457,8 @@ pub fn run() {
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             log(format!("another launch: {}", args.join(" ")));
             focus(app);
-            if let Some(request) = request_from_args(&args) {
+            // The settings are read again: they may have changed since the app started.
+            if let Some(request) = request_from_args(&args, settings::load().llm.as_ref()) {
                 start(app, request);
             }
         }))
@@ -444,7 +479,7 @@ pub fn run() {
         ])
         .setup(move |app| {
             let args: Vec<String> = std::env::args().collect();
-            if let Some(request) = request_from_args(&args) {
+            if let Some(request) = request_from_args(&args, loaded.llm.as_ref()) {
                 start(app.handle(), request);
             }
             // The caches are disposable; keep them under their limit without holding up the window.
@@ -477,13 +512,35 @@ mod tests {
             .iter()
             .map(|s| s.to_string())
             .collect();
-        let r = request_from_args(&args).unwrap();
+        let r = request_from_args(&args, None).unwrap();
         assert_eq!(r.repo, PathBuf::from("/r"));
         assert_eq!((r.base.as_str(), r.head.as_deref()), ("develop", Some("feature/x")));
         assert_eq!(r.targets, vec!["//App:App".to_string()]);
         assert_eq!(r.bazel_args, vec!["--config=sim".to_string()]);
         assert!(!r.use_merge_base);
-        assert!(request_from_args(&["app".to_string()]).is_none());
+        assert_eq!(r.llm, None, "the LLM pass is off without a setting or a flag");
+        assert!(request_from_args(&["app".to_string()], None).is_none());
+    }
+
+    fn args(list: &[&str]) -> Vec<String> {
+        ["app", "--repo", "/r"].iter().chain(list).map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn the_launch_overrides_the_llm_setting() {
+        let setting = LlmOptions { tool: "claude".to_string(), model: Some("sonnet".to_string()), ..LlmOptions::default() };
+        // Nothing said: the setting.
+        assert_eq!(request_from_args(&args(&[]), Some(&setting)).unwrap().llm, Some(setting.clone()));
+        // --no-llm wins over the setting.
+        assert_eq!(request_from_args(&args(&["--no-llm"]), Some(&setting)).unwrap().llm, None);
+        // A command keeps the rest of the setting.
+        let fake = request_from_args(&args(&["--llm-command", "/x/fake-llm.sh"]), Some(&setting)).unwrap().llm.unwrap();
+        assert_eq!((fake.tool.as_str(), fake.model.as_deref(), fake.command), ("claude", Some("sonnet"), Some(PathBuf::from("/x/fake-llm.sh"))));
+        // Another tool starts from its defaults: the setting's model is claude's.
+        let codex = request_from_args(&args(&["--llm", "codex"]), Some(&setting)).unwrap().llm.unwrap();
+        assert_eq!((codex.tool.as_str(), codex.model), ("codex", None));
+        // Without a setting, --llm turns the pass on.
+        assert_eq!(request_from_args(&args(&["--llm", "claude"]), None).unwrap().llm.map(|o| o.tool), Some("claude".to_string()));
     }
 
     #[test]

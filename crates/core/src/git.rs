@@ -146,6 +146,21 @@ impl Repo {
         }
         out
     }
+
+    /// The whole messages of the commits in `base..head`, newest first, up to `limit`.
+    pub fn commit_messages(&self, base: ObjectId, head: ObjectId, limit: usize) -> Vec<String> {
+        let repo = self.local();
+        let mut out = Vec::new();
+        let Ok(walk) = repo.rev_walk([head]).with_hidden([base]).all() else { return out };
+        for info in walk.flatten().take(limit) {
+            if let Ok(commit) = info.object() {
+                if let Ok(message) = commit.message_raw() {
+                    out.push(message.to_string().trim().to_string());
+                }
+            }
+        }
+        out
+    }
 }
 
 /// The content of a blob, read with a thread's own repository handle.

@@ -71,6 +71,9 @@ pub struct ReviewRequest {
     pub index: Option<bool>,
     #[serde(default = "default_max_refs")]
     pub max_refs_per_edge: usize,
+    /// The LLM pass to run on the final report. None: no LLM pass (the core never picks one by itself).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub llm: Option<crate::llm::LlmOptions>,
 }
 
 impl ReviewRequest {
@@ -85,6 +88,7 @@ impl ReviewRequest {
             bazel_args: Vec::new(),
             index: None,
             max_refs_per_edge: 50,
+            llm: None,
         }
     }
 }
@@ -754,13 +758,27 @@ fn first_lines(text: &str, n: usize) -> String {
 }
 
 /// Opens a session, emits the preliminary report, and refines it. Cancelling during refinement still
-/// returns the session, with its report made final.
+/// returns the session, with its report made final. When the request asks for the LLM pass, it runs on the
+/// final report and emits one more report with its annotations; cancelling it leaves the final report as it
+/// was (CORE-004).
 pub fn run(request: ReviewRequest, cancel: &Cancel, emit: Emit) -> Result<Session> {
     let mut session = Session::open(request, cancel, emit)?;
+    // The latest report, for the LLM pass.
+    let last: Mutex<Option<ChangeReport>> = Mutex::new(None);
+    let wants_llm = session.request.llm.is_some();
+    let forward = |event: Event| {
+        if let (true, Event::Report(report)) = (wants_llm, &event) {
+            *last.lock().unwrap() = Some((**report).clone());
+        }
+        emit(event)
+    };
+    let emit: Emit = &forward;
     emit(Event::Report(Box::new(session.report())));
+    let mut cancelled = false;
     match session.refine(cancel, emit) {
         Ok(()) => {}
         Err(e) if is_cancelled(&e) => {
+            cancelled = true;
             emit(Event::Report(Box::new(session.finish_cancelled())));
         }
         Err(e) => {
@@ -771,6 +789,19 @@ pub fn run(request: ReviewRequest, cancel: &Cancel, emit: Emit) -> Result<Sessio
             }
             session.stage = "complete".to_string();
             emit(Event::Report(Box::new(session.report())));
+        }
+    }
+    let report = last.lock().unwrap().take();
+    if let (Some(options), Some(report), false) = (session.request.llm.clone(), report, cancelled) {
+        if report.analysis.stage == "complete" && !cancel.is_cancelled() {
+            let progress = |m: String| emit(Event::Progress(m));
+            let annotator = crate::llm::Annotator { options: &options };
+            match annotator.run(&report, &session, cancel, &progress) {
+                Ok(annotated) => emit(Event::Report(Box::new(annotated))),
+                // Cancelled: the final report stays as it is.
+                Err(e) if is_cancelled(&e) => {}
+                Err(e) => return Err(e),
+            }
         }
     }
     Ok(session)

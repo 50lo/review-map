@@ -43,6 +43,10 @@ reviewmap
 | `--target <label>` | A Bazel target that defines the review scope; repeat for several (default: `index.targets` in `reviewmap.yml`, else the `top_level_targets` of the repo's rules_xcodeproj rule). |
 | `--bazel-arg <arg>` | An extra argument for Bazel queries and builds, such as `--config=sim`; repeat for several. |
 | `--no-index` | Don't build indexes: only links that syntax proves are shown. |
+| `--llm <tool>` | Run the [LLM pass](#llm-pass) with `claude` or `codex` (default: the app's settings, where it is off). |
+| `--llm-command <path>` | Run this executable in place of the LLM tool, such as `scripts/fake-llm.sh`. |
+| `--llm-model <name>` | The model the LLM tool uses. |
+| `--no-llm` | Don't run the LLM pass, whatever the settings say. |
 | `-h`, `--help` | Show help. |
 | `-V`, `--version` | Show the version. |
 
@@ -59,6 +63,20 @@ Review Map reads committed content only, never the working tree. It builds both 
 Index mode is on by default. Without an index for a language or a file, Review Map shows only the links that syntax alone proves, never links matched by name, and says so with an `index-unavailable` or `index-partial` warning. Checks that need complete references, such as finding unused declarations, are held back until the index is there (`checks-held-back`).
 
 Yarn Berry is detected and reported as not supported yet. Go, Rust, Gradle, SwiftPM, and direct Xcode builds are outside phase 1. Java and Objective-C files in the review scope are reported as coverage gaps.
+
+## LLM pass
+
+Review Map can ask a coding-agent CLI, `claude` or `codex`, to annotate a review: a risk for every changed region, which context regions to keep and in what order, a one-line summary of each component and review item, and a structural review of the whole change (findings of kind intent, placement, missing, duplicate, and complexity). The pass runs after the analysis is complete, on the final report; the review is usable while it runs, and cancelling it keeps the review as it was. A reply that fails validation, or a call that fails, is dropped and the deterministic scores and findings stay, with an `llm-rejected` warning. Accepted replies are cached, so the same change reviewed again makes no calls.
+
+The pass is off by default, because each call costs money. Turn it on for every review in the app's `settings.json` (in `~/Library/Application Support/reviewmap`):
+
+```json
+{ "llm": { "tool": "claude", "model": "sonnet" } }
+```
+
+or for one review with `reviewmap --llm claude` (or `--llm codex`, with `--llm-model <name>`). `--no-llm` turns it off for one review whatever the settings say. The CLI must be signed in already; Review Map runs it with the prompt on stdin, in an empty temporary directory, with no tools. If the repository has a `REVIEW.md` at the head commit, both prompts include it.
+
+To try the pass without a model, use the stand-in that the tests use: `reviewmap --llm-command scripts/fake-llm.sh` (with `--llm codex` to imitate codex). `FAKE_LLM_MODE` makes it reply with prose around the JSON (`prose`), out-of-range values (`invalid`), a failing exit (`fail`), or claude's error result (`error`).
 
 ## reviewmap.yml
 
@@ -99,7 +117,7 @@ REVIEWMAP_REPORT=<report.json> bazel run //app:dev  # the UI in a browser, reloa
 bazel run @rules_rust//tools/rust_analyzer:gen_rust_project  # rust-project.json for rust-analyzer
 ```
 
-Some fixture tests start Bazel, Node.js, or a JDK from your `PATH`. A test whose tool is missing passes early and says `skipped: …` in its log. `--test_env=REVIEWMAP_SKIP_BAZEL_TESTS=1` skips the tests that start nested Bazel workspaces.
+No test runs a real coding agent: the LLM tests use `scripts/fake-llm.sh`. Some fixture tests start Bazel, Node.js, or a JDK from your `PATH`. A test whose tool is missing passes early and says `skipped: …` in its log. `--test_env=REVIEWMAP_SKIP_BAZEL_TESTS=1` skips the tests that start nested Bazel workspaces.
 
 [docs/rebuild-build.md](docs/rebuild-build.md) describes the build: how the Rust, Swift, and UI parts fit together, how to add a Rust or npm package, what each test target covers, and how Xcode updates are handled.
 

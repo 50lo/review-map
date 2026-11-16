@@ -7,6 +7,7 @@ pub mod config;
 pub mod git;
 pub mod index;
 pub mod lang;
+pub mod llm;
 pub mod model;
 pub mod parse;
 pub mod paths;

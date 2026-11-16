@@ -212,6 +212,72 @@ pub fn own_fixture(name: &str) -> PathBuf {
     source(&format!("crates/core/tests/fixtures/{name}"))
 }
 
+/// `scripts/fake-llm.sh`, the stand-in for `claude` and `codex`. Tests never run a real coding agent: every
+/// test that turns the LLM pass on runs this script, or a wrapper around it.
+pub fn fake_llm() -> PathBuf {
+    let path = match std::env::var_os("REVIEWMAP_FAKE_LLM") {
+        Some(p) => std::env::current_dir().expect("the runfiles directory").join(p),
+        None => checkout().join("scripts/fake-llm.sh"),
+    };
+    std::fs::canonicalize(&path).unwrap_or_else(|_| panic!("{} is missing", path.display()))
+}
+
+/// LLM options that run `command` and nothing else: a cache of the test's own, so that no test reads replies
+/// another test cached, and no `gh`, so the description is the commit messages on every machine.
+pub fn llm_options(command: &Path, cache: &Path) -> reviewmap_core::llm::LlmOptions {
+    reviewmap_core::llm::LlmOptions {
+        command: Some(command.to_path_buf()),
+        pull_request: false,
+        cache_dir: Some(cache.to_path_buf()),
+        jobs: 2,
+        ..Default::default()
+    }
+}
+
+/// A script in `dir` that runs the fake with `FAKE_LLM_MODE` set to `mode`, or to `when_matched` for the
+/// prompts that contain `pattern` (a grep pattern).
+pub fn fake_llm_wrapper(dir: &Path, name: &str, mode: &str, when_matched: Option<(&str, &str)>) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let fake = fake_llm();
+    let pick = match when_matched {
+        Some((pattern, other)) => format!("if printf '%s\\n' \"$prompt\" | grep -q -- '{pattern}'; then mode={other}; fi\n"),
+        None => String::new(),
+    };
+    let script = format!("#!/bin/sh\nprompt=$(cat)\nmode={mode}\n{pick}printf '%s\\n' \"$prompt\" | FAKE_LLM_MODE=$mode '{}' \"$@\"\n", fake.display());
+    let path = dir.join(name);
+    std::fs::write(&path, script).expect("the wrapper");
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).expect("the wrapper is executable");
+    path
+}
+
+/// Runs a review with the LLM pass and returns the final report before the pass and the one after it.
+pub fn run_with_llm(mut request: ReviewRequest, options: reviewmap_core::llm::LlmOptions) -> (ChangeReport, ChangeReport) {
+    request.llm = Some(options);
+    let (_, mut reports, _) = run(request);
+    let after = reports.pop().expect("the report after the LLM pass");
+    let before = reports.pop().expect("the final report before it");
+    assert_eq!(before.analysis.stage, "complete", "the LLM pass runs on the final report");
+    (before, after)
+}
+
+/// A report without anything the LLM pass adds: what must equal the report before the pass (CORE-004).
+pub fn without_llm(report: &ChangeReport) -> ChangeReport {
+    let mut r = report.clone();
+    r.llm = None;
+    r.warnings.retain(|w| !w.kind.starts_with("llm-"));
+    r.findings.retain(|f| f.source != "llm");
+    for c in &mut r.components {
+        c.llm = None;
+    }
+    for e in &mut r.review_items {
+        e.llm = None;
+    }
+    for g in &mut r.regions {
+        g.llm = None;
+    }
+    r
+}
+
 /// `main` → `feature` of a repository, with the defaults a launch has.
 pub fn request(repo: &TestRepo) -> ReviewRequest {
     let mut request = ReviewRequest::new(repo.path());

@@ -1,6 +1,7 @@
 //! Acceptance tests for the core rules (statute/rules/core.md) in the rebuild. Each test names its rule.
 //! They need `git` and nothing else: the sources are Kotlin, which is parsed in-process, and no test here
-//! starts Bazel. CORE-004 is about the LLM annotator, which the rebuild does not have yet.
+//! starts Bazel. The CORE-004 tests and the LLM half of CORE-005 run `scripts/fake-llm.sh`, or a wrapper
+//! around it, in place of `claude`: no test here runs a real coding agent.
 //! `swift_rules.rs` repeats what depends on the language for Swift, and `bazel_fixtures.rs` covers the
 //! index builds.
 
@@ -347,6 +348,107 @@ fn the_preliminary_report_matches_nothing_by_name() {
     assert!(findings(&report, "orphaned").is_empty() && findings(&report, "unused-api").is_empty(), "{:?}", report.findings);
 }
 
+// MARK: CORE-004 A failed LLM reply keeps the deterministic report
+
+/// Two components that change, and lib now imports app, which closes a cycle: a deterministic finding the
+/// LLM's reply must not take away.
+fn llm_change() -> TestRepo {
+    two_commits(
+        &[
+            ("lib/Cart.kt", "package lib\n\nclass Cart {\n    val items = mutableListOf<Int>()\n\n    fun total(): Int {\n        return 1\n    }\n}\n"),
+            ("app/App.kt", "package app\n\nimport lib.Cart\n\nfun show() {\n    println(Cart().total())\n}\n"),
+        ],
+        &[
+            (
+                "lib/Cart.kt",
+                Some("package lib\n\nimport app.show\n\nclass Cart {\n    val items = mutableListOf<Int>()\n\n    fun total(): Int {\n        return items.sum()\n    }\n}\n"),
+            ),
+            ("app/App.kt", Some("package app\n\nimport lib.Cart\n\nfun show() {\n    println(Cart().total() + 1)\n}\n")),
+        ],
+    )
+}
+
+fn llm_warnings<'r>(report: &'r ChangeReport, kind: &str) -> Vec<&'r Warning> {
+    report.warnings.iter().filter(|w| w.kind == kind).collect()
+}
+
+/// Every region keeps its deterministic risk, and the deterministic findings are all still there.
+fn assert_deterministic_kept(before: &ChangeReport, after: &ChangeReport) {
+    assert_eq!(without_llm(after), *before, "the pass adds to the report and changes nothing else");
+    let risks = |r: &ChangeReport| r.regions.iter().map(|g| (g.id.clone(), g.risk)).collect::<Vec<_>>();
+    assert_eq!(risks(after), risks(before));
+    let checks = |r: &ChangeReport| r.findings.iter().filter(|f| f.source == "check").cloned().collect::<Vec<_>>();
+    assert_eq!(checks(after), checks(before));
+}
+
+#[test]
+fn core_004_a_rejected_batch_leaves_the_other_batches_and_every_deterministic_score() {
+    let repo = llm_change();
+    let dir = tempfile::tempdir().unwrap();
+    // lib's batch gets a risk outside 0…1 on every attempt; app's batch and the structural review are fine.
+    let wrapper = fake_llm_wrapper(dir.path(), "lib-invalid", "ok", Some(("^## Component lib ", "invalid")));
+    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join("cache")));
+    assert_deterministic_kept(&before, &after);
+    let run = after.llm.as_ref().expect("the pass ran");
+    assert_eq!((run.batches, run.failed, run.review.as_deref()), (2, 1, Some("ok")));
+    let rejected = llm_warnings(&after, "llm-rejected");
+    assert_eq!(rejected.len(), 1, "{:?}", after.warnings);
+    assert!(rejected[0].message.contains("LLM reply for lib failed validation") && rejected[0].message.contains("outside 0...1"), "{}", rejected[0].message);
+    for e in &after.review_items {
+        assert_eq!(e.llm.is_some(), e.component == "folder:app", "{}: only app's batch was accepted", e.id);
+    }
+    for g in &after.regions {
+        assert_eq!(g.llm.is_some(), g.review_item.starts_with("app/"), "{}", g.id);
+    }
+    assert!(after.findings.iter().any(|f| f.source == "llm"), "the structural review was accepted");
+}
+
+#[test]
+fn core_004_a_rejected_structural_review_adds_no_findings_and_keeps_the_deterministic_ones() {
+    let repo = llm_change();
+    let dir = tempfile::tempdir().unwrap();
+    // The structural review answers with an unknown kind on every attempt; the batches are fine.
+    let wrapper = fake_llm_wrapper(dir.path(), "review-invalid", "ok", Some(("^You are reviewing the structure", "invalid")));
+    let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join("cache")));
+    assert!(kinds(&before).contains("cycle"), "a deterministic finding to keep: {:?}", kinds(&before));
+    assert_deterministic_kept(&before, &after);
+    let run = after.llm.as_ref().expect("the pass ran");
+    assert_eq!((run.failed, run.review.as_deref()), (0, Some("rejected")), "a rejected review counts in llm.review, not llm.failed");
+    assert!(after.findings.iter().all(|f| f.source == "check"));
+    let rejected = llm_warnings(&after, "llm-rejected");
+    assert_eq!(rejected.len(), 1);
+    assert!(rejected[0].message.starts_with("LLM structural review failed validation"), "{}", rejected[0].message);
+    assert!(after.review_items.iter().all(|e| e.llm.is_some()), "the batches' summaries stay");
+}
+
+#[test]
+fn core_004_a_failing_cli_keeps_the_deterministic_report() {
+    let repo = llm_change();
+    let dir = tempfile::tempdir().unwrap();
+    // fail: the CLI exits with an error; error: claude's is_error result; invalid: every reply is out of range.
+    for mode in ["fail", "error", "invalid"] {
+        let wrapper = fake_llm_wrapper(dir.path(), &format!("{mode}-llm"), mode, None);
+        let (before, after) = run_with_llm(request(&repo), llm_options(&wrapper, &dir.path().join(format!("cache-{mode}"))));
+        assert_deterministic_kept(&before, &after);
+        let run = after.llm.as_ref().expect("the pass ran");
+        assert_eq!((run.failed, run.batches, run.review.as_deref()), (2, 2, Some("rejected")), "{mode}");
+        assert_eq!(llm_warnings(&after, "llm-rejected").len(), 3, "{mode}: two batches and the review");
+        assert!(after.review_items.iter().all(|e| e.llm.is_none()) && after.regions.iter().all(|g| g.llm.is_none()), "{mode}");
+        assert!(after.findings.iter().all(|f| f.source == "check"), "{mode}");
+    }
+}
+
+#[test]
+fn core_004_a_missing_cli_leaves_the_report_as_without_the_llm() {
+    let repo = llm_change();
+    let dir = tempfile::tempdir().unwrap();
+    let (before, after) = run_with_llm(request(&repo), llm_options(std::path::Path::new("/nonexistent/fake-llm"), dir.path()));
+    let mut expected = before.clone();
+    expected.warnings.push(llm_warnings(&after, "llm-unavailable").first().map(|w| (*w).clone()).expect("an llm-unavailable warning"));
+    assert_eq!(after, expected, "the same report, plus one llm-unavailable warning");
+    assert_eq!(after.llm, None);
+}
+
 // MARK: CORE-005 Every finding points at something on the map
 
 /// Every finding of a report cites evidence and points at something the report has.
@@ -413,6 +515,39 @@ fn core_005_every_finding_is_anchored_in_the_report() {
     let syntax_only = analyze(request(&repo));
     assert!(kinds(&syntax_only).contains("cycle"), "the imports close the cycle: {:?}", kinds(&syntax_only));
     assert_anchored(&syntax_only);
+}
+
+#[test]
+fn core_005_an_llm_finding_without_a_known_anchor_is_rejected() {
+    let repo = llm_change();
+    let dir = tempfile::tempdir().unwrap();
+    // The structural review names an unknown component, an unknown review item, an edge that isn't there, and
+    // nothing at all; the batches go to the fake.
+    let reply = r#"{"findings": [
+{"kind": "missing", "severity": "high", "message": "No test.", "evidence": ["None."], "anchors": [{"component": "folder:nowhere"}]},
+{"kind": "missing", "severity": "high", "message": "No test.", "evidence": ["None."], "anchors": [{"reviewItem": "lib/Cart.kt::Gone"}]},
+{"kind": "placement", "severity": "low", "message": "Odd edge.", "evidence": ["None."], "anchors": [{"from": "folder:app", "to": "folder:nowhere"}]},
+{"kind": "intent", "severity": "low", "message": "Unclear.", "evidence": ["None."], "anchors": []}
+]}"#;
+    let script = dir.path().join("bad-anchors");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\nprompt=$(cat)\ncase \"$prompt\" in\n  'You are reviewing the structure'*) cat <<'EOF'\n{reply}\nEOF\n  ;;\n  *) printf '%s\\n' \"$prompt\" | '{}' \"$@\" ;;\nesac\n",
+            fake_llm().display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::os::unix::fs::PermissionsExt::from_mode(0o755)).unwrap();
+    let (_, after) = run_with_llm(request(&repo), llm_options(&script, &dir.path().join("cache")));
+    assert_eq!(after.llm.as_ref().and_then(|r| r.review.as_deref()), Some("rejected"));
+    let rejected = llm_warnings(&after, "llm-rejected");
+    assert_eq!(rejected.len(), 1, "{:?}", after.warnings);
+    for part in ["unknown component folder:nowhere", "unknown review item lib/Cart.kt::Gone", "no edge folder:app → folder:nowhere", "finding 4 has no anchor"] {
+        assert!(rejected[0].message.contains(part), "{part} in {}", rejected[0].message);
+    }
+    assert!(after.findings.iter().all(|f| f.source == "check"));
+    assert_anchored(&after);
 }
 
 // MARK: CORE-006 Formatting-only changes ask for no review

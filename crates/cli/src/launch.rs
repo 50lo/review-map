@@ -60,7 +60,18 @@ fn app_executable() -> Result<PathBuf> {
         .ok_or_else(|| anyhow!("Can't find the Review Map app. Build it with scripts/build-app.sh, or set REVIEWMAP_APP to the app bundle."))
 }
 
-pub fn open_app(request: &ReviewRequest) -> Result<()> {
+/// What a launch says about the LLM pass.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LlmChoice {
+    /// Nothing: the app's settings decide.
+    Default,
+    /// `--no-llm`.
+    Off,
+    /// `--llm`, `--llm-command`, or `--llm-model`: the request's `llm` holds what was given.
+    On,
+}
+
+pub fn open_app(request: &ReviewRequest, llm: LlmChoice) -> Result<()> {
     let exe = app_executable()?;
     let mut command = Command::new(&exe);
     command.arg("--repo").arg(&request.repo).arg("--base").arg(&request.base);
@@ -87,6 +98,21 @@ pub fn open_app(request: &ReviewRequest) -> Result<()> {
             command.arg("--index");
         }
         None => {}
+    }
+    match (llm, &request.llm) {
+        (LlmChoice::Off, _) => {
+            command.arg("--no-llm");
+        }
+        (LlmChoice::On, Some(options)) => {
+            command.arg("--llm").arg(&options.tool);
+            if let Some(c) = &options.command {
+                command.arg("--llm-command").arg(c);
+            }
+            if let Some(m) = &options.model {
+                command.arg("--llm-model").arg(m);
+            }
+        }
+        _ => {}
     }
     // Detached from this terminal: the app outlives the command, and closing the terminal doesn't end it.
     command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).process_group(0);

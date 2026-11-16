@@ -74,6 +74,7 @@ impl<'a> Builder<'a> {
                 used_by: Vec::new(),
                 depends_on: Vec::new(),
                 similar: None,
+                llm: None,
             });
         }
     }
@@ -118,6 +119,7 @@ impl<'a> Builder<'a> {
                 used_by: Vec::new(),
                 depends_on: Vec::new(),
                 similar: None,
+                llm: None,
             });
         }
     }
@@ -252,6 +254,7 @@ impl<'a> Builder<'a> {
                 used_by: used,
                 depends_on: deps,
                 similar: None,
+                llm: None,
             });
         }
         // Interface: public/open/package, used from another component, or a requirement/case of an interface type.
@@ -359,6 +362,7 @@ impl<'a> Builder<'a> {
                     changed_review_items: 0,
                     interface_changes: 0,
                     change_score: 0.0,
+                    llm: None,
                 });
                 if s == Side::Head {
                     c.status = if existed { None } else { Some("added".to_string()) };
@@ -387,6 +391,7 @@ impl<'a> Builder<'a> {
             changed_review_items: 0,
             interface_changes: 0,
             change_score: 0.0,
+            llm: None,
         };
         for (id, name) in &self.external_components {
             components.entry(id.clone()).or_insert_with(|| external(id, name));
@@ -543,6 +548,7 @@ impl<'a> Builder<'a> {
             regions,
             warnings: sorted_warnings,
             findings,
+            llm: None,
         }
     }
 
