@@ -125,9 +125,11 @@ fn node_of(rule: ProtoRule, workspace_dir: &Path, config: Option<String>) -> Tar
     }
     if let Some(location) = rule.location {
         // "/abs/workspace/app/BUILD.bazel:3:14"
-        let file = location.split(':').next().unwrap_or("");
+        let mut parts = location.split(':');
+        let file = parts.next().unwrap_or("");
         if let Ok(rel) = Path::new(file).strip_prefix(workspace_dir) {
             node.build_file = rel.to_string_lossy().to_string();
+            node.build_line = parts.next().and_then(|l| l.parse().ok()).unwrap_or(0);
         }
     }
     if node.build_file.is_empty() && !node.external {
@@ -343,6 +345,7 @@ mod tests {
         expand_filegroups(&mut targets);
         let lib = &targets["//app:AppLib"];
         assert_eq!(lib.build_file, "app/BUILD.bazel");
+        assert_eq!(lib.build_line, 3);
         assert_eq!(lib.module_name.as_deref(), Some("app_AppLib"));
         assert!(lib.srcs.contains(&"app/Sources/App.swift".to_string()));
         assert!(lib.srcs.contains(&"app/Sources/More.swift".to_string()));

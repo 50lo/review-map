@@ -145,6 +145,27 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
             anchor,
             llm: None,
         };
+        if let Some(spots) = self.b.setting_spots.get(&e.id).filter(|_| e.kind == ItemKind::Target) {
+            // Build settings: one region over each changed setting and its value, scored by that setting's flags.
+            let mut out: Vec<Region> = Vec::new();
+            for spot in spots {
+                let mut signals = self.flags_signals(&spot.flags, e.is_interface);
+                signals.push(signal(risk::BASE, if spot.side == Side::Base { "removed lines" } else { "changed" }));
+                let file = if spot.side == e.location.side { &e.location.file } else { e.base_location.as_ref().map(|l| &l.file).unwrap_or(&e.location.file) };
+                let mut r = region(
+                    if spot.side == Side::Base { "removed" } else { "review" },
+                    file,
+                    spot.lines,
+                    spot.side,
+                    score(&signals, is_low),
+                    reasons(signals, e, is_low),
+                    spot.anchor,
+                );
+                r.id = format!("{}/r{}", e.id, out.len() + 1);
+                out.push(r);
+            }
+            return out;
+        }
         let Some(pair) = pair.filter(|_| e.kind != ItemKind::File && e.kind != ItemKind::Target) else {
             // Non-code contracts: one region over the file or setting, scored by its flags.
             let mut signals = self.flag_signals(e);
@@ -263,11 +284,15 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
 
     /// Each flag weighs what its language says; the reason is the flag itself.
     fn flag_signals(&self, e: &ReviewItem) -> Vec<Signal> {
-        e.contract_flags
+        self.flags_signals(&e.contract_flags, e.is_interface)
+    }
+
+    fn flags_signals(&self, flags: &[String], is_interface: bool) -> Vec<Signal> {
+        flags
             .iter()
             .map(|f| match lang::split_flag(f) {
-                Some((language, name)) => signal(language.flag_risk(name, e.is_interface), f.clone()),
-                None => signal(if e.is_interface { risk::HIGH } else { risk::MEDIUM }, f.clone()),
+                Some((language, name)) => signal(language.flag_risk(name, is_interface), f.clone()),
+                None => signal(if is_interface { risk::HIGH } else { risk::MEDIUM }, f.clone()),
             })
             .collect()
     }

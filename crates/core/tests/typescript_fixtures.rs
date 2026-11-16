@@ -269,8 +269,16 @@ fn the_prototype_fixture_keeps_its_dependencies_and_contract_flags() {
         let name = item["qualifiedName"].as_str().unwrap();
         let component = item["component"].as_str().unwrap();
         let mut want: Vec<String> = item["contractFlags"].as_array().map(|a| a.iter().map(|f| f.as_str().unwrap().to_string()).collect()).unwrap_or_default();
-        let ours = report.review_items.iter().find(|i| i.qualified_name == name && i.component == component).unwrap_or_else(|| panic!("no review item {name} in {component}"));
-        let mut have = ours.contract_flags.clone();
+        // The prototype had one build settings review item per target; the rebuild has one for each file
+        // that sets a changed setting, "<target> build settings (<file>)", so their flags are compared together.
+        let split = format!("{name} (");
+        let ours: Vec<&reviewmap_core::model::ReviewItem> = report
+            .review_items
+            .iter()
+            .filter(|i| i.component == component && (i.qualified_name == name || (name.ends_with(" build settings") && i.qualified_name.starts_with(&split))))
+            .collect();
+        assert!(!ours.is_empty(), "no review item {name} in {component}");
+        let mut have: Vec<String> = ours.iter().flat_map(|i| i.contract_flags.clone()).collect();
         want.sort();
         have.sort();
         assert_eq!(have, want, "contract flags of {name}");
@@ -299,4 +307,152 @@ fn core_006_a_cosmetic_typescript_review_item_asks_for_no_review() {
     let component = report.components.iter().find(|c| c.id == cosmetic.component).expect("its component");
     let changed = report.review_items.iter().filter(|i| i.component == cosmetic.component && i.change != reviewmap_core::model::ChangeKind::Cosmetic).count();
     assert_eq!(component.changed_review_items, changed, "not counted as changed");
+}
+
+/// The regions of a review item, in order.
+fn regions_of<'a>(report: &'a ChangeReport, id: &str) -> Vec<&'a reviewmap_core::model::Region> {
+    report.regions.iter().filter(|r| r.review_item == id).collect()
+}
+
+/// The 1-based line of the first line of `text` that contains `needle`.
+fn line_of(text: &str, needle: &str) -> u32 {
+    text.lines().position(|l| l.contains(needle)).map(|i| i as u32 + 1).unwrap_or_else(|| panic!("no {needle}"))
+}
+
+const SETTINGS_PACKAGE_BASE: &str = r#"{
+  "name": "reviewmap-app",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {}
+}
+"#;
+
+const SETTINGS_TSCONFIG_BASE: &str = r#"{
+  // The app's compiler options.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "strict": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src"]
+}
+"#;
+
+/// A tsconfig option added at head is shown at its line in tsconfig.json, not at line 1 of package.json,
+/// even when package.json changed too (its scripts were removed, which is no build setting).
+#[test]
+fn a_changed_tsconfig_option_is_shown_at_its_line_in_tsconfig() {
+    let _guard = lock();
+    let tsconfig_head = SETTINGS_TSCONFIG_BASE.replace("    \"strict\": true,\n", "    \"strict\": true,\n    \"noEmit\": true,\n");
+    let package_head = SETTINGS_PACKAGE_BASE.replace("  \"scripts\": {\n    \"build\": \"tsc --noEmit && vite build\"\n  },\n", "");
+    let repo = two_commits(
+        &[("app/package.json", SETTINGS_PACKAGE_BASE), ("app/tsconfig.json", SETTINGS_TSCONFIG_BASE), ("app/src/main.ts", "export const a = 1;\n")],
+        &[("app/package.json", Some(&package_head)), ("app/tsconfig.json", Some(&tsconfig_head))],
+    );
+    let mut request = request(&repo);
+    request.index = Some(false);
+    let report = analyze(request);
+    let item = review_item(&report, "reviewmap-app build settings");
+    assert_eq!(item.signature.head.as_deref(), Some("tsconfig noEmit = true"));
+    let line = line_of(&tsconfig_head, "\"noEmit\"");
+    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("app/tsconfig.json", line, line));
+    let regions = regions_of(&report, &item.id);
+    assert_eq!(regions.len(), 1, "{regions:?}");
+    let r = regions[0];
+    assert_eq!((r.kind.as_str(), r.file.as_str(), r.start_line, r.end_line, r.side), ("review", "app/tsconfig.json", line, line, reviewmap_core::model::Side::Head));
+    assert_eq!(r.reasons, vec!["typescript:compiler-options-changed".to_string()]);
+}
+
+/// Settings of one package in two files make one review item per file, each region in its item's file and
+/// naming only its own setting. A package.json field is found at the top level, not inside `exports`, and a
+/// removed tsconfig option is shown at its base line.
+#[test]
+fn build_settings_in_two_files_are_shown_where_each_is_set() {
+    let _guard = lock();
+    let package_base = r#"{
+  "name": "@shop/core",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts"
+}
+"#;
+    let package_head = package_base.replace("  \"types\": \"./dist/index.d.ts\"\n", "  \"types\": \"./dist/types/index.d.ts\"\n");
+    let tsconfig_base = r#"{
+  "compilerOptions": {
+    "strict": false,
+    "noImplicitAny": true,
+    "target": "ES2022"
+  }
+}
+"#;
+    let tsconfig_head = r#"{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022"
+  }
+}
+"#;
+    let repo = two_commits(
+        &[("core/package.json", package_base), ("core/tsconfig.json", tsconfig_base), ("core/src/index.ts", "export const a = 1;\n")],
+        &[("core/package.json", Some(&package_head)), ("core/tsconfig.json", Some(tsconfig_head))],
+    );
+    let mut request = request(&repo);
+    request.index = Some(false);
+    let report = analyze(request);
+    let items: Vec<&reviewmap_core::model::ReviewItem> = report.review_items.iter().filter(|i| i.kind == reviewmap_core::model::ItemKind::Target).collect();
+    assert_eq!(items.len(), 2, "{:?}", items.iter().map(|i| &i.qualified_name).collect::<Vec<_>>());
+    for item in &items {
+        for r in regions_of(&report, &item.id) {
+            assert_eq!(r.file, item.location.file, "region {} is in its item's file", r.id);
+        }
+    }
+
+    let package = review_item(&report, "@shop/core build settings (package.json)");
+    let types = package_head.lines().collect::<Vec<_>>().iter().rposition(|l| l.contains("\"types\"")).unwrap() as u32 + 1;
+    assert_eq!((package.location.file.as_str(), package.location.start_line), ("core/package.json", types));
+    let regions = regions_of(&report, &package.id);
+    assert_eq!(regions.iter().map(|r| (r.kind.as_str(), r.start_line, r.side)).collect::<Vec<_>>(), vec![("review", types, reviewmap_core::model::Side::Head)]);
+    assert_eq!(regions[0].reasons, vec!["typescript:package-exports-changed".to_string()]);
+
+    let tsconfig = review_item(&report, "@shop/core build settings (tsconfig.json)");
+    let strict = line_of(tsconfig_head, "\"strict\"");
+    let removed = line_of(tsconfig_base, "\"noImplicitAny\"");
+    assert_eq!((tsconfig.location.file.as_str(), tsconfig.location.side), ("core/tsconfig.json", reviewmap_core::model::Side::Head));
+    assert!(tsconfig.location.start_line <= strict && strict <= tsconfig.location.end_line);
+    let regions = regions_of(&report, &tsconfig.id);
+    let shown: Vec<(&str, u32, reviewmap_core::model::Side, Option<u32>)> = regions.iter().map(|r| (r.kind.as_str(), r.start_line, r.side, r.anchor)).collect();
+    assert_eq!(shown, vec![("review", strict, reviewmap_core::model::Side::Head, None), ("removed", removed, reviewmap_core::model::Side::Base, Some(strict))]);
+    assert_eq!(regions[0].reasons, vec!["typescript:strictness-changed".to_string()]);
+    assert!(tsconfig.base_location.as_ref().map(|b| b.file == "core/tsconfig.json" && b.start_line <= removed && removed <= b.end_line).unwrap_or(false), "{:?}", tsconfig.base_location);
+}
+
+/// A setting whose value spans lines is shown whole: the region over a changed `lib` array runs from the
+/// key to the array's end, so the changed entry inside it is on the page.
+#[test]
+fn a_setting_written_over_several_lines_is_shown_whole() {
+    let _guard = lock();
+    let base = SETTINGS_TSCONFIG_BASE.replace("    \"jsx\": \"react-jsx\"\n", "    \"jsx\": \"react-jsx\",\n    \"lib\": [\n      \"ES2022\",\n      \"DOM\"\n    ]\n");
+    let head = base.replace("      \"DOM\"\n", "      \"DOM\",\n      \"DOM.Iterable\"\n");
+    let repo = two_commits(
+        &[("app/package.json", SETTINGS_PACKAGE_BASE), ("app/tsconfig.json", &base), ("app/src/main.ts", "export const a = 1;\n")],
+        &[("app/tsconfig.json", Some(&head))],
+    );
+    let mut request = request(&repo);
+    request.index = Some(false);
+    let report = analyze(request);
+    let item = review_item(&report, "reviewmap-app build settings");
+    let (start, changed) = (line_of(&head, "\"lib\""), line_of(&head, "DOM.Iterable"));
+    let end = changed + 1;
+    assert_eq!(head.lines().nth(end as usize - 1).map(str::trim), Some("]"));
+    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("app/tsconfig.json", start, end));
+    let regions = regions_of(&report, &item.id);
+    assert_eq!(regions.iter().map(|r| (r.file.as_str(), r.start_line, r.end_line)).collect::<Vec<_>>(), vec![("app/tsconfig.json", start, end)]);
 }

@@ -2,7 +2,10 @@
 //! settings, external packages, review items, edges, components, and the analysis summary.
 
 use super::checks::{similar_declarations, StructuralChecks};
-use super::{Builder, Mode};
+use super::components::TargetSettings;
+use super::regions::lcs;
+use super::settings::setting_lines;
+use super::{Builder, Mode, SettingSpot, SideData};
 use crate::bazel;
 use crate::config::Config;
 use crate::lang::{self, Language};
@@ -79,9 +82,12 @@ impl<'a> Builder<'a> {
         }
     }
 
-    /// Changed build settings of a target that exists at both sides, as a `target` review item.
+    /// Changed build settings of a target that exists at both sides, as `target` review items: one for each
+    /// file that sets a changed setting (a package's package.json and its tsconfig.json), located at the
+    /// lines that set them, so that every region of the review item is in its file.
     pub fn add_target_settings(&mut self) {
-        let (b, h) = (&self.base.layout.target_settings, &self.head.layout.target_settings);
+        let (base, head) = (self.base, self.head);
+        let (b, h) = (&base.layout.target_settings, &head.layout.target_settings);
         for (id, hs) in h {
             let Some(bs) = b.get(id) else { continue };
             let keys: BTreeSet<&String> = bs.settings.keys().chain(hs.settings.keys()).filter(|k| bs.settings.get(*k) != hs.settings.get(*k)).collect();
@@ -90,37 +96,48 @@ impl<'a> Builder<'a> {
                 continue;
             }
             // The flag follows what changed: the setting's name and the values on both sides.
-            let flags: BTreeSet<String> = keys
-                .iter()
-                .map(|k| {
-                    let probe = format!("{k} {} {}", bs.settings.get(*k).map(String::as_str).unwrap_or(""), hs.settings.get(*k).map(String::as_str).unwrap_or(""));
-                    format!("{}:{}", language.id(), language.setting_flag(&changed_part(&probe, bs.settings.get(*k), hs.settings.get(*k), k)))
-                })
-                .collect();
-            let show = |m: &BTreeMap<String, String>| -> Option<String> {
-                let lines: Vec<String> = keys.iter().filter_map(|k| m.get(*k).map(|v| if v == "on" { (*k).clone() } else { format!("{k} = {v}") })).collect();
-                (!lines.is_empty()).then(|| lines.join("\n"))
+            let flag_of = |k: &String| -> String {
+                let probe = format!("{k} {} {}", bs.settings.get(k).map(String::as_str).unwrap_or(""), hs.settings.get(k).map(String::as_str).unwrap_or(""));
+                format!("{}:{}", language.id(), language.setting_flag(&changed_part(&probe, bs.settings.get(k), hs.settings.get(k), k)))
             };
-            let name = self.head.layout.components.get(id).map(|c| c.name.clone()).unwrap_or_else(|| id.clone());
-            self.file_review_items.push(ReviewItem {
-                id: format!("{}::{id} build settings", hs.file),
-                component: id.clone(),
-                kind: ItemKind::Target,
-                qualified_name: format!("{name} build settings"),
-                parent: None,
-                is_interface: true,
-                change: ChangeKind::Modifiers,
-                changes: vec![ChangeKind::Modifiers],
-                signature: Signature { base: show(&bs.settings), head: show(&hs.settings) },
-                contract_flags: flags.into_iter().collect(),
-                tags: Vec::new(),
-                location: Location { file: hs.file.clone(), start_line: 1, end_line: 1, side: Side::Head },
-                base_location: None,
-                used_by: Vec::new(),
-                depends_on: Vec::new(),
-                similar: None,
-                llm: None,
-            });
+            // Each setting belongs to the file that sets it at head, or that set it at base.
+            let mut by_file: BTreeMap<&str, Vec<&String>> = BTreeMap::new();
+            for k in &keys {
+                let file = if hs.settings.contains_key(*k) { hs.file_of(k) } else { bs.file_of(k) };
+                by_file.entry(file).or_default().push(k);
+            }
+            let name = head.layout.components.get(id).map(|c| c.name.clone()).unwrap_or_else(|| id.clone());
+            let several = by_file.len() > 1;
+            for (file, keys) in by_file {
+                let flags: BTreeSet<String> = keys.iter().map(|k| flag_of(k)).collect();
+                let show = |m: &BTreeMap<String, String>| -> Option<String> {
+                    let lines: Vec<String> = keys.iter().filter_map(|k| m.get(*k).map(|v| if v == "on" { (*k).clone() } else { format!("{k} = {v}") })).collect();
+                    (!lines.is_empty()).then(|| lines.join("\n"))
+                };
+                let placed = place_settings(base, head, file, &keys, bs, hs, &flag_of);
+                let item_id = format!("{file}::{id} build settings");
+                let qualified_name = if several { format!("{name} build settings ({})", crate::paths::file_name(file)) } else { format!("{name} build settings") };
+                self.setting_spots.insert(item_id.clone(), placed.spots);
+                self.file_review_items.push(ReviewItem {
+                    id: item_id,
+                    component: id.clone(),
+                    kind: ItemKind::Target,
+                    qualified_name,
+                    parent: None,
+                    is_interface: true,
+                    change: ChangeKind::Modifiers,
+                    changes: vec![ChangeKind::Modifiers],
+                    signature: Signature { base: show(&bs.settings), head: show(&hs.settings) },
+                    contract_flags: flags.into_iter().collect(),
+                    tags: Vec::new(),
+                    location: placed.location,
+                    base_location: placed.base_location,
+                    used_by: Vec::new(),
+                    depends_on: Vec::new(),
+                    similar: None,
+                    llm: None,
+                });
+            }
         }
     }
 
@@ -586,6 +603,91 @@ fn gap_name(language: &str) -> &str {
 }
 
 /// What to classify a changed setting by: for a list of compiler options, only the options that differ.
+/// Where a build settings review item shows the settings one file sets.
+struct PlacedSettings {
+    spots: Vec<SettingSpot>,
+    location: Location,
+    base_location: Option<Location>,
+}
+
+/// The lines of `file` that set `keys`: at head for a setting head still has, at base for a removed one.
+/// While the file exists at head, the review item is located there, and a removed setting is anchored after
+/// the head line it followed; a setting whose line can't be found is shown at its rule (Bazel) or at the
+/// top of its own file.
+fn place_settings(
+    base: &SideData,
+    head: &SideData,
+    file: &str,
+    keys: &[&String],
+    bs: &TargetSettings,
+    hs: &TargetSettings,
+    flag_of: &dyn Fn(&String) -> String,
+) -> PlacedSettings {
+    let lines_in = |side: &SideData, s: &TargetSettings, k: &String| -> Option<(String, (u32, u32))> {
+        let f = s.file_of(k);
+        let found = side.source.text(f).and_then(|t| setting_lines(&t, k, s.rule_line));
+        let fallback = if f == s.file { s.rule_line.map(|l| (l, l)) } else { None };
+        side.source.has_path(f).then(|| (f.to_string(), found.or(fallback).unwrap_or((1, 1))))
+    };
+    let head_lines = head.source.lines(file);
+    // For anchoring removed settings: which head line each base line is matched with.
+    let matches: Vec<(usize, usize)> = match (base.source.lines(file), &head_lines) {
+        (Some(b), Some(h)) => {
+            let norm = |l: &String| l.split_whitespace().collect::<Vec<_>>().join(" ");
+            let (b, h): (Vec<String>, Vec<String>) = (b.iter().map(norm).collect(), h.iter().map(norm).collect());
+            lcs(&b.iter().map(String::as_str).collect::<Vec<_>>(), &h.iter().map(String::as_str).collect::<Vec<_>>())
+        }
+        _ => Vec::new(),
+    };
+    let anchor_of = |base_line: u32| -> u32 {
+        let next = matches.iter().find(|(b, _)| *b as u32 >= base_line).map(|(_, h)| *h as u32);
+        next.unwrap_or_else(|| head_lines.as_ref().map(|l| l.len() as u32).unwrap_or(0))
+    };
+    let mut spots: BTreeMap<(Side, (u32, u32), Option<u32>), Vec<String>> = BTreeMap::new();
+    let mut base_lines: Vec<u32> = Vec::new();
+    let mut base_file: Option<String> = None;
+    for k in keys {
+        let at_base = if bs.settings.contains_key(*k) { lines_in(base, bs, k) } else { None };
+        if let Some((f, l)) = &at_base {
+            base_file.get_or_insert_with(|| f.clone());
+            base_lines.extend([l.0, l.1]);
+        }
+        let spot = if hs.settings.contains_key(*k) {
+            lines_in(head, hs, k).map(|(_, l)| (Side::Head, l, None))
+        } else {
+            at_base.map(|(_, l)| (Side::Base, l, head_lines.is_some().then(|| anchor_of(l.0))))
+        };
+        if let Some(spot) = spot {
+            let flags = spots.entry(spot).or_default();
+            let flag = flag_of(k);
+            if !flags.contains(&flag) {
+                flags.push(flag);
+            }
+        }
+    }
+    let mut spots: Vec<SettingSpot> = spots.into_iter().map(|((side, lines, anchor), flags)| SettingSpot { flags, side, lines, anchor }).collect();
+    // In the order the reviewer reads them: by head position, a removed setting after the line it followed.
+    spots.sort_by_key(|s| (s.anchor.unwrap_or(s.lines.0), s.side == Side::Base, s.lines));
+    let span = |lines: &[u32]| (lines.iter().copied().min().unwrap_or(1).max(1), lines.iter().copied().max().unwrap_or(1).max(1));
+    let removed = spots.iter().any(|s| s.side == Side::Base);
+    if head_lines.is_some() {
+        let lines: Vec<u32> = spots.iter().flat_map(|s| match s.anchor {
+            Some(a) => vec![a],
+            None => vec![s.lines.0, s.lines.1],
+        }).collect();
+        let (start, end) = span(&lines);
+        let base_location = (removed && !base_lines.is_empty()).then(|| {
+            let (start, end) = span(&base_lines);
+            Location { file: base_file.clone().unwrap_or_else(|| file.to_string()), start_line: start, end_line: end, side: Side::Base }
+        });
+        PlacedSettings { spots, location: Location { file: file.to_string(), start_line: start, end_line: end, side: Side::Head }, base_location }
+    } else {
+        // The file is gone at head: its settings are shown where base set them.
+        let (start, end) = span(&base_lines);
+        PlacedSettings { spots, location: Location { file: base_file.unwrap_or_else(|| file.to_string()), start_line: start, end_line: end, side: Side::Base }, base_location: None }
+    }
+}
+
 fn changed_part(probe: &str, base: Option<&String>, head: Option<&String>, key: &str) -> String {
     let (Some(b), Some(h)) = (base, head) else { return probe.to_string() };
     let bs: BTreeSet<&str> = b.split_whitespace().collect();

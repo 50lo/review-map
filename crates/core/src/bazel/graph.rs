@@ -22,6 +22,9 @@ pub struct TargetNode {
     pub settings: BTreeMap<String, String>,
     /// The BUILD file that declares the target, relative to the workspace.
     pub build_file: String,
+    /// The line of `build_file` where the target's rule is declared; 0 when Bazel did not say.
+    #[serde(default)]
+    pub build_line: u32,
     pub external: bool,
 }
 
