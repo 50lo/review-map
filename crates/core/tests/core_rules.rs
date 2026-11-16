@@ -686,3 +686,38 @@ fn core_006_a_commit_that_only_reformats_adds_nothing_to_review() {
     assert!(report.findings.is_empty(), "{:?}", report.findings);
     assert!(report.components.iter().all(|c| c.changed_review_items == 0), "{:?}", report.components);
 }
+
+// MARK: Components that hold only test code are tests (no rule yet; the map's Tests filter hides them)
+
+/// `tools` holds only files under `src/test`, though its own name says nothing of it. `samples` mixes one
+/// production file with 32 fixtures under `tests/fixtures`, more than the default split threshold of 30, so it
+/// is split there into `one` and `two`, which hold only fixture files. `app` is production code.
+#[test]
+fn components_that_hold_only_test_files_are_tests() {
+    let mut base: Vec<(String, String)> = vec![
+        ("app/App.kt".into(), "package app\n\nfun main() {}\n".into()),
+        ("tools/src/test/kotlin/ToolTest.kt".into(), "package tools\n\nclass ToolTest\n".into()),
+        ("samples/main/Sample.kt".into(), "package samples\n\nclass Sample\n".into()),
+    ];
+    for (folder, n) in [("one", 16), ("two", 16)] {
+        for i in 0..n {
+            base.push((format!("samples/tests/fixtures/{folder}/F{i}.kt"), format!("package {folder}\n\nclass F{i}\n")));
+        }
+    }
+    let base: Vec<(&str, &str)> = base.iter().map(|(p, t)| (p.as_str(), t.as_str())).collect();
+    let repo = two_commits(
+        &base,
+        &[
+            ("app/App.kt", Some("package app\n\nfun main() { println(1) }\n")),
+            ("tools/src/test/kotlin/ToolTest.kt", Some("package tools\n\nclass ToolTest { fun t() {} }\n")),
+            ("samples/tests/fixtures/one/F0.kt", Some("package one\n\nclass F0 { fun f() {} }\n")),
+        ],
+    );
+    let report = analyze(request(&repo));
+    let is_test = |id: &str| report.components.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("{id} in {:?}", report.components)).is_test;
+    assert!(is_test("folder:tools"), "every file is under src/test");
+    assert!(is_test("folder:samples/one"), "a split folder inside tests/fixtures");
+    assert!(is_test("folder:samples/two"), "a split folder inside tests/fixtures");
+    assert!(!is_test("folder:samples"), "it keeps a production file");
+    assert!(!is_test("folder:app"));
+}
