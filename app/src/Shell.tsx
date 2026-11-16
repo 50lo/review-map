@@ -1,13 +1,11 @@
 // What surrounds the viewer in the app: the screen that starts a review, and the bar that says how far
 // the analysis got, how each language was resolved, and lets the reviewer cancel or compare.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as backend from "./backend";
 import type { JobState, RecentReview, ReviewRequest } from "./backend";
-import type { ChangeReport, LanguageCoverage } from "./types";
-
-const LANGUAGE_NAMES: Record<string, string> = { swift: "Swift", kotlin: "Kotlin", typescript: "TypeScript", java: "Java", objc: "Objective-C" };
-const languageName = (id: string) => LANGUAGE_NAMES[id] ?? id;
+import { changedGaps, coverageLabel, coverageSummary, gapText, stageExplanation, statusLead } from "./coverage";
+import type { ChangeReport } from "./types";
 
 const splitList = (text: string) => text.split(/\s+/).filter(Boolean);
 
@@ -198,37 +196,12 @@ export function StartScreen({
   );
 }
 
+
 // ---------------------------------------------------------------------------
 // Status
 
-function coverageLabel(c: LanguageCoverage): { text: string; tone: string; title: string } {
-  const name = languageName(c.id);
-  const heldBack = c.heldBack ?? [];
-  const notRun = heldBack.length ? ` Not run: ${heldBack.join(", ")}; the warnings say why.` : "";
-  if (c.resolution === "index") {
-    const partial = c.indexedFiles < c.files;
-    return {
-      text: partial ? `${name}: index covers ${c.indexedFiles} of ${c.files} files` : `${name}: indexed`,
-      tone: partial || heldBack.length ? "warn" : "ok",
-      title:
-        (partial
-          ? "Files the index doesn't cover at both sides show only links that syntax proves. The warnings list them."
-          : "Every reference comes from the compiler's index.") + notRun,
-    };
-  }
-  if (c.resolution === "syntax") {
-    return {
-      text: `${name}: syntax only`,
-      tone: "warn",
-      title: `No index${c.note ? `: ${c.note}` : ""}. Only links that syntax proves are shown, and the checks that need every reference did not run.`,
-    };
-  }
-  if (c.resolution === "name-based") {
-    return { text: `${name}: matched by name`, tone: "plain", title: "The comparison report: references are matched by name, as without an index." };
-  }
-  return { text: `${name}: preliminary`, tone: "pending", title: "Only links that syntax proves are shown until the index is ready." };
-}
-
+// One line. On the left, how far the analysis got and its latest progress message; on the right, one chip that
+// sums up every language's coverage in the worst tone among them, with each language's details a click away.
 export function StatusBar({
   job,
   report,
@@ -251,64 +224,33 @@ export function StatusBar({
   const analysis = report.analysis;
   const running = !!job?.running;
   const stage = analysis?.stage ?? "complete";
-  const gaps = (analysis?.gaps ?? []).filter((g) => g.changedFiles > 0);
+  const languages = analysis?.languages ?? [];
   // What is still to come. A language that is syntax-only from the start (indexes are off) has nothing pending.
-  const pending = (analysis?.languages ?? []).some((l) => l.resolution === "preliminary");
+  const pending = languages.some((l) => l.resolution === "preliminary");
   // Without a Bazel workspace in the change, components are already final (npm packages, folders).
   const bazel = (analysis?.workspaces ?? []).length > 0 || report.components.some((c) => c.kind === "bazelPackage");
-  const stageText =
-    stage === "preliminary"
-      ? pending
-        ? bazel
-          ? "Preliminary: components are Bazel packages and only links that syntax proves are shown."
-          : "Preliminary: only links that syntax proves are shown until the index is ready."
-        : bazel
-          ? "Components are Bazel packages until Bazel reports the build graph."
-          : null
-      : stage === "graph" && pending
-        ? "Components and declared dependencies come from Bazel. References are still preliminary."
-        : null;
+  const explanation = running ? stageExplanation(stage, pending, bazel) : null;
+  const lead = statusLead(job, error, stage, pending);
+  const summary = coverageSummary(languages, analysis?.gaps);
   return (
     <div className={`statusbar ${running ? "running" : ""}`}>
       <div className="status-main">
-        {running ? (
+        {running && <span className="spinner" />}
+        <span className={`status-lead ${lead.tone}`} title={lead.title || explanation || undefined}>
+          {lead.text}
+        </span>
+        {running && (
           <>
-            <span className="spinner" />
-            <span className="status-message" title={job?.message}>
+            <span className="status-message muted" title={job?.message}>
               {job?.message || "Analyzing…"}
             </span>
             <button className="link" onClick={onCancel}>
               Cancel
             </button>
           </>
-        ) : job?.cancelled ? (
-          <span className="pill warn" title="Languages whose index wasn't ready show only links that syntax proves.">
-            Cancelled: the report shows what was ready
-          </span>
-        ) : error ? (
-          <span className="pill warn" title={error}>
-            The analysis stopped: {error.split("\n")[0]}
-          </span>
-        ) : (
-          <span className="muted">Analysis complete</span>
         )}
-        {running && stageText && <span className="pill pending">{stageText}</span>}
       </div>
-      <div className="status-coverage">
-        {(analysis?.languages ?? []).map((c) => {
-          const l = coverageLabel(c);
-          return (
-            <span key={c.id} className={`pill ${l.tone}`} title={l.title}>
-              {l.text}
-            </span>
-          );
-        })}
-        {gaps.map((g) => (
-          <span key={g.language} className="pill warn" title={`Not analyzed: ${g.sample.join(", ")}`}>
-            {g.changedFiles} changed {languageName(g.language)} file{g.changedFiles === 1 ? "" : "s"} not analyzed
-          </span>
-        ))}
-      </div>
+      {summary && <CoverageChip summary={summary} report={report} explanation={explanation} />}
       <div className="status-actions">
         <span className="segmented" title="Compare the indexed report with the one that matches every reference by name, for the same revisions.">
           <button className={variant === "indexed" ? "on" : ""} onClick={() => onVariant("indexed")}>
@@ -323,5 +265,70 @@ export function StatusBar({
         </button>
       </div>
     </div>
+  );
+}
+
+// The coverage chip and its popover, which lists everything the chip sums up: each language's coverage with its
+// explanation, the changed files that aren't analyzed, and what the current stage means.
+function CoverageChip({ summary, report, explanation }: { summary: { text: string; tone: string }; report: ChangeReport; explanation: string | null }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const down = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    // Captured, so Escape closes the popover without also leaving the current focus on the map.
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setOpen(false);
+    };
+    document.addEventListener("mousedown", down);
+    document.addEventListener("keydown", key, true);
+    return () => {
+      document.removeEventListener("mousedown", down);
+      document.removeEventListener("keydown", key, true);
+    };
+  }, [open]);
+  const labels = (report.analysis?.languages ?? []).map((c) => ({ id: c.id, ...coverageLabel(c) }));
+  const gaps = changedGaps(report.analysis?.gaps);
+  return (
+    <span className="status-coverage" ref={ref}>
+      <button
+        className={`pill coverage-chip ${summary.tone}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={[...labels.map((l) => l.text), ...gaps.map(gapText)].join("\n")}
+        onClick={() => setOpen((o) => !o)}
+      >
+        {summary.text}
+      </button>
+      {open && (
+        <div className="coverage-popover" role="dialog" aria-label="Coverage">
+          {explanation && <p className="coverage-stage">{explanation}</p>}
+          {labels.length > 0 && (
+            <ul>
+              {labels.map((l) => (
+                <li key={l.id}>
+                  <span className={`pill ${l.tone}`}>{l.text}</span>
+                  <span className="muted">{l.title}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {gaps.length > 0 && (
+            <ul>
+              {gaps.map((g) => (
+                <li key={g.language}>
+                  <span className="pill warn">{gapText(g)}</span>
+                  <span className="muted">Not analyzed: {g.sample.join(", ")}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </span>
   );
 }
