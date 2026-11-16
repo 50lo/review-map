@@ -1,6 +1,6 @@
 # Building the rebuild
 
-The rebuild (see [rebuild-phase1-proposal.md](rebuild-phase1-proposal.md)) builds with Bazel only, in the same workspace as the Swift prototype. Bazel fetches Rust, Node.js and every package itself. You need Bazel or Bazelisk (`.bazelversion` pins Bazel 9.3.1) and full Xcode, for Swift and libIndexStore.
+The rebuild (see [rebuild-phase1-proposal.md](rebuild-phase1-proposal.md)) builds with Bazel only, in the same workspace as the Swift prototype. Bazel fetches Rust, Node.js and every package itself. You need Bazelisk (`.bazelversion` pins Bazel 9.3.1) and full Xcode, for Swift and libIndexStore. Bazelisk runs `tools/bazel`, described below; a plain Bazel binary skips it.
 
 | Part | Where | Bazel rules | Dependencies from |
 | --- | --- | --- | --- |
@@ -29,6 +29,7 @@ bazel run @rules_rust//tools/rust_analyzer:gen_rust_project  # rust-project.json
 - **The app without the Tauri CLI.** Tauri's build script and `generate_context!()` read `app/src-tauri/tauri.conf.json`. The BUILD file passes `TAURI_CONFIG`, which Tauri merges into that file, to point `frontendDist` at the UI that `//app:dist` built, and the app's `tauri` dependency turns on `custom-protocol`, as `tauri build` does, so the app serves the UI it embeds instead of loading `build.devUrl`. `//app:bundle` then makes the bundle `tauri build` made: `Contents/MacOS` holds `reviewmap-app`, `reviewmap` and `reviewmap-swift-helper`, with `icon.icns` and an `Info.plist` with the same keys, and the bundle is signed ad hoc.
 - **The UI's packages.** `app/package.json` lists them and `app/pnpm-lock.yaml` pins them; there is no `package-lock.json`. rules_js lays them out under `bazel-bin/app/node_modules` and never runs their install scripts (`pnpm.onlyBuiltDependencies` is empty). To add or bump a package, edit `package.json` and update the lockfile with Bazel's pnpm: `bazel run -- @pnpm//:pnpm --dir $PWD/app install --lockfile-only`. `//app:ts` is the type check (`tsc --noEmit`) and the target that holds the UI's TypeScript, which is what Review Map builds when it indexes a change to `app/`.
 - **The Swift helper** uses the prototype's Swift packages: swift-syntax 602.0.0 and indexstore-db at swift-6.2.4-RELEASE, the pins in the root `Package.resolved`. Change them there.
+- **Xcode updates.** Bazel detects Xcode once (`@local_config_xcode`, `@local_config_apple_cc`) and detects it again only when `DEVELOPER_DIR` or `XCODE_VERSION` changes; an Xcode updated in place changes neither, and the build then fails until `bazel clean --expunge`. `tools/bazel`, which Bazelisk runs in place of Bazel, sets `XCODE_VERSION` to the selected Xcode's path and build number (from its `version.plist`) unless it is already set. Neither rule reads the value, so an Xcode update or `xcode-select -s` only redoes the detection, in about 2 s, and every build action stays cached.
 - **Version.** `version.bzl` holds the version for the Bazel targets. Keep it equal to `Cargo.toml`, `app/package.json` and `tauri.conf.json`.
 
 ## Tests
