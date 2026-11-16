@@ -88,8 +88,11 @@
 - id: D261116-29htm
   timestamp: 2026-11-16T07:12:40Z
   actor: user
-  status: proposed
-  approved_by: null
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-16T07:18:10Z
   summary: 'CORE-002 no longer protects the case of an LLM cache directory inside the reviewed repository: the cache''s location can''t be chosen anymore, so the case can''t arise. The rule itself, that analysis never writes into the reviewed repository, is unchanged.'
   rationale: 'The prototype had an --llm-cache flag, so a reviewer could point the cache into the repository, and the annotator refused that with an error. The rebuild first kept the option as LlmOptions.cacheDir, used only so tests could keep their caches apart, and refused a cache inside the repository with an llm-unavailable warning, which no longer matched the case''s wording. The user asked to remove the option instead (2026-11-16): replies are always cached in the app''s own cache (<cache root>/llm), and keyed by the command among the rest, so each test keeps its replies apart by running a fake of its own. Rejected: rewording the case to the warning, which would keep a test-only setting and a rule for a situation no user flow reaches. Rejected for now: one check at the start of a review that refuses a cache or data directory inside the repository, which only REVIEWMAP_HOME, a variable for tests and development, could cause.'
   establishes: []
