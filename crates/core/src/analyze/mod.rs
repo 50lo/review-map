@@ -219,13 +219,14 @@ pub struct BuildOptions {
 /// (side, from, to) -> refs.
 pub type EdgeRefs = BTreeMap<String, BTreeMap<String, Vec<Ref>>>;
 
-/// One line of a build settings review item that a changed setting is written on.
+/// The lines of a build settings review item that a changed setting is written on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SettingSpot {
     /// The flags of the settings on the line, with the language prefix.
     pub flags: Vec<String>,
     pub side: Side,
-    pub line: u32,
+    /// The first and last line of the settings and their values.
+    pub lines: (u32, u32),
     /// For a setting removed from a file that still sets others: the last head line before where it was.
     pub anchor: Option<u32>,
 }

@@ -433,3 +433,26 @@ fn build_settings_in_two_files_are_shown_where_each_is_set() {
     assert_eq!(regions[0].reasons, vec!["typescript:strictness-changed".to_string()]);
     assert!(tsconfig.base_location.as_ref().map(|b| b.file == "core/tsconfig.json" && b.start_line <= removed && removed <= b.end_line).unwrap_or(false), "{:?}", tsconfig.base_location);
 }
+
+/// A setting whose value spans lines is shown whole: the region over a changed `lib` array runs from the
+/// key to the array's end, so the changed entry inside it is on the page.
+#[test]
+fn a_setting_written_over_several_lines_is_shown_whole() {
+    let _guard = lock();
+    let base = SETTINGS_TSCONFIG_BASE.replace("    \"jsx\": \"react-jsx\"\n", "    \"jsx\": \"react-jsx\",\n    \"lib\": [\n      \"ES2022\",\n      \"DOM\"\n    ]\n");
+    let head = base.replace("      \"DOM\"\n", "      \"DOM\",\n      \"DOM.Iterable\"\n");
+    let repo = two_commits(
+        &[("app/package.json", SETTINGS_PACKAGE_BASE), ("app/tsconfig.json", &base), ("app/src/main.ts", "export const a = 1;\n")],
+        &[("app/tsconfig.json", Some(&head))],
+    );
+    let mut request = request(&repo);
+    request.index = Some(false);
+    let report = analyze(request);
+    let item = review_item(&report, "reviewmap-app build settings");
+    let (start, changed) = (line_of(&head, "\"lib\""), line_of(&head, "DOM.Iterable"));
+    let end = changed + 1;
+    assert_eq!(head.lines().nth(end as usize - 1).map(str::trim), Some("]"));
+    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("app/tsconfig.json", start, end));
+    let regions = regions_of(&report, &item.id);
+    assert_eq!(regions.iter().map(|r| (r.file.as_str(), r.start_line, r.end_line)).collect::<Vec<_>>(), vec![("app/tsconfig.json", start, end)]);
+}

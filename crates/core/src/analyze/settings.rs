@@ -3,21 +3,95 @@
 //! top-level field, "tsconfig <option>" a key of `compilerOptions`); every other key is an attribute of a
 //! Bazel rule.
 
-/// The 1-based line of `key` in `text`, the file that sets it. `rule_line` is the line of the Bazel rule
-/// that declares the target, when known.
-pub fn setting_line(text: &str, key: &str, rule_line: Option<u32>) -> Option<u32> {
+/// The 1-based lines of `key` in `text`, the file that sets it: from the key to the end of its value, which
+/// may span lines (a list of `copts`, an `exports` map). `rule_line` is the line of the Bazel rule that
+/// declares the target, when known.
+pub fn setting_lines(text: &str, key: &str, rule_line: Option<u32>) -> Option<(u32, u32)> {
     if let Some(field) = key.strip_prefix("package.json ") {
-        return json_key_line(text, &[field]);
+        return json_key_lines(text, &[field]);
     }
     if let Some(option) = key.strip_prefix("tsconfig ") {
-        return json_key_line(text, &["compilerOptions", option]);
+        return json_key_lines(text, &["compilerOptions", option]);
     }
-    rule_attribute_line(text, key, rule_line?)
+    rule_attribute_lines(text, key, rule_line?)
 }
 
-/// The line of the object key at `path` (from the top-level object) in JSON with comments, as tsconfig
-/// allows. A key of the same name at another depth, or inside an array, is not it.
-pub fn json_key_line(text: &str, path: &[&str]) -> Option<u32> {
+/// Skips whitespace and comments from `i`, counting lines. Returns the next index.
+fn skip_space(b: &[u8], mut i: usize, line: &mut u32) -> usize {
+    while i < b.len() {
+        match b[i] {
+            b'\n' => {
+                *line += 1;
+                i += 1;
+            }
+            b' ' | b'\t' | b'\r' => i += 1,
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                while i < b.len() && !(b[i] == b'*' && b.get(i + 1) == Some(&b'/')) {
+                    if b[i] == b'\n' {
+                        *line += 1;
+                    }
+                    i += 1;
+                }
+                i += 2;
+            }
+            _ => break,
+        }
+    }
+    i
+}
+
+/// The last line of the JSON value that starts at or after `i` (after a key's colon).
+fn value_end_line(b: &[u8], i: usize, mut line: u32) -> u32 {
+    let mut i = skip_space(b, i, &mut line);
+    if b.get(i) == Some(&b':') {
+        i = skip_space(b, i + 1, &mut line);
+    }
+    let mut depth = 0usize;
+    while i < b.len() {
+        match b[i] {
+            // A number, `true`, `false` or `null` ends at the first space.
+            b'\n' | b' ' | b'\t' | b'\r' if depth == 0 => return line,
+            b'\n' => line += 1,
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    if b[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                if depth == 0 {
+                    return line;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'/') || b.get(i + 1) == Some(&b'*') => {
+                i = skip_space(b, i, &mut line);
+                continue;
+            }
+            b'{' | b'[' => depth += 1,
+            b'}' | b']' => {
+                if depth <= 1 {
+                    return line;
+                }
+                depth -= 1;
+            }
+            b',' if depth == 0 => return line,
+            _ => {}
+        }
+        i += 1;
+    }
+    line
+}
+
+/// The lines of the object key at `path` (from the top-level object) and its value, in JSON with comments,
+/// as tsconfig allows. A key of the same name at another depth, or inside an array, is not it.
+pub fn json_key_lines(text: &str, path: &[&str]) -> Option<(u32, u32)> {
     if path.is_empty() {
         return None;
     }
@@ -69,7 +143,7 @@ pub fn json_key_line(text: &str, path: &[&str]) -> Option<u32> {
                     let parent_on_path = stack.last().map(|(_, p)| *p).unwrap_or(false);
                     on_path_key = parent_on_path && depth <= path.len() && s == path[depth - 1];
                     if on_path_key && depth == path.len() {
-                        return Some(line);
+                        return Some((line, value_end_line(b, i + 1, line)));
                     }
                     expect_key = false;
                 }
@@ -99,19 +173,20 @@ pub fn json_key_line(text: &str, path: &[&str]) -> Option<u32> {
     None
 }
 
-/// The line of attribute `attr` in the rule call that starts on `rule_line` of a BUILD file.
-pub fn rule_attribute_line(text: &str, attr: &str, rule_line: u32) -> Option<u32> {
+/// The lines of attribute `attr` and its value in the rule call that starts on `rule_line` of a BUILD file.
+pub fn rule_attribute_lines(text: &str, attr: &str, rule_line: u32) -> Option<(u32, u32)> {
     let lines: Vec<&str> = text.lines().collect();
     let first = (rule_line as usize).checked_sub(1)?;
     let mut depth = 0i32;
     let mut opened = false;
+    let mut found: Option<u32> = None;
     for (n, l) in lines.iter().enumerate().skip(first) {
-        if opened && depth == 1 {
+        if opened && depth == 1 && found.is_none() {
             let t = l.trim_start();
             if let Some(rest) = t.strip_prefix(attr) {
                 let rest = rest.trim_start();
                 if rest.starts_with('=') && !rest.starts_with("==") {
-                    return Some(n as u32 + 1);
+                    found = Some(n as u32 + 1);
                 }
             }
         }
@@ -139,11 +214,17 @@ pub fn rule_attribute_line(text: &str, attr: &str, rule_line: u32) -> Option<u32
                 _ => {}
             }
         }
+        // The attribute's value ends on the line that brings the call back to its own level.
+        if let Some(start) = found {
+            if depth <= 1 {
+                return Some((start, n as u32 + 1));
+            }
+        }
         if opened && depth <= 0 {
             return None;
         }
     }
-    None
+    found.map(|start| (start, lines.len() as u32))
 }
 
 #[cfg(test)]
@@ -161,9 +242,10 @@ mod tests {
 
     #[test]
     fn a_package_field_is_the_top_level_key() {
-        assert_eq!(setting_line(PACKAGE, "package.json types", None), Some(7));
-        assert_eq!(setting_line(PACKAGE, "package.json exports", None), Some(3));
-        assert_eq!(setting_line(PACKAGE, "package.json main", None), None);
+        assert_eq!(setting_lines(PACKAGE, "package.json types", None), Some((7, 7)));
+        assert_eq!(setting_lines(PACKAGE, "package.json exports", None), Some((3, 5)));
+        assert_eq!(setting_lines(PACKAGE, "package.json files", None), Some((6, 6)));
+        assert_eq!(setting_lines(PACKAGE, "package.json main", None), None);
     }
 
     #[test]
@@ -176,12 +258,17 @@ mod tests {
   "compilerOptions": {
     "paths": { "noEmit": ["x"] },
     "strict": true,
+    "lib": [
+      "ES2022", // "noEmit"
+      "DOM"
+    ],
     "noEmit": true
   }
 }"#;
-        assert_eq!(setting_line(tsconfig, "tsconfig noEmit", None), Some(9));
-        assert_eq!(setting_line(tsconfig, "tsconfig strict", None), Some(8));
-        assert_eq!(setting_line(tsconfig, "tsconfig paths", None), Some(7));
+        assert_eq!(setting_lines(tsconfig, "tsconfig noEmit", None), Some((13, 13)));
+        assert_eq!(setting_lines(tsconfig, "tsconfig strict", None), Some((8, 8)));
+        assert_eq!(setting_lines(tsconfig, "tsconfig paths", None), Some((7, 7)));
+        assert_eq!(setting_lines(tsconfig, "tsconfig lib", None), Some((9, 12)));
     }
 
     #[test]
@@ -204,9 +291,9 @@ swift_library(
     ],
 )
 "#;
-        assert_eq!(setting_line(build, "copts", Some(8)), Some(14));
-        assert_eq!(setting_line(build, "copts", Some(3)), Some(5));
-        assert_eq!(setting_line(build, "defines", Some(8)), None);
-        assert_eq!(setting_line(build, "copts", None), None);
+        assert_eq!(setting_lines(build, "copts", Some(8)), Some((14, 16)));
+        assert_eq!(setting_lines(build, "copts", Some(3)), Some((5, 5)));
+        assert_eq!(setting_lines(build, "defines", Some(8)), None);
+        assert_eq!(setting_lines(build, "copts", None), None);
     }
 }

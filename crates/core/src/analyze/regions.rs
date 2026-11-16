@@ -146,7 +146,7 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
             llm: None,
         };
         if let Some(spots) = self.b.setting_spots.get(&e.id).filter(|_| e.kind == ItemKind::Target) {
-            // Build settings: one region on each line that sets a changed setting, scored by that setting's flags.
+            // Build settings: one region over each changed setting and its value, scored by that setting's flags.
             let mut out: Vec<Region> = Vec::new();
             for spot in spots {
                 let mut signals = self.flags_signals(&spot.flags, e.is_interface);
@@ -155,7 +155,7 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
                 let mut r = region(
                     if spot.side == Side::Base { "removed" } else { "review" },
                     file,
-                    (spot.line, spot.line),
+                    spot.lines,
                     spot.side,
                     score(&signals, is_low),
                     reasons(signals, e, is_low),

@@ -4,7 +4,7 @@
 use super::checks::{similar_declarations, StructuralChecks};
 use super::components::TargetSettings;
 use super::regions::lcs;
-use super::settings::setting_line;
+use super::settings::setting_lines;
 use super::{Builder, Mode, SettingSpot, SideData};
 use crate::bazel;
 use crate::config::Config;
@@ -623,11 +623,11 @@ fn place_settings(
     hs: &TargetSettings,
     flag_of: &dyn Fn(&String) -> String,
 ) -> PlacedSettings {
-    let line_in = |side: &SideData, s: &TargetSettings, k: &String| -> Option<(String, u32)> {
+    let lines_in = |side: &SideData, s: &TargetSettings, k: &String| -> Option<(String, (u32, u32))> {
         let f = s.file_of(k);
-        let found = side.source.text(f).and_then(|t| setting_line(&t, k, s.rule_line));
-        let fallback = if f == s.file { s.rule_line } else { None };
-        side.source.has_path(f).then(|| (f.to_string(), found.or(fallback).unwrap_or(1)))
+        let found = side.source.text(f).and_then(|t| setting_lines(&t, k, s.rule_line));
+        let fallback = if f == s.file { s.rule_line.map(|l| (l, l)) } else { None };
+        side.source.has_path(f).then(|| (f.to_string(), found.or(fallback).unwrap_or((1, 1))))
     };
     let head_lines = head.source.lines(file);
     // For anchoring removed settings: which head line each base line is matched with.
@@ -643,19 +643,19 @@ fn place_settings(
         let next = matches.iter().find(|(b, _)| *b as u32 >= base_line).map(|(_, h)| *h as u32);
         next.unwrap_or_else(|| head_lines.as_ref().map(|l| l.len() as u32).unwrap_or(0))
     };
-    let mut spots: BTreeMap<(Side, u32, Option<u32>), Vec<String>> = BTreeMap::new();
+    let mut spots: BTreeMap<(Side, (u32, u32), Option<u32>), Vec<String>> = BTreeMap::new();
     let mut base_lines: Vec<u32> = Vec::new();
     let mut base_file: Option<String> = None;
     for k in keys {
-        let at_base = if bs.settings.contains_key(*k) { line_in(base, bs, k) } else { None };
+        let at_base = if bs.settings.contains_key(*k) { lines_in(base, bs, k) } else { None };
         if let Some((f, l)) = &at_base {
             base_file.get_or_insert_with(|| f.clone());
-            base_lines.push(*l);
+            base_lines.extend([l.0, l.1]);
         }
         let spot = if hs.settings.contains_key(*k) {
-            line_in(head, hs, k).map(|(_, l)| (Side::Head, l, None))
+            lines_in(head, hs, k).map(|(_, l)| (Side::Head, l, None))
         } else {
-            at_base.map(|(_, l)| (Side::Base, l, head_lines.is_some().then(|| anchor_of(l))))
+            at_base.map(|(_, l)| (Side::Base, l, head_lines.is_some().then(|| anchor_of(l.0))))
         };
         if let Some(spot) = spot {
             let flags = spots.entry(spot).or_default();
@@ -665,13 +665,16 @@ fn place_settings(
             }
         }
     }
-    let mut spots: Vec<SettingSpot> = spots.into_iter().map(|((side, line, anchor), flags)| SettingSpot { flags, side, line, anchor }).collect();
+    let mut spots: Vec<SettingSpot> = spots.into_iter().map(|((side, lines, anchor), flags)| SettingSpot { flags, side, lines, anchor }).collect();
     // In the order the reviewer reads them: by head position, a removed setting after the line it followed.
-    spots.sort_by_key(|s| (s.anchor.unwrap_or(s.line), s.side == Side::Base, s.line));
+    spots.sort_by_key(|s| (s.anchor.unwrap_or(s.lines.0), s.side == Side::Base, s.lines));
     let span = |lines: &[u32]| (lines.iter().copied().min().unwrap_or(1).max(1), lines.iter().copied().max().unwrap_or(1).max(1));
     let removed = spots.iter().any(|s| s.side == Side::Base);
     if head_lines.is_some() {
-        let lines: Vec<u32> = spots.iter().map(|s| s.anchor.unwrap_or(s.line)).collect();
+        let lines: Vec<u32> = spots.iter().flat_map(|s| match s.anchor {
+            Some(a) => vec![a],
+            None => vec![s.lines.0, s.lines.1],
+        }).collect();
         let (start, end) = span(&lines);
         let base_location = (removed && !base_lines.is_empty()).then(|| {
             let (start, end) = span(&base_lines);
