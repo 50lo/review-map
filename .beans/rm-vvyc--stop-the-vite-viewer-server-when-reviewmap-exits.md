@@ -1,10 +1,11 @@
 ---
 # rm-vvyc
 title: Stop the Vite viewer server when reviewmap exits
-status: todo
+status: scrapped
 type: task
+priority: normal
 created_at: 2026-11-07T22:47:13Z
-updated_at: 2026-11-07T22:47:13Z
+updated_at: 2026-11-16T10:51:39Z
 ---
 
 ## What

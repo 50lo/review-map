@@ -1,12 +1,13 @@
 ---
 # rm-8byb
 title: Group changed external packages into one map node
-status: todo
+status: scrapped
 type: task
+priority: normal
 tags:
     - ui
 created_at: 2026-11-16T09:57:22Z
-updated_at: 2026-11-16T09:57:22Z
+updated_at: 2026-11-16T10:50:31Z
 parent: rm-w7ge
 ---
 
