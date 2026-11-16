@@ -30,7 +30,8 @@ impl<'a> Builder<'a> {
     ///
     /// The checks that claim "no callers" or "no test references" need more: every file at head that could
     /// hold such a reference, generated ones included. Where the index misses one, they are held back
-    /// (`check_coverage`) and a `checks-held-back` warning gives the counts.
+    /// (`check_coverage`) and a `checks-held-back` warning gives the counts. The conformers check is held back
+    /// with unused-api and orphaned: a conformer in a missed file has no supertype the index resolves.
     pub fn add_index(&mut self, lang: &'static dyn Language, base: &SideIndex, head: &SideIndex) {
         self.indexed_languages.insert(lang.id().to_string());
         let given = [base, head];
@@ -106,8 +107,9 @@ impl<'a> Builder<'a> {
         let mut reasons: Vec<String> = Vec::new();
         if !checks.callers {
             held_back.extend(["unused-api".to_string(), "orphaned".to_string()]);
+            // A conformer there can't be resolved to its supertype, and none is matched by name.
             reasons.push(format!(
-                "unused-api and orphaned, because the index misses {} of {} non-test {name} files at head, so a caller there can't be ruled out",
+                "unused-api, orphaned and conformers, because the index misses {} of {} non-test {name} files at head, so a caller or a conformer there can't be ruled out",
                 callers.1 - callers.0,
                 callers.1
             ));
@@ -119,6 +121,9 @@ impl<'a> Builder<'a> {
                 tests.1 - tests.0,
                 tests.1
             ));
+        }
+        if !checks.callers {
+            held_back.push("conformers".to_string());
         }
         if !reasons.is_empty() {
             self.warnings.insert(Warning::new("checks-held-back", format!("{name} checks that did not run: {}.", reasons.join("; "))));
@@ -224,6 +229,8 @@ impl<'a> Builder<'a> {
     }
 
     pub fn resolve_references(&mut self) {
+        // CORE-003: supertypes come from the index, never from the names in an inheritance clause.
+        self.hierarchy = super::supertypes::Hierarchy::build(self);
         for s in Side::BOTH {
             let data = self.side(s);
             let layout = &data.layout;

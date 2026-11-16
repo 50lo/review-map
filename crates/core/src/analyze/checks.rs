@@ -5,8 +5,9 @@
 //!
 //! With an index, "is X referenced" asks the index. The checks that claim "no callers" or "no test
 //! references" (unused-api, orphaned, untested) run only when the index covers every file that could hold
-//! such a reference: missing coverage is not evidence of no callers (CORE-003). A language without an index
-//! gets none of them, and no conformers check either, as in the preliminary view.
+//! such a reference: missing coverage is not evidence of no callers (CORE-003). The conformers check takes
+//! supertypes from the index (`supertypes`), so it runs under the same coverage as unused-api and orphaned. A
+//! language without an index gets none of them, as in the preliminary view.
 //!
 //! The comparison report matches by name, and there "is X referenced" means "does the identifier X appear
 //! outside its own declaration". That over-counts uses, so the unused-code checks err towards saying nothing.
@@ -199,12 +200,6 @@ impl<'b, 'a> StructuralChecks<'b, 'a> {
     fn is_low(&self, l: &Located, s: Side) -> bool {
         let data = self.b.side(s);
         l.decl().traits.contains("test") || data.is_test_component(&l.component) || is_test_path(&l.file) || data.source.generated.contains(&*l.file)
-    }
-
-    /// Whether the conformers check may run for a declaration's language: not while it shows only what
-    /// syntax proves.
-    fn is_resolved(&self, l: &Located) -> bool {
-        !self.b.is_syntax_only(&l.parsed.language)
     }
 
     /// Whether every place that could reference a declaration from non-test code (`tests` false) or from a
@@ -644,7 +639,9 @@ impl<'b, 'a> StructuralChecks<'b, 'a> {
         let mut out = Vec::new();
         for p in &self.b.pairs {
             let Some(h) = p.head.as_ref() else { continue };
-            if !self.is_resolved(h) || self.is_low(h, Side::Head) {
+            // A conformer can sit in any non-test file: the check needs the supertypes of all of them, which
+            // only the index resolves (CORE-003), or the comparison report by name.
+            if !self.knows_all_references(h, false) || self.is_low(h, Side::Head) {
                 continue;
             }
             let Some(parent) = self.b.parent_decl(h) else { continue };

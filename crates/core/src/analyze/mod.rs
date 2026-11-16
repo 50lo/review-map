@@ -10,6 +10,7 @@ pub mod finish;
 pub mod matching;
 pub mod references;
 pub mod regions;
+pub mod supertypes;
 
 use crate::git::{Repo, Tree};
 use crate::index::IndexedRef;
@@ -222,10 +223,15 @@ pub struct Builder<'a> {
     pub head: &'a SideData,
     pub languages: Vec<&'static dyn Language>,
     pub options: BuildOptions,
-    /// Head containers by their explicit inherited names, in source order.
+    /// Head containers by their explicit inherited names, in source order. Name matching, so only the
+    /// comparison report fills it (CORE-003); the main report uses `hierarchy`.
     pub inheritors: HashMap<String, Vec<Located>>,
-    /// "Type|member" -> head declarations, in source order, across every file and component.
+    /// "Type|member" -> head declarations, in source order, across every file and component. Name matching,
+    /// so only the comparison report fills it, like `inheritors`.
     pub head_members: HashMap<String, Vec<Located>>,
+    /// Supertypes and extensions of head containers as the index resolves them, for indexed languages. Filled
+    /// by `resolve_references`, once the indexes are added.
+    pub hierarchy: supertypes::Hierarchy,
 
     pub pairs: Vec<Pair>,
     pub pair_of: HashMap<DeclKey, usize>,
@@ -273,7 +279,8 @@ impl<'a> Builder<'a> {
     pub fn new(base: &'a SideData, head: &'a SideData, languages: Vec<&'static dyn Language>, options: BuildOptions) -> Builder<'a> {
         let mut inheritors: HashMap<String, Vec<Located>> = HashMap::new();
         let mut head_members: HashMap<String, Vec<Located>> = HashMap::new();
-        for (path, file) in head.files() {
+        let by_name = options.modes.values().any(|m| *m == Mode::NameBased);
+        for (path, file) in head.files().iter().filter(|_| by_name) {
             let Some(component) = head.layout.file_component.get(path) else { continue };
             let file_key: Arc<str> = Arc::from(path.as_str());
             let comp_key: Arc<str> = Arc::from(component.as_str());
@@ -300,6 +307,7 @@ impl<'a> Builder<'a> {
             options,
             inheritors,
             head_members,
+            hierarchy: supertypes::Hierarchy::default(),
             pairs: Vec::new(),
             pair_of: HashMap::new(),
             file_review_items: Vec::new(),

@@ -2,8 +2,8 @@
 //! lookup. A port of the prototype's `KotlinLanguage.swift`, `KotlinFlags.swift`, `KotlinManifest.swift`,
 //! and `KotlinStructure.swift`. Source is parsed without Gradle or the compiler; only indexing builds.
 
-use super::{inherited_names, risk, ConformanceUse, Conformer, Language};
-use crate::analyze::{kind_group, Builder, Located, Pair, SideSource};
+use super::{indexed_conformers, inherited_names, risk, ConformanceUse, Conformer, Language};
+use crate::analyze::{kind_group, Builder, Located, Mode, Pair, SideSource};
 use crate::model::{ChangeKind, ItemKind, Side};
 use crate::parse::kotlin::MAIN_THREAD;
 use crate::parse::{Declaration, ParsedFile};
@@ -237,45 +237,14 @@ impl Language for KotlinLanguage {
         decl.attributes.iter().any(|a| IMPLICIT_ATTRIBUTES.contains(&a.as_str()))
     }
 
-    /// Uses Kotlin package/import identity before matching members of the actual implementing class.
+    /// Through the index in the main report (CORE-003). The comparison report resolves supertype names
+    /// through Kotlin's packages and imports before matching members of the actual implementing class.
     fn conformers(&self, interface: &Pair, requirement: Option<&Pair>, builder: &Builder, use_: ConformanceUse) -> Vec<Conformer> {
-        let side = if interface.head.is_none() { builder.base } else { builder.head };
-        let iloc = interface.any();
-        let Some(interface_file) = side.files().get(&*iloc.file) else { return Vec::new() };
-        let wanted = qualified(interface_file.package_name.as_deref(), &iloc.decl().qualified_name);
-        let known = known_types(builder.head.files());
-        let member = requirement.and_then(|r| r.head.as_ref()).map(|h| h.decl());
-        let mut result = Vec::new();
-        for (path, file) in builder.head.files() {
-            if file.language != "kotlin" {
-                continue;
-            }
-            let Some(component) = builder.head.layout.file_component.get(path) else { continue };
-            if use_ == ConformanceUse::Check && **component != *iloc.component && !builder.has_edge(Side::Head, component, &iloc.component) {
-                continue;
-            }
-            for (index, declaration) in file.decls.iter().enumerate() {
-                if !declaration.is_container() {
-                    continue;
-                }
-                if !supertypes(declaration).any(|s| resolve_type(s, file, declaration.scope.as_deref(), &known).as_deref() == Some(wanted.as_str())) {
-                    continue;
-                }
-                let file_key: Arc<str> = Arc::from(path.as_str());
-                let comp_key: Arc<str> = Arc::from(component.as_str());
-                let located = Located { parsed: file.clone(), file: file_key.clone(), index, component: comp_key.clone() };
-                let mut implementations = Vec::new();
-                if let Some(member) = member {
-                    for (member_index, candidate) in file.decls.iter().enumerate() {
-                        if candidate.parent_index == Some(index) && candidate.name == member.name && kind_group(candidate.kind) == kind_group(member.kind) {
-                            implementations.push(Located { parsed: file.clone(), file: file_key.clone(), index: member_index, component: comp_key.clone() });
-                        }
-                    }
-                }
-                result.push(Conformer { declaration: located, implementations });
-            }
+        match builder.mode_of(self.id()) {
+            Mode::NameBased => named_conformers(interface, requirement, builder, use_),
+            Mode::Index => indexed_conformers(interface, requirement, builder, use_),
+            Mode::Preliminary | Mode::SyntaxOnly => Vec::new(),
         }
-        result
     }
 
     fn isolation(&self, file: &ParsedFile, line: u32) -> Option<String> {
@@ -296,6 +265,47 @@ impl Language for KotlinLanguage {
         }
         None
     }
+}
+
+/// Conformers by supertype names resolved through packages and imports: only for the comparison report.
+fn named_conformers(interface: &Pair, requirement: Option<&Pair>, builder: &Builder, use_: ConformanceUse) -> Vec<Conformer> {
+    let side = if interface.head.is_none() { builder.base } else { builder.head };
+    let iloc = interface.any();
+    let Some(interface_file) = side.files().get(&*iloc.file) else { return Vec::new() };
+    let wanted = qualified(interface_file.package_name.as_deref(), &iloc.decl().qualified_name);
+    let known = known_types(builder.head.files());
+    let member = requirement.and_then(|r| r.head.as_ref()).map(|h| h.decl());
+    let mut result = Vec::new();
+    for (path, file) in builder.head.files() {
+        if file.language != "kotlin" {
+            continue;
+        }
+        let Some(component) = builder.head.layout.file_component.get(path) else { continue };
+        if use_ == ConformanceUse::Check && **component != *iloc.component && !builder.has_edge(Side::Head, component, &iloc.component) {
+            continue;
+        }
+        for (index, declaration) in file.decls.iter().enumerate() {
+            if !declaration.is_container() {
+                continue;
+            }
+            if !supertypes(declaration).any(|s| resolve_type(s, file, declaration.scope.as_deref(), &known).as_deref() == Some(wanted.as_str())) {
+                continue;
+            }
+            let file_key: Arc<str> = Arc::from(path.as_str());
+            let comp_key: Arc<str> = Arc::from(component.as_str());
+            let located = Located { parsed: file.clone(), file: file_key.clone(), index, component: comp_key.clone() };
+            let mut implementations = Vec::new();
+            if let Some(member) = member {
+                for (member_index, candidate) in file.decls.iter().enumerate() {
+                    if candidate.parent_index == Some(index) && candidate.name == member.name && kind_group(candidate.kind) == kind_group(member.kind) {
+                        implementations.push(Located { parsed: file.clone(), file: file_key.clone(), index: member_index, component: comp_key.clone() });
+                    }
+                }
+            }
+            result.push(Conformer { declaration: located, implementations });
+        }
+    }
+    result
 }
 
 // MARK: Contract flags

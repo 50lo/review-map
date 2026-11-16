@@ -509,7 +509,33 @@ impl<'b, 'a> RegionBuilder<'b, 'a> {
 
         // Overrides of a changed method, and the method a changed override overrides.
         let is_override = d.modifiers.iter().any(|m| m == "override");
-        if let (false, true, Some(scope)) = (preliminary, matches!(d.kind, ItemKind::Func | ItemKind::Var), d.scope.as_ref()) {
+        let methodlike = matches!(d.kind, ItemKind::Func | ItemKind::Var) && (d.parent_kind == Some(ItemKind::Class) || is_override);
+        if let (Mode::Index, true, Some(owner)) = (mode, methodlike, d.parent_index.and_then(|pi| b.located(Side::Head, &hd.file, pi))) {
+            // CORE-003: subclasses and superclasses are the ones the index resolves.
+            let overrides = |m: &Located| m.decl().labels_key == d.labels_key;
+            let mut n = 0;
+            for sub in b.hierarchy.inheritors_of(&b.hierarchy.type_of(&owner)) {
+                if n >= 5 {
+                    break;
+                }
+                for m in b.hierarchy.members_of(sub) {
+                    if overrides(&m) && m.decl().modifiers.iter().any(|x| x == "override") {
+                        add(&mut items, decl_item(&m, "override", header_supports.clone()));
+                        n += 1;
+                    }
+                }
+            }
+            if is_override {
+                for sup in b.hierarchy.supertypes_of(&owner) {
+                    for m in b.hierarchy.members_of(&sup) {
+                        if overrides(&m) {
+                            add(&mut items, decl_item(&m, "override", header_supports.clone()));
+                        }
+                    }
+                }
+            }
+        }
+        if let (Mode::NameBased, true, Some(scope)) = (mode, matches!(d.kind, ItemKind::Func | ItemKind::Var), d.scope.as_ref()) {
             if d.parent_kind == Some(ItemKind::Class) || is_override {
                 let mut n = 0;
                 for sub in b.inheritors.get(scope).map(Vec::as_slice).unwrap_or(&[]) {

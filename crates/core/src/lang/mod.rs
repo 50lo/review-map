@@ -11,7 +11,7 @@ pub mod typescript;
 pub use typescript::project::Resolved as ImportTarget;
 
 use crate::analyze::components::ComponentLayout;
-use crate::analyze::{conformance_name, kind_group, Builder, Located, Pair, SideSource};
+use crate::analyze::{conformance_name, kind_group, Builder, Located, Mode, Pair, SideSource};
 use crate::model::{ItemKind, Side};
 use crate::parse::{Declaration, ParsedFile};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -133,8 +133,59 @@ pub fn gap_language(path: &str) -> Option<&'static str> {
     }
 }
 
-/// Conformers by explicit inheritance clauses: the default for languages with nominal conformance.
+/// Conformers by explicit inheritance clauses: the default for languages with nominal conformance. Through the
+/// index in the main report, by name only in the comparison report (CORE-003).
 pub fn default_conformers(interface: &Pair, requirement: Option<&Pair>, builder: &Builder, use_: ConformanceUse) -> Vec<Conformer> {
+    match builder.mode_of(&interface.any().parsed.language) {
+        Mode::NameBased => named_conformers(interface, requirement, builder, use_),
+        Mode::Index => indexed_conformers(interface, requirement, builder, use_),
+        Mode::Preliminary | Mode::SyntaxOnly => Vec::new(),
+    }
+}
+
+/// Conformers whose inheritance clause the index resolves to the interface's head declaration, with their
+/// implementations of `requirement`: members of the conformer's type and of its resolved extensions.
+pub fn indexed_conformers(interface: &Pair, requirement: Option<&Pair>, builder: &Builder, use_: ConformanceUse) -> Vec<Conformer> {
+    let Some(ihead) = interface.head.as_ref() else { return Vec::new() };
+    let hierarchy = &builder.hierarchy;
+    let member = requirement.and_then(|r| r.head.as_ref()).map(|h| h.decl());
+    if let (ConformanceUse::Check, Some(member)) = (use_, member) {
+        let abstract_ = ihead.decl().kind == ItemKind::Class && member.modifiers.iter().any(|m| m == "abstract");
+        // An existing default implementation in an extension of the interface covers every explicit conformer.
+        let has_default = hierarchy.extensions_of(ihead).iter().any(|extension| {
+            extension.parsed.decls.iter().any(|m| m.parent_index == Some(extension.index) && m.name == member.name)
+        });
+        if !abstract_ && has_default {
+            return Vec::new();
+        }
+    }
+    let mut result = Vec::new();
+    for candidate in hierarchy.inheritors_of(ihead) {
+        if use_ == ConformanceUse::Check {
+            let component = &ihead.component;
+            if candidate.component != *component && !builder.has_edge(Side::Head, &candidate.component, component) {
+                continue;
+            }
+        }
+        let mut implementations = Vec::new();
+        if let Some(member) = member {
+            for implementation in hierarchy.members_of(candidate) {
+                let d = implementation.decl();
+                let ok = d.name == member.name
+                    && (d.kind == member.kind || kind_group(d.kind) == kind_group(member.kind))
+                    && (use_ == ConformanceUse::Check || implementation.component == candidate.component);
+                if ok {
+                    implementations.push(implementation);
+                }
+            }
+        }
+        result.push(Conformer { declaration: candidate.clone(), implementations });
+    }
+    result
+}
+
+/// Conformers by the names in inheritance clauses: only for the comparison report.
+fn named_conformers(interface: &Pair, requirement: Option<&Pair>, builder: &Builder, use_: ConformanceUse) -> Vec<Conformer> {
     let idecl = interface.any().decl();
     let name: String = match use_ {
         ConformanceUse::Check => idecl.qualified_name.clone(),

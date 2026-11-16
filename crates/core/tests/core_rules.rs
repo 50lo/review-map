@@ -1,5 +1,6 @@
 //! Acceptance tests for the core rules (statute/rules/core.md) in the rebuild. Each test names its rule.
-//! They need `git` and nothing else: the sources are Kotlin, which is parsed in-process, and no test here
+//! They need `git` and nothing else: the sources are Kotlin (and in one test TypeScript), which are parsed
+//! in-process, and no test here
 //! starts Bazel. The CORE-004 tests and the LLM half of CORE-005 run `scripts/fake-llm.sh`, or a wrapper
 //! around it, in place of `claude`: no test here runs a real coding agent.
 //! `swift_rules.rs` repeats what depends on the language for Swift, and `bazel_fixtures.rs` covers the
@@ -205,7 +206,7 @@ fn core_003_files_the_index_misses_are_syntax_only_and_listed() {
     // app/App.kt may still call Format.legacy, so the check that would say the change removed the last
     // caller does not run, and the report says so.
     assert!(findings(&report, "orphaned").is_empty(), "{:?}", findings(&report, "orphaned"));
-    assert_eq!(coverage.held_back, ["unused-api", "orphaned"]);
+    assert_eq!(coverage.held_back, ["unused-api", "orphaned", "conformers"]);
     let held = held_back_warnings(&report);
     assert!(held.len() == 1 && held[0].message.contains("orphaned") && held[0].message.contains("1 of 3"), "{held:?}");
 
@@ -326,6 +327,109 @@ fn core_003_only_the_comparison_report_matches_by_name() {
     assert_eq!(named.analysis.languages[0].resolution, "name-based");
     assert!(has_call_link(&named), "the comparison report matches the call by name");
     assert!(index_warnings(&named).is_empty() && held_back_warnings(&named).is_empty(), "{:?}", named.warnings);
+}
+
+/// `one` and `two` each declare `shared.Store` and `shared.Base`, as two flavours of one library would: the same
+/// names, the same package, different declarations. `app` has one subclass and conformer of each. Head changes
+/// the requirement `load` and the body of `run` in `one` only.
+fn same_name_supertypes() -> TestRepo {
+    let library = |run: &str, load: &str| format!("package shared\n\ninterface Store {{\n    fun {load}\n}}\n\nopen class Base {{\n    open fun run() {run}\n}}\n");
+    let user = |name: &str| format!("package app\n\nimport shared.Base\nimport shared.Store\n\nclass {name} : Base(), Store {{\n    override fun load() {{}}\n    override fun run() {{}}\n}}\n");
+    two_commits(
+        &[
+            ("one/Store.kt", &library("{}", "load()")),
+            ("two/Store.kt", &library("{}", "load()")),
+            ("app/OneStore.kt", &user("OneStore")),
+            ("app/TwoStore.kt", &user("TwoStore")),
+        ],
+        &[("one/Store.kt", Some(&library("{ println(\"run\") }", "load(force: Boolean)")))],
+    )
+}
+
+/// What the index records in a file of `same_name_supertypes` that uses `library`'s Store and Base: the imports
+/// (lines 3 and 4) and the inheritance clause (line 6), where `Base()` names Base's constructor.
+fn uses_of(library: &str) -> Vec<IndexedRef> {
+    let to = |line: u32, target_line: u32, name: &str| IndexedRef { line, target_file: library.to_string(), target_line, name: name.to_string() };
+    vec![to(3, 7, "Base"), to(4, 3, "Store"), to(6, 7, "<init>()"), to(6, 3, "Store")]
+}
+
+fn same_name_index(with_two: bool) -> SideIndex {
+    let mut files = vec![("one/Store.kt", vec![]), ("two/Store.kt", vec![]), ("app/OneStore.kt", uses_of("one/Store.kt"))];
+    if with_two {
+        files.push(("app/TwoStore.kt", uses_of("two/Store.kt")));
+    }
+    side_index(&files)
+}
+
+/// Context regions of the review item with this qualified name, by relation, as "file:line".
+fn context_of(report: &ChangeReport, name: &str, relation: &str) -> Vec<String> {
+    let item = review_item(report, name);
+    report.regions.iter().filter(|r| r.review_item == item.id && r.relation.as_deref() == Some(relation)).map(|r| format!("{}:{}", r.file, r.start_line)).collect()
+}
+
+/// Two supertypes with the same name are told apart by the index: a conformer or subclass of one is never
+/// reported as one of the other, in the conformers check, in conformer context, or in override context.
+#[test]
+fn core_003_supertypes_come_from_the_index_not_from_their_names() {
+    let repo = same_name_supertypes();
+    let mut session = open(request(&repo));
+    session.set_index("kotlin", same_name_index(true), same_name_index(true));
+    let report = session.report();
+    let conformers = findings(&report, "conformers");
+    assert_eq!(conformers.len(), 1, "{:?}", report.findings);
+    assert!(conformers[0].message.contains("1 conformer wasn't updated"), "{:?}", conformers[0]);
+    assert!(conformers[0].evidence.iter().any(|e| e.contains("OneStore.load")), "{:?}", conformers[0].evidence);
+    assert!(!conformers[0].evidence.iter().any(|e| e.contains("TwoStore")), "TwoStore conforms to the other Store: {:?}", conformers[0].evidence);
+    assert_eq!(context_of(&report, "Store.load()", "conformer"), ["app/OneStore.kt:7"]);
+    assert_eq!(context_of(&report, "Base.run()", "override"), ["app/OneStore.kt:8"]);
+    assert!(report.analysis.languages[0].held_back.is_empty(), "{:?}", report.analysis.languages[0]);
+
+    // The comparison report still matches the clauses by name, and so takes TwoStore for a conformer too.
+    let named = session.name_based_report();
+    assert!(context_of(&named, "Base.run()", "override").contains(&"app/TwoStore.kt:8".to_string()), "{:?}", named.regions);
+}
+
+/// The same on TypeScript, whose `implements` clauses went through the same name lookup: two `Store`
+/// interfaces in different folders, and an implementation of each.
+#[test]
+fn core_003_typescript_supertypes_come_from_the_index_not_from_their_names() {
+    let store = |load: &str| format!("export interface Store {{\n  {load}: void;\n}}\n");
+    let user = |name: &str, from: &str| format!("import {{ Store }} from \"../{from}/store\";\n\nexport class {name} implements Store {{\n  load(): void {{}}\n}}\n");
+    let repo = two_commits(
+        &[
+            ("one/store.ts", &store("load()")),
+            ("two/store.ts", &store("load()")),
+            ("app/oneStore.ts", &user("OneStore", "one")),
+            ("app/twoStore.ts", &user("TwoStore", "two")),
+        ],
+        &[("one/store.ts", Some(&store("load(force: boolean)")))],
+    );
+    let uses = |library: &str| vec![1, 3].into_iter().map(|line| IndexedRef { line, target_file: library.to_string(), target_line: 1, name: "Store".to_string() }).collect::<Vec<_>>();
+    let index = || side_index(&[("one/store.ts", vec![]), ("two/store.ts", vec![]), ("app/oneStore.ts", uses("one/store.ts")), ("app/twoStore.ts", uses("two/store.ts"))]);
+    let mut session = open(request(&repo));
+    session.set_index("typescript", index(), index());
+    let report = session.report();
+    let conformers = findings(&report, "conformers");
+    assert_eq!(conformers.len(), 1, "{:?}", report.findings);
+    assert!(conformers[0].evidence.iter().any(|e| e.contains("OneStore.load")), "{:?}", conformers[0].evidence);
+    assert!(!conformers[0].evidence.iter().any(|e| e.contains("TwoStore")), "TwoStore implements the other Store: {:?}", conformers[0].evidence);
+    assert_eq!(context_of(&report, "Store.load()", "conformer"), ["app/oneStore.ts:4"]);
+}
+
+/// A conformer in a file the index misses has no supertype: it is not matched by name, and because it could
+/// conform to the changed interface, the conformers check is held back and the report says so.
+#[test]
+fn core_003_a_supertype_the_index_misses_is_no_relation_and_holds_conformers_back() {
+    let repo = same_name_supertypes();
+    let mut session = open(request(&repo));
+    session.set_index("kotlin", same_name_index(false), same_name_index(false));
+    let report = session.report();
+    assert!(findings(&report, "conformers").is_empty(), "{:?}", report.findings);
+    assert_eq!(report.analysis.languages[0].held_back, ["unused-api", "orphaned", "conformers"]);
+    let held = held_back_warnings(&report);
+    assert!(held.len() == 1 && held[0].message.contains("conformers") && held[0].message.contains("1 of 4"), "{held:?}");
+    assert_eq!(context_of(&report, "Store.load()", "conformer"), ["app/OneStore.kt:7"]);
+    assert_eq!(context_of(&report, "Base.run()", "override"), ["app/OneStore.kt:8"]);
 }
 
 /// The first view, before any index: nothing is matched by name, no index warning is given yet because the

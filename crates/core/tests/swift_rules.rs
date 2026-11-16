@@ -4,6 +4,7 @@
 mod common;
 
 use common::*;
+use reviewmap_core::index::{IndexedRef, SideIndex};
 use reviewmap_core::model::{ChangeKind, ChangeReport};
 use std::sync::OnceLock;
 
@@ -75,4 +76,54 @@ fn core_005_every_swift_finding_is_anchored_in_the_report() {
             assert!(known, "{}: {a:?} names nothing in the report", f.id);
         }
     }
+}
+
+/// CORE-003 on Swift: modules `A` and `B` each declare a protocol `Store`. `App` conforms to A's in an
+/// extension of `OneStore` and to B's in the declaration of `TwoStore`. Head changes A's requirement. The
+/// supertypes come from the index's references in the inheritance clauses, so `TwoStore` is no conformer of
+/// A's `Store`, as it would be by name.
+#[test]
+fn core_003_swift_supertypes_come_from_the_index_not_from_their_names() {
+    if !swift_helper() {
+        return;
+    }
+    let store = |load: &str| format!("public protocol Store {{\n    func {load}\n}}\n");
+    let repo = two_commits(
+        &[
+            ("A/Store.swift", &store("load()")),
+            ("B/Store.swift", &store("load()")),
+            ("App/OneStore.swift", "import A\n\nstruct OneStore {\n    func load() {}\n}\n\nextension OneStore: Store {}\n"),
+            ("App/TwoStore.swift", "import B\n\nstruct TwoStore: Store {\n    func load() {}\n}\n"),
+        ],
+        &[("A/Store.swift", Some(&store("load(force: Bool)")))],
+    );
+    let to = |line: u32, file: &str, target_line: u32, name: &str| IndexedRef { line, target_file: file.to_string(), target_line, name: name.to_string() };
+    let index = || SideIndex {
+        refs: [
+            ("A/Store.swift", vec![]),
+            ("B/Store.swift", vec![]),
+            ("App/OneStore.swift", vec![to(7, "App/OneStore.swift", 3, "OneStore"), to(7, "A/Store.swift", 1, "Store")]),
+            ("App/TwoStore.swift", vec![to(3, "B/Store.swift", 1, "Store")]),
+        ]
+        .into_iter()
+        .map(|(f, r)| (f.to_string(), r))
+        .collect(),
+        warnings: Vec::new(),
+    };
+    let mut session = open(request(&repo));
+    session.set_index("swift", index(), index());
+    let report = session.report();
+    let conformers = findings(&report, "conformers");
+    assert_eq!(conformers.len(), 1, "{:?}", report.findings);
+    assert!(conformers[0].message.contains("1 conformer wasn't updated"), "{:?}", conformers[0]);
+    assert!(conformers[0].evidence.iter().any(|e| e.contains("OneStore.load")), "{:?}", conformers[0].evidence);
+    assert!(!conformers[0].evidence.iter().any(|e| e.contains("TwoStore")), "TwoStore conforms to B's Store: {:?}", conformers[0].evidence);
+    let load = report.review_items.iter().find(|i| i.qualified_name.starts_with("Store.load")).expect("the changed requirement");
+    let context: Vec<String> = report
+        .regions
+        .iter()
+        .filter(|r| r.review_item == load.id && r.relation.as_deref() == Some("conformer"))
+        .map(|r| format!("{}:{}", r.file, r.start_line))
+        .collect();
+    assert_eq!(context, ["App/OneStore.swift:4"], "{:?}", report.regions);
 }
