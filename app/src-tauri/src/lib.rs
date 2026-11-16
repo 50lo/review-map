@@ -7,6 +7,7 @@
 //! stops them when the review is cancelled or the app exits, along with the Bazel servers it started.
 
 mod editor;
+mod menu;
 mod settings;
 
 use reviewmap_core::git::Repo;
@@ -342,6 +343,17 @@ fn log_ui_error(message: String) {
     log(format!("ui error: {text}"));
 }
 
+/// The UI's state for the menu bar's two items: whether New Review… and the comparison can be used, and
+/// whether the comparison report is on screen (the comparison item's check mark).
+#[tauri::command]
+fn set_menu_state(app: AppHandle, state: menu::MenuState) -> Result<(), String> {
+    log(format!("ui: menu state: new review {}, comparison {}, comparison shown {}", state.can_start_new, state.can_compare, state.name_based));
+    match app.try_state::<menu::AppMenu<tauri::Wry>>() {
+        Some(items) => items.apply(state).map_err(|e| e.to_string()),
+        None => Ok(()),
+    }
+}
+
 #[tauri::command]
 fn recent_reviews() -> Vec<settings::Recent> {
     settings::load().recent
@@ -475,9 +487,15 @@ pub fn run() {
             save_review_state,
             recent_reviews,
             repo_defaults,
-            log_ui_error
+            log_ui_error,
+            set_menu_state
         ])
+        .on_menu_event(menu::on_event)
         .setup(move |app| {
+            // Without the menu bar the app still reviews; the menu's two items are then missing.
+            if let Err(e) = menu::install(app.handle()) {
+                log(format!("the menu bar could not be built: {e}"));
+            }
             let args: Vec<String> = std::env::args().collect();
             if let Some(request) = request_from_args(&args, loaded.llm.as_ref()) {
                 start(app.handle(), request);

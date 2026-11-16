@@ -28,7 +28,7 @@ import { ReviewItemPage, InterfacePage, LocationPage } from "./Pages";
 import { initReview, useReview } from "./review";
 import { Sidebar } from "./Sidebar";
 import { forgetSources, resetSources } from "./source";
-import { StartScreen, StatusBar } from "./Shell";
+import { ComparisonBanner, StartScreen, StatusBar } from "./Shell";
 
 // Focus lives in the URL hash, so browser back/forward walk the focus history.
 const readFocus = (): Focus => hashToFocus(location.hash);
@@ -283,6 +283,42 @@ export function App() {
     [byName],
   );
 
+  const newReview = useCallback(() => {
+    shownKey.current = "";
+    history.replaceState(null, "", location.pathname + location.search);
+    setReport(null);
+    setByName(null);
+    setVariant("indexed");
+  }, []);
+
+  // The menu bar's File → New Review… and View → Show Name-Matched Comparison (app/src-tauri/src/menu.rs):
+  // the app is told when they can be used and whether the comparison is on screen, and sends their clicks.
+  const running = !!job?.running || starting;
+  const nameBased = variant === "name-based" && !!byName;
+  const menu = { canStartNew: !!report && !running, canCompare: !!report && !running && !comparing, nameBased };
+  useEffect(() => {
+    backend.setMenuState(menu).catch((e) => backend.logUiError(`menu state: ${e?.message ?? e}`));
+  }, [menu.canStartNew, menu.canCompare, menu.nameBased]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onMenu = useRef<(id: string) => void>(() => undefined);
+  onMenu.current = (id) => {
+    if (id === "new-review" && menu.canStartNew) newReview();
+    else if (id === "compare-name-based" && menu.canCompare) compare(variant === "name-based" ? "indexed" : "name-based");
+    // An ignored click: macOS has flipped the check mark already, so put it back.
+    else backend.setMenuState(menu).catch(() => undefined);
+  };
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    let alive = true;
+    backend
+      .onMenu((id) => onMenu.current(id))
+      .then((un) => (alive ? (stop = un) : un()))
+      .catch((e) => backend.logUiError(`menu events: ${e?.message ?? e}`));
+    return () => {
+      alive = false;
+      stop?.();
+    };
+  }, []);
+
   if (!ready) return <div className="empty">Starting…</div>;
   if (!report) return <StartScreen job={job} starting={starting} error={error} onStart={start} onCancel={() => void backend.cancelReview()} />;
   const shown = variant === "name-based" && byName ? byName : report;
@@ -291,22 +327,10 @@ export function App() {
       key={reviewKey(report)}
       report={shown}
       status={
-        <StatusBar
-          job={job}
-          report={report}
-          variant={variant}
-          comparing={comparing}
-          error={error}
-          onVariant={compare}
-          onCancel={() => void backend.cancelReview()}
-          onNewReview={() => {
-            shownKey.current = "";
-            history.replaceState(null, "", location.pathname + location.search);
-            setReport(null);
-            setByName(null);
-            setVariant("indexed");
-          }}
-        />
+        <>
+          <StatusBar job={job} report={report} error={error} onCancel={() => void backend.cancelReview()} />
+          {nameBased && <ComparisonBanner onBack={() => compare("indexed")} />}
+        </>
       }
     />
   );

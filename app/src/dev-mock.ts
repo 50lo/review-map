@@ -33,6 +33,9 @@ export async function install(): Promise<void> {
           return null;
         case "recent_reviews":
           return [];
+        case "set_menu_state":
+          // The browser has no menu bar; its "menu" event never comes.
+          return null;
         case "log_ui_error":
           console.error("ui error:", args.message);
           return null;

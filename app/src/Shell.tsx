@@ -1,5 +1,6 @@
-// What surrounds the viewer in the app: the screen that starts a review, and the bar that says how far
-// the analysis got, how each language was resolved, and lets the reviewer cancel or compare.
+// What surrounds the viewer in the app: the screen that starts a review, the bar that says how far the
+// analysis got and how each language was resolved, and the banner shown over the name-matched comparison.
+// Starting a new review and showing the comparison are in the app's menu bar (app/src-tauri/src/menu.rs).
 
 import { useEffect, useRef, useState } from "react";
 import * as backend from "./backend";
@@ -205,21 +206,13 @@ export function StartScreen({
 export function StatusBar({
   job,
   report,
-  variant,
-  comparing,
   error,
-  onVariant,
   onCancel,
-  onNewReview,
 }: {
   job: JobState | null;
   report: ChangeReport;
-  variant: "indexed" | "name-based";
-  comparing: boolean;
   error: string | null;
-  onVariant: (v: "indexed" | "name-based") => void;
   onCancel: () => void;
-  onNewReview: () => void;
 }) {
   const analysis = report.analysis;
   const running = !!job?.running;
@@ -251,19 +244,19 @@ export function StatusBar({
         )}
       </div>
       {summary && <CoverageChip summary={summary} report={report} explanation={explanation} />}
-      <div className="status-actions">
-        <span className="segmented" title="Compare the indexed report with the one that matches every reference by name, for the same revisions.">
-          <button className={variant === "indexed" ? "on" : ""} onClick={() => onVariant("indexed")}>
-            Indexed
-          </button>
-          <button className={variant === "name-based" ? "on" : ""} disabled={running || comparing} onClick={() => onVariant("name-based")}>
-            {comparing ? "Matching…" : "By name"}
-          </button>
-        </span>
-        <button className="link" onClick={onNewReview} disabled={running}>
-          New review
-        </button>
-      </div>
+    </div>
+  );
+}
+
+// Over every level while the name-matched comparison report is shown, so a reviewer who turned it on from the
+// menu doesn't take its links for indexed ones.
+export function ComparisonBanner({ onBack }: { onBack: () => void }) {
+  return (
+    <div className="comparison-banner" role="status">
+      <span>Showing the name-matched comparison report: references are matched by name, not by the index.</span>
+      <button className="btn" onClick={onBack}>
+        Back to indexed
+      </button>
     </div>
   );
 }

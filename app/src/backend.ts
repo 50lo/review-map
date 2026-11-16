@@ -72,6 +72,23 @@ export const repoDefaults = (path: string) => invoke<RepoDefaults>("repo_default
 /** Writes a failure in the UI to the app log. Never throws: it is called while something else is failing. */
 export const logUiError = (message: string) => invoke<void>("log_ui_error", { message }).catch(() => undefined);
 
+/** What the menu bar's own items can do now. Mirrors `MenuState` in app/src-tauri/src/menu.rs. */
+export interface MenuState {
+  /** File → New Review… is enabled. */
+  canStartNew: boolean;
+  /** View → Show Name-Matched Comparison is enabled. */
+  canCompare: boolean;
+  /** The comparison report is on screen: the comparison item's check mark. */
+  nameBased: boolean;
+}
+
+export const setMenuState = (state: MenuState) => invoke<void>("set_menu_state", { state });
+
+/** Calls `cb` with the id of a menu bar item when it is chosen. */
+export function onMenu(cb: (id: string) => void): Promise<() => void> {
+  return listen<{ id: string }>("menu", (e) => cb(e.payload.id));
+}
+
 export function onReviewEvent(handler: (e: ReviewEvent) => void): Promise<() => void> {
   return listen<ReviewEvent>("review://event", (e) => handler(e.payload));
 }

@@ -1702,11 +1702,26 @@ code,
   min-width: 0;
   flex: 0 1 auto;
 }
-.statusbar .status-actions {
+/* Between the status bar and the map or page, on every level, while the name-matched comparison is shown. */
+.comparison-banner {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
+  padding: 4px 12px;
+  font-size: 12px;
+  line-height: 18px;
   flex: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--changed) 45%, var(--line));
+  background: color-mix(in srgb, var(--changed) 14%, var(--panel));
+}
+.comparison-banner > span {
+  flex: 1;
+  min-width: 0;
+}
+.comparison-banner .btn {
+  flex: none;
+  padding: 1px 8px;
+  font-size: 12px;
 }
 .pill {
   display: inline-block;
@@ -1787,30 +1802,6 @@ code,
 }
 .coverage-stage {
   margin: 0;
-}
-.segmented {
-  display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
-}
-.segmented button {
-  font: inherit;
-  font-size: 12px;
-  line-height: 16px;
-  padding: 1px 8px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-}
-.segmented button.on {
-  background: var(--accent);
-  color: #fff;
-}
-.segmented button:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 .spinner {
   display: inline-block;
