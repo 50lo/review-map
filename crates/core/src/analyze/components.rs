@@ -146,15 +146,24 @@ pub fn build(
         layout.file_component.insert((*f).clone(), id);
     }
 
-    // 4. Split large components by folder.
     let mut by_component: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (f, c) in &layout.file_component {
         by_component.entry(c.clone()).or_default().push(f.clone());
     }
+    mark_test_only(&by_component, &mut layout);
+
+    // 4. Split large components by folder.
     for (id, comp_files) in by_component {
         let Some(info) = layout.components.get(&id).cloned() else { continue };
         split(&info, &comp_files, 1, config, &mut layout);
     }
+    // Again for the split folders: a split can root inside a test folder ("tests/fixtures") and give children
+    // whose names say nothing of it.
+    let mut by_component: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (f, c) in &layout.file_component {
+        by_component.entry(c.clone()).or_default().push(f.clone());
+    }
+    mark_test_only(&by_component, &mut layout);
 
     // 5. reviewmap.yml rules override everything.
     if let Some(rules) = config.components.as_ref().filter(|r| !r.is_empty()) {
@@ -390,6 +399,20 @@ fn npm_link_name(label: &str) -> Option<String> {
     Some(crate::lang::typescript::project::typed_module(name).unwrap_or_else(|| name.to_string()))
 }
 
+/// Marks a component as test code when every file it holds is on a test path (repo-relative), whatever its
+/// own label or directory says: the targets of a Bazel workspace nested in a test folder (whose labels are
+/// relative to that workspace), a root-package target that lists only fixture files, and a Bazel package
+/// whose unclaimed files all live under `Tests/`.
+fn mark_test_only(by_component: &BTreeMap<String, Vec<String>>, layout: &mut ComponentLayout) {
+    for (id, files) in by_component {
+        if !files.is_empty() && files.iter().all(|f| is_test_path(f)) {
+            if let Some(info) = layout.components.get_mut(id) {
+                info.is_test = true;
+            }
+        }
+    }
+}
+
 fn split(parent_info: &ComponentInfo, files: &[String], depth: usize, config: &Config, layout: &mut ComponentLayout) {
     if files.len() <= config.split_threshold() || depth > config.split_max_depth() {
         return;
@@ -452,4 +475,66 @@ fn common_dir(files: &[String]) -> String {
         prefix.truncate(n);
     }
     prefix.join("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(id: &str, kind: ComponentKind, module: Option<&str>, is_test: bool) -> ComponentInfo {
+        ComponentInfo { id: id.into(), name: id.into(), kind, module: module.map(String::from), parent: None, is_test, layer: None }
+    }
+
+    /// The components of this repository's own review (Tests unchecked showed them on the map): Bazel targets
+    /// of a fixture workspace under `crates/core/tests/fixtures`, whose labels are relative to that workspace; a
+    /// root-package target that lists only prototype fixture files; and the root package, whose unclaimed files
+    /// all live under `Tests/`. Production components, and a mixed one, keep their classification.
+    #[test]
+    fn components_holding_only_test_files_are_tests() {
+        let nested = "crates/core/tests/fixtures/swift-bazel/head//Sources/Storage:Storage";
+        let filegroup = "//:prototype_fixture_basic";
+        let mut layout = ComponentLayout::default();
+        for c in [
+            info(nested, ComponentKind::BazelTarget, Some("Storage"), false),
+            info(filegroup, ComponentKind::BazelTarget, None, false),
+            info("pkg:.", ComponentKind::BazelPackage, None, false),
+            info("//crates/core:reviewmap_core", ComponentKind::BazelTarget, Some("reviewmap_core"), false),
+            info("folder:mixed", ComponentKind::Folder, None, false),
+            info("//Tests:Unit", ComponentKind::BazelTarget, None, true),
+        ] {
+            layout.components.insert(c.id.clone(), c);
+        }
+        let files: BTreeMap<String, Vec<String>> = [
+            (nested, vec!["crates/core/tests/fixtures/swift-bazel/head/Sources/Storage/Store.swift"]),
+            (filegroup, vec!["Tests/ReviewMapCoreTests/Fixtures/basic/base/Sources/Core/Cart.swift", "Tests/ReviewMapCoreTests/Fixtures/basic/head/Sources/Core/Cart.swift"]),
+            ("pkg:.", vec!["Tests/ReviewMapCoreTests/AnalyzerTests.swift"]),
+            ("//crates/core:reviewmap_core", vec!["crates/core/src/paths.rs"]),
+            ("folder:mixed", vec!["mixed/Sources/A.swift", "mixed/Tests/ATests.swift"]),
+            ("//Tests:Unit", vec!["Tests/UnitTests.swift"]),
+        ]
+        .into_iter()
+        .map(|(id, fs)| (id.to_string(), fs.into_iter().map(String::from).collect()))
+        .collect();
+
+        mark_test_only(&files, &mut layout);
+
+        let is_test = |id: &str| layout.components[id].is_test;
+        assert!(is_test(nested), "a target of a workspace nested under tests/");
+        assert_eq!(layout.components[nested].module.as_deref(), Some("Storage"), "keeps its module, so its links stay");
+        assert!(is_test(filegroup), "a root-package target that lists only fixture files");
+        assert!(is_test("pkg:."), "a package whose files all live under Tests/");
+        assert!(is_test("//Tests:Unit"), "a test target stays one");
+        assert!(!is_test("//crates/core:reviewmap_core"), "production code");
+        assert!(!is_test("folder:mixed"), "a component with any non-test file");
+    }
+
+    /// A fixture analyzed as its own repository has no test folder above it: its targets are ordinary code.
+    #[test]
+    fn a_standalone_fixture_is_not_test_code() {
+        let mut layout = ComponentLayout::default();
+        layout.components.insert("//Sources/Storage:Storage".into(), info("//Sources/Storage:Storage", ComponentKind::BazelTarget, Some("Storage"), false));
+        let files = BTreeMap::from([("//Sources/Storage:Storage".to_string(), vec!["Sources/Storage/Store.swift".to_string()])]);
+        mark_test_only(&files, &mut layout);
+        assert!(!layout.components["//Sources/Storage:Storage"].is_test);
+    }
 }
