@@ -115,3 +115,18 @@
   - CORE-003
   retires: []
   terms: []
+- id: D261116-tnmgj
+  timestamp: 2026-11-16T21:35:41Z
+  actor: user
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-16T21:36:33Z
+  summary: 'Change CORE-003: a language with no changed file in the review is not indexed. It ends syntax-only, like a language whose index could not be built, with an index-unavailable warning saying that none of its files changed. A language with one changed file anywhere in the repository is indexed as before.'
+  rationale: 'Measured on 2026-11-17 (docs/rebuild-step5-speed.md, B5): a Rust-only change built the Swift index at both sides although no Swift file changed, 70 of 89 s from empty caches. A language with no changed file has no review items, so its structural checks have nothing to check, and with no references across languages in phase 1 its index cannot hide or reveal a caller of a changed item in another language; what is lost is call-level detail on edges among its unchanged components. TypeScript already skips its index this way, which CORE-003 did not list as a reason; this decision covers it. Rejected: keep building every language (costs about 70 s cold per review that leaves Swift untouched); skip per workspace or unit (would leave part of a changed language unindexed, so files would be missed and checks held back for no gain). The user chose this option in bean rm-gnyb.'
+  establishes: []
+  changes:
+  - CORE-003
+  retires: []
+  terms: []
