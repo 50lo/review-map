@@ -20,8 +20,8 @@ import {
   type StartItem,
   type Visible,
 } from "./graph";
-import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
-import { FindingsSection } from "./FindingsSection";
+import { edgeFindingView, findingsForComponent, findingsForEdge, findingsOf } from "./findings";
+import { FindingChip, FindingLine, FindingsSection } from "./FindingsSection";
 import { NotesActions, NotesList } from "./Notes";
 import { useReview } from "./review";
 import type { Component, Edge, ReviewItem } from "./types";
@@ -435,29 +435,54 @@ function EdgePanel({ index, e, setFocus }: { index: Index; e: Edge; setFocus: Pr
   const bySymbol = new Map<string, typeof e.refs>();
   for (const r of e.refs) bySymbol.set(r.symbol, [...(bySymbol.get(r.symbol) ?? []), r]);
   const symbolClass = (s: string) => (added.has(s) ? "sym-added" : removed.has(s) ? "sym-removed" : "");
-  const findings = findingsForEdge(index, e.from, e.to);
+  // Each finding from this edge's point of view: what the panel already shows is left out, but every finding keeps at least its chip.
+  const views = findingsForEdge(index, e.from, e.to).map((f) => edgeFindingView(index, e, f));
+  const chips = views.flatMap((v) => (v.kind === "chip" ? [v.finding] : []));
+  const lines = views.flatMap((v) => (v.kind === "line" ? [v] : []));
+  const full = new Map(views.flatMap((v) => (v.kind === "full" ? [[v.finding, v] as const] : [])));
+  // On an added or removed edge every reference is new or gone, and REFERENCES colors them; only a changed edge lists what changed.
+  const listChanges = e.status === "changed";
   return (
     <>
       <section>
         <h2 className="title">
           <Name index={index} id={e.from} setFocus={setFocus} /> → <Name index={index} id={e.to} setFocus={setFocus} />
         </h2>
-        <p>
+        <p className="edge-status">
           <StatusDot status={e.status} /> {e.status}
           {e.status === "changed" && ": the set of referenced symbols changed"}
+          {(e.status === "added" || e.status === "removed") && ` · ${total} reference${total === 1 ? "" : "s"}`}
+          {chips.map((f) => (
+            <span key={f.id}>
+              {" · "}
+              <FindingChip index={index} f={f} go={setFocus} />
+            </span>
+          ))}
         </p>
-        {added.size > 0 && (
+        {lines.map((v) => (
+          <FindingLine key={v.finding.id} index={index} f={v.finding} context={v.context} go={setFocus} />
+        ))}
+        {listChanges && added.size > 0 && (
           <p className="small">
             Now references: <span className="sym-added mono">{[...added].join(", ")}</span>
           </p>
         )}
-        {removed.size > 0 && (
+        {listChanges && removed.size > 0 && (
           <p className="small">
             No longer references: <span className="sym-removed mono">{[...removed].join(", ")}</span>
           </p>
         )}
       </section>
-      <FindingsSection index={index} title="Findings" findings={findings} go={setFocus} hideAnchor={(a) => a.from === e.from && a.to === e.to} />
+      <FindingsSection
+        index={index}
+        title="Findings"
+        findings={[...full.keys()]}
+        go={setFocus}
+        shape={(f) => {
+          const v = full.get(f);
+          return v && { evidence: v.evidence, anchors: v.anchors };
+        }}
+      />
       <section>
         <h2>
           References <span className="muted">{total}</span>

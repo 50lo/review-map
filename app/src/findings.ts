@@ -2,7 +2,7 @@
 // finding leads. Kept free of React so it can be unit tested against the fixture reports.
 
 import { within, type Focus, type Index, type MapGraph } from "./graph";
-import type { Anchor, Finding } from "./types";
+import type { Anchor, Edge, Finding } from "./types";
 
 export const SEVERITY_ORDER: Record<string, number> = { high: 0, medium: 1, low: 2 };
 
@@ -93,3 +93,50 @@ export function findingFocus(index: Index, f: Finding): Focus {
 /** The highest severity among findings, for a badge's color. */
 export const topSeverity = (fs: Finding[]) =>
   fs.reduce<string | undefined>((top, f) => (top === undefined || (SEVERITY_ORDER[f.severity] ?? 3) < (SEVERITY_ORDER[top] ?? 3) ? f.severity : top), undefined);
+
+/** What is left of a finding on the panel of one edge, once the facts the panel already shows are taken out. */
+export type EdgeFindingView =
+  /** Only the severity and kind, on the status line. */
+  | { kind: "chip"; finding: Finding }
+  /** The chip and one line of context the panel doesn't otherwise show. */
+  | { kind: "line"; finding: Finding; context: string }
+  /** The finding with the evidence and anchors that are not this edge again. */
+  | { kind: "full"; finding: Finding; evidence: string[]; anchors: Anchor[] };
+
+const MAX_OTHER_USERS = 3;
+
+/**
+ * A finding seen from one edge. The edge panel already shows the edge's ends, status and references,
+ * so a finding there drops what repeats them. Decided from report data (refs, externalDeps, edges), never
+ * from the wording of the finding's text.
+ */
+export function edgeFindingView(index: Index, edge: Edge, f: Finding): EdgeFindingView {
+  if (f.kind === "new-external") {
+    const parts: string[] = [];
+    const lock = index.report.externalDeps.find((d) => d.change === "added" && "ext:" + d.name === edge.to);
+    if (lock) parts.push(lock.to ? `New in the lockfile at ${lock.to}` : "New in the lockfile");
+    const name = (id: string) => index.components.get(id)?.name ?? id;
+    const others: string[] = [];
+    for (const e of index.report.edges) {
+      if (e.status !== "added" || e.to !== edge.to || e.from === edge.from || e.from.startsWith("ext:")) continue;
+      const n = name(e.from);
+      if (!others.includes(n) && n !== name(edge.from)) others.push(n);
+    }
+    if (others.length > 0) {
+      const shown = others.slice(0, MAX_OTHER_USERS).join(", ");
+      const more = others.length > MAX_OTHER_USERS ? ` and ${others.length - MAX_OTHER_USERS} more` : "";
+      parts.push(`also new in ${shown}${more}`);
+    }
+    return parts.length > 0 ? { kind: "line", finding: f, context: parts.join(" · ") } : { kind: "chip", finding: f };
+  }
+  const anchors = f.anchors.filter(
+    (a) => !(a.from === edge.from && a.to === edge.to) && !(a.component !== undefined && (a.component === edge.from || a.component === edge.to)),
+  );
+  let evidence = f.evidence;
+  if (f.kind === "layering") {
+    // Evidence after the first line (which layers the ends are in) may name references; drop the ones that are this edge's.
+    const refEnds = edge.refs.map((r) => (r.line === 0 ? ` in ${r.file}` : ` at ${r.file}:${r.line}`));
+    evidence = f.evidence.filter((x, i) => i === 0 || !refEnds.some((end) => x.endsWith(end)));
+  }
+  return { kind: "full", finding: f, evidence, anchors };
+}

@@ -1886,3 +1886,21 @@ code,
 .finish-notes {
   white-space: nowrap;
 }
+/* Findings on an edge panel: a chip on the status line, or a chip with one line of context under it. */
+.finding-chip {
+  white-space: nowrap;
+}
+.finding-chip .finding-kind,
+.finding-line .finding-kind {
+  margin-left: 2px;
+}
+.finding-line {
+  display: block;
+  margin: 2px 0 0;
+  text-align: left;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.finding-context {
+  margin-left: 6px;
+}
