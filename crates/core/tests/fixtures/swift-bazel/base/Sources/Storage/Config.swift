@@ -3,3 +3,7 @@ public struct Config {
 
     public init() {}
 }
+
+public protocol Source {
+    func fetch() -> Int
+}

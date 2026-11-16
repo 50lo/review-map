@@ -127,6 +127,16 @@ fn swift_index_through_bazel() {
     assert!(definitions.iter().any(|r| r.reasons[0] == "Config" && r.file == "Sources/Storage/Config.swift"), "{definitions:?}");
     assert!(!definitions.iter().any(|r| r.file.starts_with("Sources/Settings")), "{definitions:?}");
 
+    // CORE-003: Storage and Settings each declare a protocol Source. The compiler's index resolves the
+    // inheritance clauses, so only LocalSource conforms to Storage's, whose requirement head changes.
+    let fetch = report.review_items.iter().find(|i| i.qualified_name == "Source.fetch()" && i.location.file == "Sources/Storage/Config.swift").expect("the changed requirement");
+    let conformers = findings(report, "conformers");
+    assert!(conformers.len() == 1 && conformers[0].evidence.iter().any(|e| e.contains("LocalSource.fetch")), "{:?}", report.findings);
+    assert!(!conformers[0].evidence.iter().any(|e| e.contains("ThemeSource")), "{:?}", conformers[0].evidence);
+    let context: Vec<(&str, u32)> =
+        report.regions.iter().filter(|r| r.review_item == fetch.id && r.relation.as_deref() == Some("conformer")).map(|r| (r.file.as_str(), r.start_line)).collect();
+    assert_eq!(context, [("Sources/Feed/Feed.swift", 31)]);
+
     // The comparison report of the same review: every reference matched by name, and no index warning.
     let named = session.name_based_report();
     assert_eq!(named.analyzer.resolution, "name-based");
@@ -146,6 +156,26 @@ fn swift_index_through_bazel() {
     assert_eq!(again.edges, report.edges);
     assert_eq!(again.review_items, report.review_items);
 }
+
+/// The prototype fixture's `store/Store.kt` and `cache/Cache.kt` (base and head, by `change`), each with an
+/// interface `Source` and an open class `Base` added: two pairs of supertypes with the same names. Head gives
+/// store's `Source.fetch()` a default body and changes the body of store's `Base.name()`.
+fn kotlin_supertypes(module: &str, change: &str, head: bool) -> String {
+    let fetch = if head && module == "store" { "fun fetch(): Int = 0" } else { "fun fetch(): Int" };
+    let name = if head && module == "store" { "\"store base\"".to_string() } else { format!("\"{module}\"") };
+    let class = if module == "store" { "Store" } else { "Cache" };
+    let own = if module == "cache" {
+        "\nclass CacheSource : Base(), Source {\n    override fun fetch(): Int = 2\n    override fun name(): String = \"cache source\"\n}\n"
+    } else {
+        ""
+    };
+    format!(
+        "package demo.{module}\n\nclass {class} {{\n    fun load(key: String): String {{\n        return \"{module}{change}\" + key\n    }}\n}}\n\ninterface Source {{\n    {fetch}\n}}\n\nopen class Base {{\n    open fun name(): String = {name}\n}}\n{own}"
+    )
+}
+
+/// The fixture's `app/Main.kt` with a subclass of store's Base that implements store's Source, at lines 16 to 19.
+const KOTLIN_MAIN: &str = "package demo.app\n\nimport demo.cache.Cache\nimport demo.store.Base\nimport demo.store.Source\nimport demo.store.Store\n\nvar warm: Cache? = null\n\nfun start() {\n    val s = Store()\n    println(s.load(\"a\") + (warm != null))\n}\n\nfun main() = start()\nclass LocalSource : Base(), Source {\n    override fun fetch(): Int = 1\n    override fun name(): String = \"local\"\n}\n";
 
 /// `load()` is a method of both Store and Cache, in two targets; the app only calls Store's.
 ///
@@ -167,6 +197,9 @@ fn kotlin_index_through_bazel() {
             ("MODULE.bazel", "module(name = \"root\")\n", "module(name = \"root\")\n"),
             ("BUILD.bazel", "", ""),
             ("scripts/Report.kt", "package scripts\n\nfun report(): String = \"base\"\n", "package scripts\n\nfun report(): String = \"head\"\n"),
+            ("android/store/Store.kt", &kotlin_supertypes("store", ":", false), &kotlin_supertypes("store", "/", true)),
+            ("android/cache/Cache.kt", &kotlin_supertypes("cache", ":", false), &kotlin_supertypes("cache", "/", true)),
+            ("android/app/Main.kt", KOTLIN_MAIN, KOTLIN_MAIN),
         ],
     );
     let _ = std::fs::remove_dir_all(bazel.home.join("cache/index/kotlin"));
@@ -192,6 +225,16 @@ fn kotlin_index_through_bazel() {
     assert_eq!(used_by(report, "Cache.load()"), Vec::<String>::new(), "the app never calls Cache.load()");
     let named = session.name_based_report();
     assert!(!used_by(&named, "Cache.load()").is_empty(), "name matching can't tell the two load() methods apart");
+
+    // CORE-003: store and cache each declare Source and Base. scip-java resolves the supertype list of
+    // LocalSource (`Base()` names Base's constructor) to store's, so it alone is conformer and override context
+    // of store's changes; CacheSource, of cache's Source and Base, is neither.
+    let context = |name: &str, relation: &str| -> Vec<(String, u32)> {
+        let item = report.review_items.iter().find(|i| i.qualified_name == name && i.location.file == "android/store/Store.kt").expect("the changed declaration");
+        report.regions.iter().filter(|r| r.review_item == item.id && r.relation.as_deref() == Some(relation)).map(|r| (r.file.clone(), r.start_line)).collect()
+    };
+    assert_eq!(context("Source.fetch()", "conformer"), [("android/app/Main.kt".to_string(), 17)], "{:?}", report.regions);
+    assert_eq!(context("Base.name()", "override"), [("android/app/Main.kt".to_string(), 18)], "{:?}", report.regions);
 
     // CORE-003: the root workspace's Kotlin file shows only links that syntax proves, and the warnings say so
     // and why. Since a caller could sit in it, the checks that claim "no callers" don't run for Kotlin.
@@ -242,6 +285,13 @@ fn typescript_index_through_bazel() {
     let named = session.name_based_report();
     assert!(!used_by(&named, "Cache.load()").is_empty(), "name matching can't tell the two load() methods apart");
 
+    // CORE-003: store.ts and cache.ts each declare an interface Source. scip-typescript resolves the
+    // `implements` clauses, so only LocalSource implements store.ts's, whose requirement head changes.
+    let fetch = report.review_items.iter().find(|i| i.qualified_name.starts_with("Source.fetch") && i.location.file == "packages/lib/src/store.ts").expect("the changed requirement");
+    let context: Vec<(&str, u32)> =
+        report.regions.iter().filter(|r| r.review_item == fetch.id && r.relation.as_deref() == Some("conformer")).map(|r| (r.file.as_str(), r.start_line)).collect();
+    assert_eq!(context, [("packages/app/src/main.ts", 13)], "{:?}", report.regions);
+
     // build_info.ts imports a file only the build has: syntax-only at both sides, and the warning says why.
     // Its call of Store.load() is not counted, and the checks that claim "no callers" are held back.
     let partial: Vec<&str> = report.warnings.iter().filter(|w| w.kind == "index-partial").map(|w| w.message.as_str()).collect();
@@ -249,6 +299,8 @@ fn typescript_index_through_bazel() {
     let coverage = report.analysis.languages.iter().find(|l| l.id == "typescript").expect("TypeScript's coverage");
     assert_eq!((coverage.files, coverage.indexed_files), (5, 4));
     assert!(coverage.held_back.contains(&"unused-api".to_string()), "{coverage:?}");
+    // A conformer could sit in build_info.ts too, so the conformers check is held back as well.
+    assert!(coverage.held_back.contains(&"conformers".to_string()) && findings(report, "conformers").is_empty(), "{coverage:?}");
 
     // CORE-002, and the links made for the indexer are gone from the app's own tree.
     assert_eq!(snapshot(&repo.path()), before, "nothing in the reviewed repository changed");

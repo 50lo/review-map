@@ -22,3 +22,11 @@ public struct Feed {
         Settings.Config().theme
     }
 }
+
+final class LocalSource: Storage.Source {
+    func fetch() -> Int { 1 }
+}
+
+final class ThemeSource: Settings.Source {
+    func fetch() -> Int { 2 }
+}

@@ -5,3 +5,7 @@ export class Store {
     return this.value;
   }
 }
+
+export interface Source {
+  fetch(): number;
+}
