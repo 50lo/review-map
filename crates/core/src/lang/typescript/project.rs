@@ -21,6 +21,25 @@ pub const NODE_BUILTINS: &[&str] = &[
     "worker_threads", "zlib", "sqlite", "sea",
 ];
 
+/// Extensions of files that a bundler imports but that hold no TypeScript declarations (images, styles,
+/// fonts, media, text and data). TypeScript types such imports through wildcard modules (`declare module
+/// '*.svg'`), so the index can miss nothing behind them.
+const ASSET_EXTENSIONS: &[&str] = &[
+    "svg", "png", "jpg", "jpeg", "gif", "webp", "avif", "ico", "bmp", "css", "scss", "sass", "less", "styl",
+    "pcss", "html", "md", "mdx", "txt", "wasm", "woff", "woff2", "ttf", "otf", "eot", "mp3", "mp4", "webm",
+    "wav", "ogg", "glsl", "wgsl", "yaml", "yml", "toml", "graphql", "gql", "csv", "xml", "pdf",
+];
+
+/// Whether a specifier names an asset, not code: a file with an asset extension, or one with a bundler
+/// query (`./shader.txt?raw`, `./worker.ts?worker`).
+pub fn is_asset(spec: &str) -> bool {
+    if spec.contains('?') {
+        return true;
+    }
+    let file = spec.rsplit('/').next().unwrap_or(spec);
+    file.rsplit_once('.').is_some_and(|(stem, ext)| !stem.is_empty() && ASSET_EXTENSIONS.contains(&ext.to_ascii_lowercase().as_str()))
+}
+
 pub fn is_node_builtin(module: &str) -> bool {
     module.starts_with("node:") || NODE_BUILTINS.contains(&module.split('/').next().unwrap_or(""))
 }
@@ -646,6 +665,18 @@ mod tests {
         let map: BTreeMap<String, String> = files.iter().map(|(p, t)| (p.to_string(), t.to_string())).collect();
         let paths: Vec<String> = map.keys().cloned().collect();
         Project::build(paths.iter(), &|p: &str| map.get(p).map(|t| t.as_bytes().to_vec()))
+    }
+
+    #[test]
+    fn assets() {
+        assert!(is_asset("./icons/swift.svg"));
+        assert!(is_asset("../styles/App.module.CSS"));
+        assert!(is_asset("./shader.glsl?raw"));
+        assert!(!is_asset("./store"));
+        assert!(!is_asset("./foo.service"));
+        assert!(!is_asset("./generated/version"));
+        assert!(!is_asset("@demo/lib"));
+        assert!(!is_asset("./data.json"), "TypeScript reads JSON modules itself");
     }
 
     #[test]

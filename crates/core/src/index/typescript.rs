@@ -29,7 +29,7 @@ use super::scip;
 use super::{IndexedRef, SideIndex};
 use crate::analyze::SideSource;
 use crate::bazel::workspace::{BazelEnv, Workspaces};
-use crate::lang::typescript::project::{Manager, Project, Resolved};
+use crate::lang::typescript::project::{is_asset, Manager, Project, Resolved};
 use crate::model::{Side, Warning};
 use crate::parse::ParsedFile;
 use crate::paths::{is_under, join, strip_dir};
@@ -470,6 +470,8 @@ pub fn resolve_documents(
         if let Some(parsed) = parsed(file) {
             let unresolved = parsed.imports.iter().find_map(|imp| {
                 let why = match project.resolve(file, &imp.name) {
+                    // An image or stylesheet: no declarations lie behind it, whatever the index made of it.
+                    Resolved::Missing if is_asset(&imp.name) => return None,
                     Resolved::Missing => "no TypeScript file of the revision matches it; it may be generated".to_string(),
                     Resolved::Package { name, workspace: true, file: None } => {
                         format!("the entry of {name} is not in the repository; a build step or install script that did not run makes it")
