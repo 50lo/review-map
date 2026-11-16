@@ -7,9 +7,10 @@ import {
   hiddenNeighbors,
   isGroupOf,
   externalChangeOf,
-  isLowRisk,
   kindLabel,
   llmOf,
+  nextUnreviewed,
+  reviewProgress,
   riskTier,
   startHere,
   stepRegion,
@@ -75,8 +76,7 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
   const changedComponents = report.components.filter((c) => c.kind !== "external" && c.changedReviewItems > 0).length;
   const byStatus = (s: Edge["status"]) => report.edges.filter((e) => e.status === s).length;
   const [showWarnings, setShowWarnings] = useState(false);
-  const toReview = report.reviewItems.filter((e) => !isLowRisk(index, e));
-  const done = toReview.filter((e) => review.reviewed[e.id]).length;
+  const { done, total } = reviewProgress(index, review.reviewed);
   return (
     <>
       <ReviewSection index={index} setFocus={setFocus} />
@@ -86,7 +86,7 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
         {index.llm && <LLMStatus index={index} />}
         {index.riskOrder.length > 0 && (
           <p className="small step-all">
-            <button className="btn primary" onClick={() => setFocus(stepRegion(index, null, 1))}>
+            <button className="btn primary" onClick={() => setFocus(nextUnreviewed(index, review.reviewed) ?? stepRegion(index, null, 1))}>
               Review {index.riskOrder.length} regions by risk ›
             </button>{" "}
             <span className="muted kbd-hint">or press j and k</span>
@@ -100,14 +100,14 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
           ))}
         </ol>
       </section>
-      {toReview.length > 0 && (
+      {total > 0 && (
         <section>
           <h2>Progress</h2>
-          <div className="progress" title={`${done} of ${toReview.length} reviewed`}>
-            <span style={{ width: `${(100 * done) / toReview.length}%` }} />
+          <div className="progress" title={`${done} of ${total} reviewed`}>
+            <span style={{ width: `${(100 * done) / total}%` }} />
           </div>
           <p className="small muted">
-            {done} of {toReview.length} review items reviewed
+            {done} of {total} review items reviewed
           </p>
         </section>
       )}

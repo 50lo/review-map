@@ -12,10 +12,13 @@ import {
   edgeKey,
   flagLabel,
   hiddenNeighbors,
+  isLowRisk,
   llmOf,
+  nextUnreviewed,
   regionPosition,
   related,
   reviewItemScore,
+  reviewProgress,
   revealFocus,
   rollup,
   startHere,
@@ -288,6 +291,41 @@ describe("region stepping", () => {
   it("enters a review item's riskiest region first", () => {
     const r = order[3];
     expect(stepRegion(index, { type: "reviewItem", id: r.reviewItem }, 1)).toEqual({ type: "reviewItem", id: r.reviewItem, region: order.find((x) => x.reviewItem === r.reviewItem)!.id });
+  });
+});
+
+describe("nextUnreviewed", () => {
+  const order = index.riskOrder;
+
+  it("goes to the riskiest region when nothing is reviewed", () => {
+    expect(nextUnreviewed(index, {})).toEqual(stepRegion(index, null, 1));
+  });
+
+  it("skips regions of reviewed review items", () => {
+    const done = { [order[0].reviewItem]: true };
+    const first = order.find((r) => r.reviewItem !== order[0].reviewItem)!;
+    expect(nextUnreviewed(index, done)).toEqual({ type: "reviewItem", id: first.reviewItem, region: first.id });
+    // A review item marked not reviewed counts as not reviewed.
+    expect(nextUnreviewed(index, { [order[0].reviewItem]: false })).toEqual(stepRegion(index, null, 1));
+  });
+
+  it("returns null when every review item in risk order is reviewed", () => {
+    expect(nextUnreviewed(index, Object.fromEntries(order.map((r) => [r.reviewItem, true])))).toBeNull();
+  });
+
+  it("returns null when the report has no risk regions", () => {
+    const bare = buildIndex(validate({ components: [], edges: [], reviewItems: [{ kind: "func", change: "signature", contractFlags: [], location: { file: "API.kt" } }] }));
+    expect(bare.riskOrder).toEqual([]);
+    expect(nextUnreviewed(bare, {})).toBeNull();
+  });
+});
+
+describe("reviewProgress", () => {
+  it("counts review items that aren't low risk", () => {
+    const toReview = report.reviewItems.filter((e) => !isLowRisk(index, e));
+    expect(reviewProgress(index, {})).toEqual({ done: 0, total: toReview.length });
+    const lowRisk = report.reviewItems.find((e) => isLowRisk(index, e))!;
+    expect(reviewProgress(index, { [toReview[0].id]: true, [lowRisk.id]: true })).toEqual({ done: 1, total: toReview.length });
   });
 });
 

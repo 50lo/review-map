@@ -2,13 +2,30 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { ChangeReport } from "./types";
 import * as backend from "./backend";
 import type { JobState, ReviewEvent, ReviewRequest } from "./backend";
-import { buildIndex, carryFocus, collapse, defaultCollapsed, edgeKey, isGroupOf, mapFocus, revealFocus, sameComponents, stepRegion, visible, type Index, type MapOptions } from "./graph";
+import {
+  buildIndex,
+  carryFocus,
+  collapse,
+  defaultCollapsed,
+  edgeKey,
+  isGroupOf,
+  mapFocus,
+  nextUnreviewed,
+  regionPosition,
+  revealFocus,
+  reviewProgress,
+  sameComponents,
+  stepRegion,
+  visible,
+  type Index,
+  type MapOptions,
+} from "./graph";
 import { lastName } from "./levels";
 import { validate } from "./load";
 import { MapView } from "./MapView";
 import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
 import { ReviewItemPage, InterfacePage, LocationPage } from "./Pages";
-import { initReview } from "./review";
+import { initReview, useReview } from "./review";
 import { Sidebar } from "./Sidebar";
 import { forgetSources, resetSources } from "./source";
 import { StartScreen, StatusBar } from "./Shell";
@@ -61,6 +78,71 @@ function crumbs(index: Index, f: Focus): Crumb[] {
     case "location":
       return [{ label: `${f.file.split("/").pop()}:${f.line}` }];
   }
+}
+
+/**
+ * Where "next" (j, ], the toolbar's Next) goes. On a review item: the next region in risk order. Anywhere
+ * else: the riskiest region whose review item isn't reviewed, or, once all are, the riskiest region.
+ */
+function nextRegion(index: Index, reviewed: Record<string, boolean>, focus: Focus): Focus {
+  if (focus?.type === "reviewItem") return stepRegion(index, focus, 1);
+  return nextUnreviewed(index, reviewed) ?? stepRegion(index, focus, 1);
+}
+
+const sameFocus = (a: Focus, b: Focus) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * The toolbar's "what next" control, at every level. On a review item: the region's place in risk order
+ * with previous and next. Elsewhere: the next unreviewed review item. Progress counts review items, the
+ * same numbers as the Overview's Progress section. Hidden when the report has no risk regions.
+ */
+function NextControl({ index, focus, setFocus }: { index: Index; focus: Focus; setFocus: (f: Focus) => void }) {
+  const { reviewed } = useReview();
+  if (index.riskOrder.length === 0) return null;
+  const { done, total } = reviewProgress(index, reviewed);
+  const allDone = total > 0 && done === total;
+  const progress = (
+    <span className={`next-progress ${allDone ? "all-done" : ""}`} title={`${done} of ${total} review items reviewed. Tests, generated code and cosmetic changes aren't counted.`}>
+      {allDone ? `All ${total} reviewed` : `${done}/${total} reviewed`}
+    </span>
+  );
+  const order = `${index.llm ? "LLM " : ""}risk`;
+  if (focus?.type === "reviewItem") {
+    const pos = regionPosition(index, focus);
+    const n = index.riskOrder.length;
+    const prev = stepRegion(index, focus, -1);
+    const next = stepRegion(index, focus, 1);
+    return (
+      <div className="next-control">
+        <span className="stepper" title={`Regions across the change, highest ${order} first (keys k and j)`}>
+          <button className="btn" title="Previous region (k)" disabled={sameFocus(prev, focus)} onClick={() => setFocus(prev)}>
+            ‹
+          </button>
+          <span className="small">{pos ? `Region ${pos} of ${n}` : `${n} regions`}</span>
+          <button className="btn" title="Next region (j)" disabled={sameFocus(next, focus)} onClick={() => setFocus(next)}>
+            ›
+          </button>
+        </span>
+        {progress}
+      </div>
+    );
+  }
+  const target = nextUnreviewed(index, reviewed);
+  const item = target?.type === "reviewItem" ? index.reviewItems.get(target.id) : undefined;
+  return (
+    <div className="next-control">
+      {target && item && (
+        <button
+          className="btn primary next-btn"
+          title={`Next unreviewed: ${item.qualifiedName}, at its riskiest region (by ${order}).\nKeys: j next region, k previous region.`}
+          onClick={() => setFocus(target)}
+        >
+          Next: <span className="next-name">{lastName(item.qualifiedName)}</span> ›
+        </button>
+      )}
+      {progress}
+    </div>
+  );
 }
 
 const OPTIONS_KEY = "reviewmap.options.v2";
@@ -242,6 +324,7 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
       /* storage unavailable: the choice just doesn't persist */
     }
   }, []);
+  const { reviewed } = useReview();
   const [focusState, setFocusState] = useState<Focus>(readFocus);
   // Components whose unchanged neighbors were added to the map, and groups drawn as one node.
   const [expandedState, setExpanded] = useState<Set<string>>(() => new Set());
@@ -302,7 +385,7 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Next and previous region in risk order, from anywhere.
       if (e.key === "j" || e.key === "]" || e.key === "k" || e.key === "[") {
-        const next = stepRegion(index, readFocus(), e.key === "j" || e.key === "]" ? 1 : -1);
+        const next = e.key === "j" || e.key === "]" ? nextRegion(index, reviewed, readFocus()) : stepRegion(index, readFocus(), -1);
         if (JSON.stringify(next) !== JSON.stringify(readFocus())) setFocus(next);
         return;
       }
@@ -314,7 +397,7 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [setFocus, index]);
+  }, [setFocus, index, reviewed]);
 
   const vis = useMemo(() => visible(index, opts, expanded), [index, opts.scope, opts.showTests, expanded]); // eslint-disable-line react-hooks/exhaustive-deps
   // A focus inside a collapsed group opens the group, so the map shows it.
@@ -405,6 +488,7 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
             </button>
           )}
         </div>
+        <NextControl index={index} focus={focus} setFocus={setFocus} />
       </header>
       {status}
       <main className={`body ${level > 1 ? "paged" : ""}`}>

@@ -606,6 +606,21 @@ export function stepRegion(index: Index, focus: Focus, dir: 1 | -1): Focus {
 
 const toFocus = (r: Region): Focus => ({ type: "reviewItem", id: r.reviewItem, region: r.id });
 
+/**
+ * Where "next" goes from outside a review item: the first region in risk order whose review item
+ * isn't marked reviewed, or null when every one in risk order is.
+ */
+export function nextUnreviewed(index: Index, reviewed: Record<string, boolean>): Focus {
+  const r = index.riskOrder.find((x) => !reviewed[x.reviewItem]);
+  return r ? toFocus(r) : null;
+}
+
+/** Review progress: review items that aren't low risk, and how many of them are marked reviewed. */
+export function reviewProgress(index: Index, reviewed: Record<string, boolean>): { done: number; total: number } {
+  const toReview = index.report.reviewItems.filter((e) => !isLowRisk(index, e));
+  return { done: toReview.filter((e) => reviewed[e.id]).length, total: toReview.length };
+}
+
 /** 1-based position of the focused region in risk order, or 0. */
 export function regionPosition(index: Index, focus: Focus): number {
   if (focus?.type !== "reviewItem" || !focus.region) return 0;

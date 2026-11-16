@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CodeView, useSource, type CodeRegion } from "./CodeView";
 import { lineChanges } from "./diff";
-import { componentEdges, contextOf, flagLabel, kindLabel, llmOf, regionPosition, regionRisk, riskTier, stepRegion, type Index } from "./graph";
+import { componentEdges, contextOf, flagLabel, kindLabel, llmOf, regionRisk, riskTier, type Index } from "./graph";
 import {
   dependsOnTarget,
   findReviewItem,
@@ -351,8 +351,6 @@ function ReviewItemPageInner({ index, e, region: focusRegion, go }: { index: Ind
   const fallbackChanged = own.length === 0 ? changes?.changed : undefined;
   const firstChanged = fallbackChanged ? fallbackChanged.findIndex(Boolean) : firstRegion ? firstRegion.startLine - loc.startLine : -1;
   const removedCount = changes ? [...changes.removed.values()].reduce((s, l) => s + l.length, 0) : 0;
-  const pos = regionPosition(index, focusRegion ? { type: "reviewItem", id: e.id, region: focusRegion } : null);
-  const total = index.riskOrder.length;
   const label = e.qualifiedName;
 
   const regionHead = (cr: CodeRegion) => {
@@ -449,19 +447,6 @@ function ReviewItemPageInner({ index, e, region: focusRegion, go }: { index: Ind
         <Chips flags={e.contractFlags} />
         {llmOf(index, e) && <LLMSummary text={llmOf(index, e)!.summary} />}
         <div className="page-actions">
-          {total > 0 && (
-            <span className="stepper" title="Regions across the change, highest risk first (keys j and k)">
-              <button className="btn" disabled={pos === 1} onClick={() => go(stepRegion(index, { type: "reviewItem", id: e.id, region: focusRegion }, -1))}>
-                ‹
-              </button>
-              <span className="muted small">
-                {pos ? `Region ${pos} of ${total}` : `${total} regions`} by {index.llm ? "LLM " : ""}risk
-              </span>
-              <button className="btn" disabled={pos === total} onClick={() => go(stepRegion(index, { type: "reviewItem", id: e.id, region: focusRegion }, 1))}>
-                ›
-              </button>
-            </span>
-          )}
           <span className="stepper" title={`Review items in ${compName(index, e.component)}, in interface view order`}>
             <button className="btn" disabled={!nb.prev} onClick={() => nb.prev && go({ type: "reviewItem", id: nb.prev.id })}>
               ‹
