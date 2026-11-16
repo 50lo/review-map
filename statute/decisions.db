@@ -103,8 +103,11 @@
 - id: D261116-2s3v0
   timestamp: 2026-11-16T07:47:35Z
   actor: user
-  status: proposed
-  approved_by: null
+  status: active
+  approved_by:
+    name: Anton Solo
+    email: anton@50lo.me
+    at: 2026-11-16T08:05:41Z
   summary: 'Change CORE-003: supertypes come only from the index in the main report. The conformers check and conformer and override context use the declaration the index resolves each inheritance-clause entry to; an entry the index does not resolve gives no relation; and the conformers check is held back, with unused-api and orphaned, when the index misses a non-test file of the language.'
   rationale: 'Closes gap G261115-g8qi8: inheritance clauses were resolved by name even with a complete index, so a conformer of one Store protocol was reported for another with the same name. Resolving through the index follows from ''never matches by name''; the rule now says so and names conformers among the held-back checks, since a conformer in a missed file can''t be resolved. Rejected: holding the check back whenever any clause entry is unresolved, because external supertypes (View, Codable) have no in-repo target and would hold it back in every repository; and falling back to name resolution for unresolved entries, which CORE-003 forbids. Index readers emit line-level references only, so the name in the clause picks which of the header''s references belongs to which entry; the declaration is still the one the index names.'
   establishes: []
