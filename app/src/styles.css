@@ -452,12 +452,14 @@ code,
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
-/* Away from the focus. Muted colors, not opacity (see EDGE_COLORS in MapView.tsx). */
+/* Away from the focus. Muted colors, not opacity (see EDGE_COLORS in MapView.tsx). Every mark on a
+   dimmed node or edge is muted: the rules that color status borders, finding badges, language icons
+   and edge labels each have a dimmed counterpart that is more specific, so it wins wherever it sits
+   in this file. Only colors change; a dashed border stays dashed. */
 .node.dim,
 .group.dim {
   color: var(--dim-fg);
   border-color: var(--dim-line);
-  border-style: solid;
 }
 .node.dim {
   background: var(--bg);
@@ -613,9 +615,15 @@ code,
 .node.ext {
   gap: 6px;
 }
+/* Dimmed, the icon is its silhouette in the dimmed text color: the image itself is moved out of the
+   box, and the box's background shows through the icon as a mask (--icon, set by LanguageBadges). */
 .node.dim .language-icon,
 .group.dim .language-icon {
-  filter: grayscale(1);
+  background: var(--dim-fg);
+  border-radius: 0;
+  object-position: 100px 0;
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
 }
 .ext-badge {
   margin-left: 6px;
@@ -629,6 +637,15 @@ code,
 .node.ext-removed {
   border-color: var(--removed);
   border-style: dashed;
+}
+.node.dim.st-added,
+.node.dim.st-removed,
+.group.dim.st-added,
+.group.dim.st-removed,
+.node.dim.ext-bumped,
+.node.dim.ext-added,
+.node.dim.ext-removed {
+  border-color: var(--dim-line);
 }
 
 .group {
@@ -1481,6 +1498,20 @@ code,
 }
 .react-flow__edge.edge-finding .react-flow__edge-textbg {
   fill: var(--panel);
+}
+/* Dimmed: each of these has one class more than the rule it overrides, so it wins wherever it sits.
+   MapView.tsx gives edges away from the focus the class edge-dim. */
+.node.dim .badge.finding-badge,
+.group.dim .badge.finding-badge {
+  background: var(--bg);
+  color: var(--dim-fg);
+  box-shadow: inset 0 0 0 1px var(--dim-line);
+}
+.react-flow__edge.edge-finding.edge-dim .react-flow__edge-textwrapper .react-flow__edge-text {
+  fill: var(--dim-fg);
+}
+.react-flow__edge.edge-finding.edge-dim .react-flow__edge-textwrapper .react-flow__edge-textbg {
+  fill: var(--bg);
 }
 /* On a component node, the findings badge sits on the top border, so it never crowds the counts. */
 .badge.finding-badge.corner {

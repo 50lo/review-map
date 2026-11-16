@@ -289,7 +289,7 @@ function Flow({ index, graph, focus, setFocus, showUnchanged, toggleGroup }: Pro
           target: e.to,
           zIndex: 2,
           interactionWidth: 18,
-          className: `edge-${e.status}${e.bundle ? " edge-bundle" : ""}${flagged ? ` edge-finding sev-${topSeverity(flagged)}` : ""}`,
+          className: `edge-${e.status}${e.bundle ? " edge-bundle" : ""}${flagged ? ` edge-finding sev-${topSeverity(flagged)}` : ""}${lit ? "" : " edge-dim"}`,
           label: flagged ? `${flagged.length} finding${flagged.length === 1 ? "" : "s"}` : undefined,
           labelBgPadding: [4, 1] as [number, number],
           labelBgBorderRadius: 4,
