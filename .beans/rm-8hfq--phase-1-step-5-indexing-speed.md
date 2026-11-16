@@ -34,7 +34,7 @@ The report's prioritised list has 12 items; these tasks are the top ones. The or
 4. rm-zm5r: run graph queries and independent index work concurrently, with a bound.
 5. rm-e2b4: keep fewer Bazel servers alive in reviews that touch several workspaces.
 6. rm-2tan: use the same Bazel configuration flags for every command in an output base.
-7. rm-gnyb: decide whether to skip indexing languages that have no changed file (needs the user's decision before any code).
+7. rm-gnyb: skip indexing languages that have no changed file. The user chose this on 2026-11-17; a CORE-003 Statute decision must be proposed and approved before the code is merged.
 8. rm-0ixm: remove first-run network costs (Bzlmod resolution of nested workspaces, scip-java download).
 
 Items 9–12 of the report (keeping Bazel servers after the app quits, Kotlin result caching and Bazel-action indexing, reusing Swift index stores from the user's own builds, one output base per workspace for both sides) are not tasks yet; see the report.

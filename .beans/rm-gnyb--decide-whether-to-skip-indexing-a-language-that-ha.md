@@ -1,20 +1,24 @@
 ---
 # rm-gnyb
-title: Decide whether to skip indexing a language that has no changed file
-status: draft
+title: Skip indexing a language that has no changed file (CORE-003 decision first)
+status: todo
 type: task
 priority: normal
 tags:
     - speed
     - decision
 created_at: 2026-11-16T21:15:50Z
-updated_at: 2026-11-16T21:15:50Z
+updated_at: 2026-11-16T21:32:24Z
 parent: rm-8hfq
 ---
 
+## Decision (2026-11-17)
+
+The user chose **option A**: skip building a language's index when the review has no changed file of that language. Recorded in this bean only; the Statute decision that adds this reason to CORE-003 is not created yet (see "Where") and must be proposed and approved by the user before the code is merged.
+
 ## What
 
-Decide whether a review should skip building a language's index when the change has no file of that language, and if so, implement it for Swift and Kotlin the way TypeScript already behaves. **This needs the user's decision before any code is written.**
+Decide whether a review should skip building a language's index when the change has no file of that language, and if so, implement it for Swift and Kotlin the way TypeScript already behaves. The user has decided (option A, see "Decision" above); the CORE-003 Statute decision still has to be proposed and approved.
 
 Today the languages differ:
 
@@ -31,17 +35,17 @@ Measured on 2026-11-17 on this repository (`docs/rebuild-step5-speed.md`, B5), R
 
 ## Where
 
-- Decision: CORE-003 (`statute/rules/core.md`) already describes the outcome of a language without an index (syntax-only, `index-unavailable` warning naming the language and the reason), and its boundary says the resolution is syntax "once it is known there will be none". So the rule text need not change. Whether to accept less detail on unchanged languages is a product choice; if the user wants it recorded, propose a Statute decision with `statute decide` (it may add a boundary case: "a language with no changed file is not indexed, and the report says so"). Don't approve it in the same session without the user's explicit approval (AGENTS.md, Statute section).
+- Decision: **needs a Statute decision.** CORE-003 (`statute/rules/core.md`) lists the reasons a language ends without an index: no index could be built, indexing was cancelled, or indexes are turned off. Skipping a language on purpose because none of its files changed is a fourth reason and changes what the main report shows for that language, so it changes the guarantee. If the user picks option A (or B, which changes TypeScript), propose a decision with `statute decide` that adds the reason to CORE-003 and probably a boundary case ("a language with no changed file is not indexed, its files are syntax-only, and the `index-unavailable` warning says so"). TypeScript's current behaviour already skips its index in that case, so the decision should cover it too. Anything created is `proposed`; run `statute approve` only after the user explicitly approves that decision (AGENTS.md, Statute section). No decision was created when this bean was written.
 - Code, if A is chosen: `crates/core/src/session.rs` (`Session::open` in-scope rules, `Session::bazel_units`, the `none` reason of `Units`, `Session::refine` before each language), tests in `crates/core/tests/core_rules.rs` (CORE-003 cases).
 
 ## Acceptance criteria
 
-- The user has chosen A, B or C, and the choice is recorded in this bean (and in a Statute decision if they want one).
+- The user has chosen A, B or C, and the choice is recorded in this bean. For A or B, a Statute decision changing CORE-003 is proposed and approved by the user before the code is merged; for C, record why the inconsistency stays.
 - If A: `f1df7b4^..f1df7b4 --target //app:bundle` from empty caches takes at most 25 s, runs no Swift index build, and its report differs from today's only in Swift's `resolution` (`syntax` instead of `index`), Swift's `indexedFiles`, the `index-unavailable`/`index-partial`/`checks-held-back` warnings for Swift, and edge reference details among Swift components, each difference listed in the bean when done. A UI-only change still indexes TypeScript and, if a Swift file changed, Swift.
 - If A: a CORE-003 test asserts that a language with no changed file is syntax-only with an `index-unavailable` warning that names that reason.
 - `bazel test //...` passes.
 
 ## Dependencies and constraints
 
-- Blocked on the user's decision. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
+- The user's product decision is made (option A). Before code: propose the CORE-003 decision with `statute decide` and get the user's explicit approval. Independent of the other tasks of the epic, but changes `Session::open` and `Session::refine` in `session.rs`, so merge one at a time with them.
 - No `app/src` change: the UI already shows `index-unavailable` warnings and per-language coverage.
