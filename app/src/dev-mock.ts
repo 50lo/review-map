@@ -36,6 +36,19 @@ export async function install(): Promise<void> {
         case "set_menu_state":
           // The browser has no menu bar; its "menu" event never comes.
           return null;
+        case "copy_text":
+          // A click in the page allows the browser's clipboard.
+          await navigator.clipboard.writeText(String(args.text));
+          return null;
+        case "export_notes": {
+          // The browser has no save dialog for the page; it downloads instead.
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([String(args.markdown)], { type: "text/markdown" }));
+          a.download = "review-notes.md";
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+          return "review-notes.md";
+        }
         case "log_ui_error":
           console.error("ui error:", args.message);
           return null;

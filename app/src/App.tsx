@@ -25,6 +25,8 @@ import { validate } from "./load";
 import { MapView } from "./MapView";
 import { focusToHash, hashToFocus, levelOf, type Focus } from "./nav";
 import { ReviewItemPage, InterfacePage, LocationPage } from "./Pages";
+import { NotesButton, ReviewProgress } from "./Notes";
+import { notesMenuAction } from "./notesExport";
 import { initReview, useReview } from "./review";
 import { Sidebar } from "./Sidebar";
 import { forgetSources, resetSources } from "./source";
@@ -94,18 +96,14 @@ const sameFocus = (a: Focus, b: Focus) => JSON.stringify(a) === JSON.stringify(b
 /**
  * The toolbar's "what next" control, at every level. On a review item: the region's place in risk order
  * with previous and next. Elsewhere: the next unreviewed review item. Progress counts review items, the
- * same numbers as the Overview's Progress section. Hidden when the report has no risk regions.
+ * same numbers as the Overview's Progress section; once all are reviewed, it offers to copy the notes.
+ * Hidden when the report has no risk regions.
  */
 function NextControl({ index, focus, setFocus }: { index: Index; focus: Focus; setFocus: (f: Focus) => void }) {
-  const { reviewed } = useReview();
+  const { reviewed, notes } = useReview();
   if (index.riskOrder.length === 0) return null;
   const { done, total } = reviewProgress(index, reviewed);
-  const allDone = total > 0 && done === total;
-  const progress = (
-    <span className={`next-progress ${allDone ? "all-done" : ""}`} title={`${done} of ${total} review items reviewed. Tests, generated code and cosmetic changes aren't counted.`}>
-      {allDone ? `All ${total} reviewed` : `${done}/${total} reviewed`}
-    </span>
-  );
+  const progress = <ReviewProgress done={done} total={total} notes={notes} />;
   const order = `${index.llm ? "LLM " : ""}risk`;
   if (focus?.type === "reviewItem") {
     const pos = regionPosition(index, focus);
@@ -291,18 +289,24 @@ export function App() {
     setVariant("indexed");
   }, []);
 
-  // The menu bar's File → New Review… and View → Show Name-Matched Comparison (app/src-tauri/src/menu.rs):
-  // the app is told when they can be used and whether the comparison is on screen, and sends their clicks.
+  // The menu bar's File → New Review…, File → Export Notes…, Edit → Copy Notes as Markdown and View → Show
+  // Name-Matched Comparison (app/src-tauri/src/menu.rs): the app is told when they can be used and whether
+  // the comparison is on screen, and sends their clicks. The notes stay loaded after New Review…, so the
+  // notes items also need a review on screen.
+  const { notes } = useReview();
   const running = !!job?.running || starting;
   const nameBased = variant === "name-based" && !!byName;
-  const menu = { canStartNew: !!report && !running, canCompare: !!report && !running && !comparing, nameBased };
+  const hasNotes = !!report && Object.keys(notes).length > 0;
+  const menu = { canStartNew: !!report && !running, canCompare: !!report && !running && !comparing, nameBased, hasNotes };
   useEffect(() => {
     backend.setMenuState(menu).catch((e) => backend.logUiError(`menu state: ${e?.message ?? e}`));
-  }, [menu.canStartNew, menu.canCompare, menu.nameBased]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [menu.canStartNew, menu.canCompare, menu.nameBased, menu.hasNotes]); // eslint-disable-line react-hooks/exhaustive-deps
   const onMenu = useRef<(id: string) => void>(() => undefined);
   onMenu.current = (id) => {
     if (id === "new-review" && menu.canStartNew) newReview();
     else if (id === "compare-name-based" && menu.canCompare) compare(variant === "name-based" ? "indexed" : "name-based");
+    // File → Export Notes… and Edit → Copy Notes as Markdown.
+    else if (menu.hasNotes && notesMenuAction(id, notes)) return;
     // An ignored click: macOS has flipped the check mark already, so put it back.
     else backend.setMenuState(menu).catch(() => undefined);
   };
@@ -348,7 +352,7 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
       /* storage unavailable: the choice just doesn't persist */
     }
   }, []);
-  const { reviewed } = useReview();
+  const { reviewed, notes } = useReview();
   const [focusState, setFocusState] = useState<Focus>(readFocus);
   // Components whose unchanged neighbors were added to the map, and groups drawn as one node.
   const [expandedState, setExpanded] = useState<Set<string>>(() => new Set());
@@ -512,7 +516,10 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
             </button>
           )}
         </div>
-        <NextControl index={index} focus={focus} setFocus={setFocus} />
+        <div className="toolbar-end">
+          <NotesButton notes={notes} regions={index.regions} setFocus={setFocus} />
+          <NextControl index={index} focus={focus} setFocus={setFocus} />
+        </div>
       </header>
       {status}
       <main className={`body ${level > 1 ? "paged" : ""}`}>

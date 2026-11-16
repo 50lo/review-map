@@ -343,14 +343,68 @@ fn log_ui_error(message: String) {
     log(format!("ui error: {text}"));
 }
 
-/// The UI's state for the menu bar's two items: whether New Review… and the comparison can be used, and
-/// whether the comparison report is on screen (the comparison item's check mark).
+/// The UI's state for the menu bar's own items: whether New Review…, the comparison and the two notes items
+/// can be used, and whether the comparison report is on screen (the comparison item's check mark).
 #[tauri::command]
 fn set_menu_state(app: AppHandle, state: menu::MenuState) -> Result<(), String> {
-    log(format!("ui: menu state: new review {}, comparison {}, comparison shown {}", state.can_start_new, state.can_compare, state.name_based));
+    log(format!(
+        "ui: menu state: new review {}, comparison {}, comparison shown {}, notes {}",
+        state.can_start_new, state.can_compare, state.name_based, state.has_notes
+    ));
     match app.try_state::<menu::AppMenu<tauri::Wry>>() {
         Some(items) => items.apply(state).map_err(|e| e.to_string()),
         None => Ok(()),
+    }
+}
+
+/// Puts text on the system clipboard, for the notes' Copy actions. Through the app rather than the web view's
+/// clipboard API, which WebKit allows only during a click in the page: Edit → Copy Notes as Markdown is a click
+/// in the menu bar.
+#[tauri::command]
+fn copy_text(text: String) -> Result<(), String> {
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    // pbcopy reads its input in the locale's encoding; an app opened from Finder has none, and anything
+    // beyond ASCII would be mangled.
+    let mut child = Command::new("/usr/bin/pbcopy")
+        .env("LANG", "en_US.UTF-8")
+        .env("LC_CTYPE", "UTF-8")
+        .stdin(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("pbcopy: {e}"))?;
+    child.stdin.take().ok_or("pbcopy: no input")?.write_all(text.as_bytes()).map_err(|e| format!("pbcopy: {e}"))?;
+    let status = child.wait().map_err(|e| format!("pbcopy: {e}"))?;
+    if !status.success() {
+        log(format!("ui: copying {} bytes failed: pbcopy {status}", text.len()));
+        return Err(format!("pbcopy {status}"));
+    }
+    log(format!("ui: copied {} bytes to the clipboard", text.len()));
+    Ok(())
+}
+
+/// Saves the review notes (Markdown) where the person picks in the system's save dialog, `review-notes.md`
+/// by default. The path of the saved file, or None when the dialog was dismissed. The web view itself can't
+/// save: WKWebView drops a download link's navigation when the app sets no download handler.
+///
+/// Async, so it runs off the main thread: the dialog runs on the main thread and this waits for it.
+#[tauri::command]
+async fn export_notes(app: AppHandle, markdown: String) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    let picked = app.dialog().file().set_title("Export Notes").set_file_name("review-notes.md").add_filter("Markdown", &["md"]).blocking_save_file();
+    let Some(picked) = picked else {
+        log("ui: export notes: dismissed");
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    match std::fs::write(&path, markdown.as_bytes()) {
+        Ok(()) => {
+            log(format!("ui: exported notes ({} bytes) to {}", markdown.len(), path.display()));
+            Ok(Some(path.display().to_string()))
+        }
+        Err(e) => {
+            log(format!("ui: exporting notes to {} failed: {e}", path.display()));
+            Err(format!("Couldn't save {}: {e}", path.display()))
+        }
     }
 }
 
@@ -488,7 +542,9 @@ pub fn run() {
             recent_reviews,
             repo_defaults,
             log_ui_error,
-            set_menu_state
+            set_menu_state,
+            copy_text,
+            export_notes
         ])
         .on_menu_event(menu::on_event)
         .setup(move |app| {

@@ -183,13 +183,19 @@ code,
   gap: 4px;
   cursor: pointer;
 }
-/* "What next" at the right end of the toolbar, at every level. */
-.next-control {
+/* The right end of the toolbar, at every level: the Notes button, then "what next". */
+.toolbar-end {
   display: flex;
   align-items: center;
   gap: 10px;
   flex: none;
   margin-left: auto;
+}
+.next-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: none;
   white-space: nowrap;
   font-size: 13px;
 }
@@ -197,7 +203,8 @@ code,
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  max-width: 200px;
+  /* Narrow enough that the Notes button fits beside it on one row at a 1100 px window. */
+  max-width: 160px;
 }
 .next-name {
   overflow: hidden;
@@ -1833,4 +1840,49 @@ code,
   white-space: pre-wrap;
   font-size: 12px;
   color: var(--muted);
+}
+
+/* ---------- notes: the toolbar's Notes button and popover, the finish prompt ---------- */
+
+.notes-control {
+  position: relative;
+  flex: none;
+}
+.notes-btn[aria-expanded="true"] {
+  border-color: var(--accent);
+}
+.notes-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+/* The notes hang over the map or the page, right-aligned under the button. */
+.notes-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  width: 400px;
+  max-width: calc(100vw - 24px);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 10px 12px;
+  white-space: normal;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+}
+.notes-popover .notes-list li + li {
+  margin-top: 10px;
+}
+.note-location {
+  overflow-wrap: anywhere;
+}
+.notes-popover .notes-actions {
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.finish-notes {
+  white-space: nowrap;
 }

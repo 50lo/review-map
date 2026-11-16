@@ -22,7 +22,8 @@ import {
 } from "./graph";
 import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
 import { FindingsSection } from "./FindingsSection";
-import { notesMarkdown, useReview } from "./review";
+import { NotesActions, NotesList } from "./Notes";
+import { useReview } from "./review";
 import type { Component, Edge, ReviewItem } from "./types";
 import { ChangeTag, Chips, RankingToggle, LLMSummary, ReviewedBox, Signature, StatusDot } from "./ui";
 
@@ -253,49 +254,16 @@ function ReviewSection({ index, setFocus }: { index: Index; setFocus: Props["set
 
 /** Notes on regions, each leading back to its region, and the Markdown export. */
 function NotesSection({ index, setFocus }: { index: Index; setFocus: Props["setFocus"] }) {
-  const review = useReview();
-  const [copied, setCopied] = useState(false);
-  const notes = Object.entries(review.notes).sort(([, a], [, b]) => a.file.localeCompare(b.file) || a.startLine - b.startLine);
-  if (notes.length === 0) return null;
-  const md = notesMarkdown(review.notes);
-  const download = () => {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" }));
-    a.download = "review-notes.md";
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
+  const { notes } = useReview();
+  const count = Object.keys(notes).length;
+  if (count === 0) return null;
   return (
     <section>
       <h2>
-        Notes <span className="muted">{notes.length}</span>
+        Notes <span className="muted">{count}</span>
       </h2>
-      <ul className="notes-list">
-        {notes.map(([id, n]) => (
-          <li key={id}>
-            <button className="link mono small" onClick={() => setFocus(index.regions.has(id) ? { type: "reviewItem", id: n.reviewItem, region: id } : { type: "location", side: n.side, file: n.file, line: n.startLine })}>
-              {n.label}
-            </button>
-            <div className="small">{n.text}</div>
-          </li>
-        ))}
-      </ul>
-      <p className="small">
-        <button
-          className="btn"
-          onClick={() =>
-            navigator.clipboard?.writeText(md).then(
-              () => setCopied(true),
-              () => setCopied(false),
-            )
-          }
-        >
-          {copied ? "Copied" : "Copy as Markdown"}
-        </button>{" "}
-        <button className="btn" onClick={download}>
-          Download .md
-        </button>
-      </p>
+      <NotesList notes={notes} regions={index.regions} onOpen={setFocus} />
+      <NotesActions notes={notes} />
     </section>
   );
 }

@@ -16,10 +16,16 @@ npm_link_all_packages(name = "node_modules")
 
 SOURCES = glob(
     ["src/**"],
-    exclude = ["src/**/*.test.ts"],
+    exclude = [
+        "src/**/*.test.ts",
+        "src/**/*.test.tsx",
+    ],
 )
 
-TESTS = glob(["src/**/*.test.ts"])
+TESTS = glob([
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+])
 
 CONFIG = [
     "package.json",

@@ -80,11 +80,18 @@ export interface MenuState {
   canCompare: boolean;
   /** The comparison report is on screen: the comparison item's check mark. */
   nameBased: boolean;
+  /** A review is open and has at least one note: File → Export Notes… and Edit → Copy Notes as Markdown are enabled. */
+  hasNotes: boolean;
 }
 
 export const setMenuState = (state: MenuState) => invoke<void>("set_menu_state", { state });
 
-/** Calls `cb` with the id of a menu bar item when it is chosen. */
+/** Puts text on the system clipboard, through the app: WebKit allows the page's clipboard only during a click in it. */
+export const copyText = (text: string) => invoke<void>("copy_text", { text });
+/** Saves Markdown where the person picks in the save dialog (`review-notes.md` by default). The path, or null when dismissed. */
+export const exportNotes = (markdown: string) => invoke<string | null>("export_notes", { markdown });
+
+/** Calls `cb` with the id of a menu bar item when it is chosen: `new-review`, `compare-name-based`, `export-notes` or `copy-notes`. */
 export function onMenu(cb: (id: string) => void): Promise<() => void> {
   return listen<{ id: string }>("menu", (e) => cb(e.payload.id));
 }
