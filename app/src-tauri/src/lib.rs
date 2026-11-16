@@ -9,6 +9,7 @@
 mod editor;
 mod menu;
 mod settings;
+mod zoom;
 
 use reviewmap_core::git::Repo;
 use reviewmap_core::llm::LlmOptions;
@@ -551,6 +552,10 @@ pub fn run() {
             // Without the menu bar the app still reviews; the menu's two items are then missing.
             if let Err(e) = menu::install(app.handle()) {
                 log(format!("the menu bar could not be built: {e}"));
+            }
+            // The zoom chosen last time, from View → Zoom In or Zoom Out.
+            if let Some(z) = loaded.zoom {
+                zoom::apply(app.handle(), zoom::clamp(Some(z)));
             }
             let args: Vec<String> = std::env::args().collect();
             if let Some(request) = request_from_args(&args, loaded.llm.as_ref()) {

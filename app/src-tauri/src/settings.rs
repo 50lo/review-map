@@ -8,7 +8,8 @@
 //!              "node": "/path/to/node/bin/node", "yarn": "/path/to/yarn" },  // npx and corepack come from node's directory
 //!   "cacheLimitGb": 30,                        // syntax, index, and Bazel action caches together
 //!   "idleWorkspaceDays": 30,                   // app-owned Bazel workspaces of repositories unused this long are removed
-//!   "llm": { "tool": "claude", "model": "sonnet" }  // the LLM pass for every review; off when missing
+//!   "llm": { "tool": "claude", "model": "sonnet" },  // the LLM pass for every review; off when missing
+//!   "zoom": 1.25                               // the window's zoom, set with View → Zoom In and Zoom Out
 //! }
 //! ```
 //!
@@ -52,6 +53,9 @@ pub struct Settings {
     /// The LLM pass to run on every review. None: off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub llm: Option<LlmOptions>,
+    /// The window's zoom, 1 when missing. Set from View → Zoom In, Zoom Out and Actual Size.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub zoom: Option<f64>,
 }
 
 impl Settings {
@@ -103,5 +107,12 @@ pub fn remember(request: &ReviewRequest) {
     settings.recent.retain(|r| !(r.repo == entry.repo && r.base == entry.base && r.head == entry.head));
     settings.recent.insert(0, entry);
     settings.recent.truncate(10);
+    save(&settings);
+}
+
+/// Keeps the window's zoom; 1 is the default and is not written.
+pub fn set_zoom(zoom: f64) {
+    let mut settings = load();
+    settings.zoom = if (zoom - 1.0).abs() < 0.001 { None } else { Some(zoom) };
     save(&settings);
 }

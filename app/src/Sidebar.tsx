@@ -22,6 +22,7 @@ import {
 } from "./graph";
 import { findingsForComponent, findingsForEdge, findingsOf } from "./findings";
 import { FindingsSection } from "./FindingsSection";
+import { NEXT_REGION_KEY, PREVIOUS_REGION_KEY } from "./keys";
 import { NotesActions, NotesList } from "./Notes";
 import { useReview } from "./review";
 import type { Component, Edge, ReviewItem } from "./types";
@@ -90,7 +91,9 @@ function Overview({ index, setFocus, setLLM }: { index: Index; setFocus: Props["
             <button className="btn primary" onClick={() => setFocus(nextUnreviewed(index, review.reviewed) ?? stepRegion(index, null, 1))}>
               Review {index.riskOrder.length} regions by risk ›
             </button>{" "}
-            <span className="muted kbd-hint">or press j and k</span>
+            <span className="muted kbd-hint">
+              or press {NEXT_REGION_KEY} and {PREVIOUS_REGION_KEY}
+            </span>
           </p>
         )}
         {items.length === 0 && <p className="muted">No changes that need review.</p>}

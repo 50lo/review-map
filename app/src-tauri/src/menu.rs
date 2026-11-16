@@ -1,7 +1,8 @@
 //! The app's menu bar: Tauri's default menu, plus File → New Review…, File → Export Notes…, Edit → Copy
 //! Notes as Markdown and View → Show Name-Matched Comparison. The UI decides what these items do and when
 //! they are enabled: a click is sent to it as the `menu` event, and it reports its state back with
-//! `set_menu_state`.
+//! `set_menu_state`. View → Zoom In, Zoom Out and Actual Size are the app's own and always enabled
+//! (`zoom.rs`).
 //!
 //! The rest is the default menu item for item, so the app menu (About, Hide, Quit) and the Edit menu (copy
 //! and paste in the web view) behave as before. Quit stays the predefined item, which ends the app through
@@ -15,6 +16,9 @@ pub const NEW_REVIEW: &str = "new-review";
 pub const COMPARE_NAME_BASED: &str = "compare-name-based";
 pub const EXPORT_NOTES: &str = "export-notes";
 pub const COPY_NOTES: &str = "copy-notes";
+const ZOOM_IN: &str = "zoom-in";
+const ZOOM_OUT: &str = "zoom-out";
+const ZOOM_RESET: &str = "zoom-reset";
 /// The items whose clicks go to the UI.
 const OWN: [&str; 4] = [NEW_REVIEW, COMPARE_NAME_BASED, EXPORT_NOTES, COPY_NOTES];
 const EVENT: &str = "menu";
@@ -70,6 +74,9 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     let compare = CheckMenuItem::with_id(app, COMPARE_NAME_BASED, "Show Name-Matched Comparison", false, false, None::<&str>)?;
     let export_notes = MenuItem::with_id(app, EXPORT_NOTES, "Export Notes…", false, Some("CmdOrCtrl+E"))?;
     let copy_notes = MenuItem::with_id(app, COPY_NOTES, "Copy Notes as Markdown", false, Some("CmdOrCtrl+Shift+C"))?;
+    let zoom_in = MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, Some("CmdOrCtrl+Equal"))?;
+    let zoom_out = MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, Some("CmdOrCtrl+Minus"))?;
+    let zoom_reset = MenuItem::with_id(app, ZOOM_RESET, "Actual Size", true, Some("CmdOrCtrl+0"))?;
     let menu = Menu::with_items(
         app,
         &[
@@ -125,6 +132,10 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
                 true,
                 &[
                     &compare,
+                    &PredefinedMenuItem::separator(app)?,
+                    &zoom_reset,
+                    &zoom_in,
+                    &zoom_out,
                     #[cfg(target_os = "macos")]
                     &PredefinedMenuItem::separator(app)?,
                     #[cfg(target_os = "macos")]
@@ -152,10 +163,17 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Sends a click on one of the app's own items to the UI. Other items (the predefined ones) act by themselves.
+/// Sends a click on one of the UI's items to the UI, and zooms for the zoom items. Other items (the predefined
+/// ones) act by themselves.
 pub fn on_event<R: Runtime>(app: &AppHandle<R>, event: MenuEvent) {
     let id = event.id().as_ref();
-    if OWN.contains(&id) {
-        let _ = app.emit(EVENT, Clicked { id: id.to_string() });
+    match id {
+        ZOOM_IN => crate::zoom::change(app, 1),
+        ZOOM_OUT => crate::zoom::change(app, -1),
+        ZOOM_RESET => crate::zoom::change(app, 0),
+        _ if OWN.contains(&id) => {
+            let _ = app.emit(EVENT, Clicked { id: id.to_string() });
+        }
+        _ => {}
     }
 }

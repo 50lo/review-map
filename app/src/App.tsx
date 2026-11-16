@@ -20,6 +20,7 @@ import {
   type Index,
   type MapOptions,
 } from "./graph";
+import { NEXT_REGION_KEY, PREVIOUS_REGION_KEY, regionStep } from "./keys";
 import { lastName } from "./levels";
 import { validate } from "./load";
 import { MapView } from "./MapView";
@@ -112,12 +113,12 @@ function NextControl({ index, focus, setFocus }: { index: Index; focus: Focus; s
     const next = stepRegion(index, focus, 1);
     return (
       <div className="next-control">
-        <span className="stepper" title={`Regions across the change, highest ${order} first (keys k and j)`}>
-          <button className="btn" title="Previous region (k)" disabled={sameFocus(prev, focus)} onClick={() => setFocus(prev)}>
+        <span className="stepper" title={`Regions across the change, highest ${order} first (keys ${PREVIOUS_REGION_KEY} and ${NEXT_REGION_KEY})`}>
+          <button className="btn" title={`Previous region (${PREVIOUS_REGION_KEY})`} disabled={sameFocus(prev, focus)} onClick={() => setFocus(prev)}>
             ‹
           </button>
           <span className="small">{pos ? `Region ${pos} of ${n}` : `${n} regions`}</span>
-          <button className="btn" title="Next region (j)" disabled={sameFocus(next, focus)} onClick={() => setFocus(next)}>
+          <button className="btn" title={`Next region (${NEXT_REGION_KEY})`} disabled={sameFocus(next, focus)} onClick={() => setFocus(next)}>
             ›
           </button>
         </span>
@@ -132,7 +133,7 @@ function NextControl({ index, focus, setFocus }: { index: Index; focus: Focus; s
       {target && item && (
         <button
           className="btn primary next-btn"
-          title={`Next unreviewed: ${item.qualifiedName}, at its riskiest region (by ${order}).\nKeys: j next region, k previous region.`}
+          title={`Next unreviewed: ${item.qualifiedName}, at its riskiest region (by ${order}).\nKeys: ${NEXT_REGION_KEY} next region, ${PREVIOUS_REGION_KEY} previous region.`}
           onClick={() => setFocus(target)}
         >
           Next: <span className="next-name">{lastName(item.qualifiedName)}</span> ›
@@ -409,14 +410,17 @@ function Viewer({ report, status }: { report: ChangeReport; status: ReactNode })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      // Text fields keep their own keys: there ⌘← and ⌘→ move to the start and end of the line.
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
       // Next and previous region in risk order, from anywhere.
-      if (e.key === "j" || e.key === "]" || e.key === "k" || e.key === "[") {
-        const next = e.key === "j" || e.key === "]" ? nextRegion(index, reviewed, readFocus()) : stepRegion(index, readFocus(), -1);
+      const step = regionStep(e);
+      if (step !== 0) {
+        e.preventDefault();
+        const next = step > 0 ? nextRegion(index, reviewed, readFocus()) : stepRegion(index, readFocus(), -1);
         if (JSON.stringify(next) !== JSON.stringify(readFocus())) setFocus(next);
         return;
       }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key !== "Escape") return;
       const f = readFocus();
       // A code location has no parent of its own; go back to where it was opened from.
