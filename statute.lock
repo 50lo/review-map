@@ -15,7 +15,7 @@
 {"source": "CORE-002", "target": "crates/core/src/llm/cli.rs#Runner.call", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "a839210ede86053bd0dd0bd4af87dbe16ced952c031c9ec279a6d7bfe6d99851"}
 {"source": "CORE-002", "target": "crates/core/src/llm/mod.rs#Annotator.run", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "eef3d1e0d2c1f7d8517593bbb32db19d671dc21e0d0b70d7c1c2cc5372c0d391"}
 {"source": "CORE-002", "target": "crates/core/src/session.rs#Session.open", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "3b8da3486257934ee38c1d409faee0385373a9475d94a1feaff0b8175d3877a2"}
-{"source": "CORE-002", "target": "crates/core/src/session.rs#Session.refine", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "48325fee526f553d88b13026fb11356dac0e155fb2ffcc5d4978bea1184fd0dc"}
+{"source": "CORE-002", "target": "crates/core/src/session.rs#Session.refine", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "20b02dbaa96a374b30aedd8e02345a1c29c81c6109f097bc5c6c3aecc3a6faec"}
 {"source": "CORE-002", "target": "crates/core/tests/bazel_fixtures.rs#swift_index_through_bazel", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "a81b90ac711e029396b234883fa9bb65657cbfd1047eb33b9d9fb40a8414684c"}
 {"source": "CORE-002", "target": "crates/core/tests/bazel_fixtures.rs#typescript_index_through_bazel", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "8c8c26331072b58c94db82278e60e4e84b9a3836d617995f70fe873a31badd0f"}
 {"source": "CORE-002", "target": "crates/core/tests/core_rules.rs#core_002_analysis_leaves_the_repo_untouched", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "8d5d3d3b471deede39c4becbf066309cfba82416c4b86bb926b801cc763c0a02"}

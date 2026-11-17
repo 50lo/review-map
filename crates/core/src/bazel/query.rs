@@ -244,6 +244,20 @@ fn expand_filegroups(targets: &mut BTreeMap<String, TargetNode>) {
 
 /// The graph of one workspace at one side. `log` gets a line per attempt.
 pub fn load_graph(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cancel, log: Log) -> Result<WorkspaceGraph> {
+    load_graph_checked(env, workspace, scope, cancel, log).map(|(graph, _)| graph)
+}
+
+/// The query's fixed shape: its flags and the attributes it reads. Part of the graph cache's key, so a
+/// change to what the query asks for never reuses a graph from before it.
+pub fn query_shape() -> String {
+    format!("--keep_going --noimplicit_deps --notool_deps --proto:output_rule_attrs={} cquery=jsonproto query=streamed_jsonproto", attr_names())
+}
+
+/// `load_graph`, and whether the graph is complete: the query the scope asks for (`cquery` with targets,
+/// `query //...` without) exited cleanly. A graph from a fallback or from a query that failed for some
+/// targets is not complete, and the graph cache doesn't keep it.
+pub fn load_graph_checked(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cancel, log: Log) -> Result<(WorkspaceGraph, bool)> {
+    let mut complete = false;
     let mut graph = WorkspaceGraph { workspace: workspace.to_string(), scope_targets: scope.targets.clone(), scope: scope.kind.clone(), ..Default::default() };
     let attrs = format!("--proto:output_rule_attrs={}", attr_names());
     let common = |command: &str| -> Cmd { env.command(command).what("graph").arg("--keep_going").arg("--noimplicit_deps").arg("--notool_deps").arg(attrs.clone()) };
@@ -255,8 +269,9 @@ pub fn load_graph(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cance
         log(format!("Querying the configured build graph of {}", scope.targets.join(" ")));
         let cmd = common("cquery").arg("--output=jsonproto").args(env.args.iter().cloned()).arg(expression.clone());
         match run_query(&cmd, cancel) {
-            Ok(out) => match serde_json::from_slice::<ProtoResults>(&out) {
+            Ok((out, clean)) => match serde_json::from_slice::<ProtoResults>(&out) {
                 Ok(parsed) if !parsed.results.is_empty() => {
+                    complete = clean;
                     for r in parsed.results {
                         let config = r.configuration.and_then(|c| c.checksum);
                         if let Some(rule) = r.target.and_then(|t| t.rule) {
@@ -279,7 +294,8 @@ pub fn load_graph(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cance
         log(format!("Querying the build graph of {what}"));
         let cmd = common("query").arg("--output=streamed_jsonproto").arg(expr);
         match run_query(&cmd, cancel) {
-            Ok(out) => {
+            Ok((out, clean)) => {
+                complete = clean && scope.kind == "all";
                 for line in out.split(|b| *b == b'\n').filter(|l| !l.is_empty()) {
                     if let Ok(t) = serde_json::from_slice::<ProtoTarget>(line) {
                         if let Some(rule) = t.rule {
@@ -298,18 +314,18 @@ pub fn load_graph(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cance
         return Err(anyhow!("Bazel could not report the build graph{}: {}", if workspace.is_empty() { String::new() } else { format!(" of {workspace}") }, errors.join("; ")));
     }
     expand_filegroups(&mut graph.targets);
-    Ok(graph)
+    Ok((graph, complete))
 }
 
 /// Runs a query. With `--keep_going`, Bazel exits non-zero when some targets failed and still prints
-/// the rest, so output counts even then.
-fn run_query(cmd: &Cmd, cancel: &Cancel) -> Result<Vec<u8>> {
+/// the rest, so output counts even then. Says whether the command exited cleanly.
+fn run_query(cmd: &Cmd, cancel: &Cancel) -> Result<(Vec<u8>, bool)> {
     match cmd.output(cancel) {
-        Ok(out) => Ok(out),
+        Ok(out) => Ok((out, true)),
         Err(e) => {
             cancel.check()?;
             match cmd.output_lenient(cancel) {
-                Ok(out) if !out.is_empty() => Ok(out),
+                Ok(out) if !out.is_empty() => Ok((out, false)),
                 _ => Err(e),
             }
         }
