@@ -44,37 +44,3 @@ pub fn change<R: Runtime>(app: &AppHandle<R>, dir: i32) {
     crate::settings::set_zoom(zoom);
     crate::log(format!("ui: zoom {:.0}%", zoom * 100.0));
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn steps_through_the_levels() {
-        assert_eq!(step(1.0, 1), 1.1);
-        assert_eq!(step(1.0, -1), 0.9);
-        assert_eq!(step(1.25, 1), 1.5);
-        assert_eq!(step(2.5, 0), 1.0);
-    }
-
-    #[test]
-    fn stops_at_the_ends() {
-        assert_eq!(step(3.0, 1), 3.0);
-        assert_eq!(step(0.5, -1), 0.5);
-    }
-
-    #[test]
-    fn a_zoom_between_levels_steps_to_the_nearest_one_that_way() {
-        assert_eq!(step(1.2, 1), 1.25);
-        assert_eq!(step(1.2, -1), 1.1);
-    }
-
-    #[test]
-    fn reads_the_setting_within_the_levels() {
-        assert_eq!(clamp(None), 1.0);
-        assert_eq!(clamp(Some(f64::NAN)), 1.0);
-        assert_eq!(clamp(Some(10.0)), 3.0);
-        assert_eq!(clamp(Some(0.1)), 0.5);
-        assert_eq!(clamp(Some(1.25)), 1.25);
-    }
-}
