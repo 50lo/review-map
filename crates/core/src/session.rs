@@ -25,7 +25,7 @@ use crate::parse::cache::SyntaxCache;
 use crate::parse::swift_helper::SwiftHelper;
 use crate::parse::{kotlin, typescript, ParsedFile};
 use crate::paths::is_under;
-use crate::proc::{is_cancelled, Cancel};
+use crate::proc::{is_cancelled, timer, Cancel};
 use anyhow::{anyhow, Result};
 use rayon::prelude::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -131,6 +131,7 @@ pub struct Session {
 impl Session {
     /// Reads and parses the two revisions. The session can build a preliminary report afterwards.
     pub fn open(request: ReviewRequest, cancel: &Cancel, emit: Emit) -> Result<Session> {
+        let resolving = timer("open: resolve revisions");
         let repo = Repo::discover(&request.repo)?;
         let head_ref = request.head.clone().unwrap_or_else(|| repo.current_branch());
         let head_sha = repo.resolve(&head_ref)?;
@@ -150,9 +151,12 @@ impl Session {
             head_sha: head_sha.to_string(),
             uses_merge_base: request.use_merge_base,
         };
+        drop(resolving);
         emit(Event::Progress(format!("Reading {} and {}", &info.base_sha[..8], &info.head_sha[..8])));
+        let reading = timer("read trees");
         let base_tree = Arc::new(repo.tree(base_sha)?);
         let head_tree = Arc::new(repo.tree(head_sha)?);
+        drop(reading);
         cancel.check()?;
 
         // reviewmap.yml is read from the head commit's tree, not from the working tree (CORE-002).
@@ -163,7 +167,10 @@ impl Session {
 
         let languages = lang::all();
         let excludes = config.exclude_matchers();
+        let parsing = timer("parse both sides");
         let (base_files, head_files) = parse_sides(&repo, &base_tree, &head_tree, &languages, &excludes, cancel, emit)?;
+        drop(parsing);
+        let _scoping = timer("open: workspaces");
         let generated = |tree_files: &BTreeMap<String, Arc<ParsedFile>>| -> HashSet<String> {
             let mut matchers = config.generated_matchers();
             matchers.extend(languages.iter().flat_map(|l| l.generated_patterns().iter()).map(|p| Glob::new(p)));
@@ -265,6 +272,7 @@ impl Session {
     }
 
     fn build(&self, modes: BTreeMap<String, Mode>, variant: &str) -> ChangeReport {
+        let _timer = timer(format!("report build ({variant}, {} stage)", self.stage));
         let languages = self.languages();
         let all = lang::all();
         let layout = |source: &Arc<SideSource>, graph: Option<&SideGraph>| components::build(source, &all, &self.config, &self.workspaces, graph);
@@ -387,7 +395,10 @@ impl Session {
                     scopes.insert((side, w.clone()), scope.clone());
                     let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
                     emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
-                    match load_graph(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))) {
+                    let querying = timer(format!("graph {} workspace {w:?}", side.name()));
+                    let loaded = load_graph(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name()))));
+                    drop(querying);
+                    match loaded {
                         Ok(graph) => {
                             if side == Side::Head {
                                 info.graph = if graph.configured { "configured" } else { "unconfigured" }.to_string();
@@ -497,10 +508,16 @@ impl Session {
     fn trees<'t>(&self, trees: &'t mut Option<Trees>, cancel: &Cancel, emit: Emit) -> Result<&'t Trees> {
         if trees.is_none() {
             emit(Event::Progress("Waiting for this repository's app-owned workspaces".to_string()));
+            let locking = timer("workspace lock");
             let spaces = Workspaces::acquire(self.repo.root(), cancel)?;
+            drop(locking);
             let progress = |m: String| emit(Event::Progress(m));
+            let materializing = timer("materialize head tree");
             let head = spaces.materialize(&self.repo, Side::Head, &self.head.tree, &self.info.head_sha, cancel, &progress)?;
+            drop(materializing);
+            let materializing = timer("materialize base tree");
             let base = spaces.materialize(&self.repo, Side::Base, &self.base.tree, &self.info.base_sha, cancel, &progress)?;
+            drop(materializing);
             *trees = Some(Trees { spaces, head, base });
         }
         Ok(trees.as_ref().expect("the trees were just made"))
@@ -633,7 +650,10 @@ impl Session {
                 if files.is_empty() || !(units.exists)(&src, w) {
                     continue;
                 }
-                match build(w, side, &src, files) {
+                let indexing = timer(format!("index {language} {} {w:?}", side.name()));
+                let built_index = build(w, side, &src, files);
+                drop(indexing);
+                match built_index {
                     Ok(index) => *(if side == Side::Head { &mut pair.1 } else { &mut pair.0 }) = Some(index),
                     Err(e) => {
                         if is_cancelled(&e) {

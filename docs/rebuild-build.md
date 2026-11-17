@@ -42,6 +42,103 @@ bazel run @rules_rust//tools/rust_analyzer:gen_rust_project  # rust-project.json
 - `//app:test`, the UI's Vitest tests, which read the prototype's reports in `Tests/ReviewMapCoreTests/Fixtures`.
 - `//crates/core:bazel_fixtures`, the index builds from start to end. They start Bazel in nested workspaces made from fixtures that `.bazelignore` keeps out of this workspace (`crates/core/tests/fixtures`, and the prototype's `kotlin-bazel-indexed`). So the target runs outside the sandbox (`local`), one at a time (`exclusive`), is never cached (`no-cache`), reads the fixtures from the checkout, keeps the app's home in `target/reviewmap-test-home` so the nested Bazel servers and output bases stay warm, and inherits `PATH`, `HOME` and `JAVA_HOME` to find Bazel, the JDK and Xcode. A test whose tool is missing passes early and says `skipped: …` in its log (`bazel-testlogs/crates/core/bazel_fixtures/test.log`); `REVIEWMAP_SKIP_BAZEL_TESTS=1` skips them all (`--test_env=REVIEWMAP_SKIP_BAZEL_TESTS=1`).
 
+## Benchmarking a review
+
+Every review logs how long each of its steps took. The CLI's `--report` mode prints these lines to stderr among its progress lines, and the app writes them to its log, `<cache>/logs/app.log`. Each step ends with one line that gives its seconds and a label:
+
+```
+[timing] 62.09s cmd bazel build (swift index, head, workspace "")
+```
+
+Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` step holds its `cmd bazel build`. Kotlin's indexers also run several at a time. So the lines don't add up to the total. `scripts/bench-phases.py` reads these labels:
+
+| Label | Step |
+| --- | --- |
+| `cmd <program> [<bazel command>] (<what>, …)` | One external command (`Cmd` in `crates/core/src/proc.rs`). `<what>` is its purpose: `graph`, `swift index`, `typescript index`, `kotlin index`, `scip-typescript`, `yarn install`, `kotlin indexer`, `download`. Bazel commands add the side and the workspace (`head, workspace ""` for the root), never `--output_base` |
+| `open: resolve revisions`, `read trees`, `parse both sides`, `open: workspaces` | `Session::open` |
+| `workspace lock`, `materialize <side> tree` | `Session::trees`: the app-owned trees |
+| `graph <side> workspace "<w>"` | One workspace's build graph at one side (`load_graph`: its `cquery`, and its `query` when that fails) |
+| `index <language> <side> "<unit>"` | One language's index of one workspace or project at one side, cache hits included |
+| `swift merge stores (<side>, <n> stores)`, `swift helper read (<side>)` | Inside `index swift`: copying the index stores, and the Swift helper reading them |
+| `typescript resolve (<side>)` | Inside `index typescript`: turning the SCIP index into references |
+| `report build (<variant>, <stage> stage)` | One report (`Session::build`) |
+| `shutdown bazel servers (<n>)` | Stopping the review's Bazel servers at the end |
+| `write report`, `total` | The CLI: writing the `--report` file, and the whole run from `main` |
+
+`scripts/bench-review.sh` runs one review in a Review Map home of its own and keeps what it measured. Build the binaries the way the app bundle builds them, and copy them out of `bazel-bin`, because the next build replaces them:
+
+```bash
+bazel build --config=release //crates/cli:reviewmap //helper:reviewmap-swift-helper
+mkdir -p $S/bin && cp bazel-bin/crates/cli/reviewmap bazel-bin/helper/reviewmap-swift-helper $S/bin/
+scripts/bench-review.sh --bin $S/bin --home $S/homes/ui --out $S/runs/ui-cold --state cold $S/repo 6324470^ 6324470 --target //app:bundle
+scripts/bench-phases.py $S/runs/ui-cold $S/runs/ui-reopen   # the table of docs/rebuild-step5-speed.md, "Results"
+scripts/bench-review.sh --clean $S/homes/ui                 # stop the home's Bazel servers and delete it
+```
+
+The script `cd`s into the repository and runs `reviewmap <repo> --base B --head H --no-llm --report <out>/report.json [args…]` there with `REVIEWMAP_HOME=<home>`. It writes the following to `<out>`:
+
+- `log.txt`: every stderr line, prefixed with the seconds since the start.
+- `summary.txt`: the total time, the load average at start and end, peak RSS, and the disk use of `<home>/cache`.
+- `report.json`: the report.
+
+Its options:
+
+- `--compare <baseline report.json>` runs `diff <(jq -S . baseline) <(jq -S . new)` and fails when the two reports differ. Two runs of the same pair give the same report, cold or warm. Any difference is therefore a real change, as long as both runs used the same clone path and the same home path: the report names the repository's root, and some warnings name log files under the home.
+- `--profiles` sets `REVIEWMAP_PROFILE_DIR=<out>/profiles`. The core then copies Bazel's JSON trace profile (`<output_base>/command.profile.gz`, which every build and query rewrites) after each Bazel command except `info`, which writes none.
+- `--keep-bazel` sets `REVIEWMAP_KEEP_BAZEL=1`. The CLI then leaves the home's Bazel servers running at exit, as the app does between the reviews of one session, so the next run is a *session* run. The servers idle out after 15 minutes.
+- `--label` and `--state` name the run in the table.
+
+Use a scratch directory for every home, never `~/Library/Caches/reviewmap`; the script refuses that one. Don't run `bazel test //...` while a timed run is going. A *cold* run starts with `--clean`. *Reopen* means the same home with its servers stopped. *Session* means the previous run used `--keep-bazel`.
+
+### The step-5 scenarios
+
+These are the scenarios of [rebuild-step5-speed.md](rebuild-step5-speed.md) ("Scenarios"). They run on a scratch clone of `rebuild`, which has every commit they name, plus three synthetic commits. The commits are made with a fixed author, committer and date, so they get the same SHAs in every clone (`c82c903` bench-helper, `49cc6d7` bench-kotlin, `e51535a` bench-kotlin2):
+
+```bash
+git clone --branch rebuild "$(git rev-parse --show-toplevel)" $S/repo && cd $S/repo
+export GIT_AUTHOR_NAME=bench GIT_AUTHOR_EMAIL=bench@example.invalid GIT_AUTHOR_DATE='2026-11-17T00:00:00Z'
+export GIT_COMMITTER_NAME=bench GIT_COMMITTER_EMAIL=bench@example.invalid GIT_COMMITTER_DATE='2026-11-17T00:00:00Z'
+# Swift helper: an extension added to helper/Sources/reviewmap-swift-helper/Model.swift.
+git switch -q --detach 046c3e7
+printf '\nextension ParsedFile {\n    /// Synthetic change for benchmarks: the number of declarations.\n    var declarationCount: Int { decls.count }\n}\n' >> helper/Sources/reviewmap-swift-helper/Model.swift
+git commit -q -am 'bench: a Swift helper change' && git branch -f bench-helper
+# Kotlin: a function added to Store.kt, then (bench-kotlin2, on top) the same function added to Cache.kt.
+git switch -q --detach 046c3e7
+K=Tests/ReviewMapCoreTests/Fixtures/kotlin-bazel-indexed/head
+perl -0pi -e 's/\n}\n\z/\n\n    fun has(key: String): Boolean {\n        return load(key).isNotEmpty()\n    }\n}\n/' $K/store/Store.kt
+git commit -q -am 'bench: a Kotlin change' && git branch -f bench-kotlin
+perl -0pi -e 's/\n}\n\z/\n\n    fun has(key: String): Boolean {\n        return load(key).isNotEmpty()\n    }\n}\n/' $K/cache/Cache.kt
+git commit -q -am 'bench: a second Kotlin change' && git branch -f bench-kotlin2
+git switch -q rebuild && git rev-parse bench-helper bench-kotlin bench-kotlin2
+```
+
+`$S` is a scratch directory and `B="scripts/bench-review.sh --bin $S/bin"`. Each block starts from a cleaned home, and its runs follow one another in that home:
+
+```bash
+# UI: cold, then reopen the same pair; then the next pair after a reopen, and in a session.
+$B --home $S/homes/ui --out $S/runs/ui-cold --state cold $S/repo 6324470^ 6324470 --target //app:bundle
+$B --home $S/homes/ui --out $S/runs/ui-reopen --state "reopen, same pair" --compare $S/runs/ui-cold/report.json $S/repo 6324470^ 6324470 --target //app:bundle
+$B --home $S/homes/ui --out $S/runs/ui-next --state reopen --keep-bazel $S/repo 99f2be4^ 99f2be4 --target //app:bundle
+$B --home $S/homes/ui --out $S/runs/ui-next2 --state session --keep-bazel $S/repo bff6fe0^ bff6fe0 --target //app:bundle
+# Rust and Swift helper in a session: the next pairs in the UI home, servers warm.
+$B --home $S/homes/ui --out $S/runs/rust-session --state session --keep-bazel $S/repo f1df7b4^ f1df7b4 --target //app:bundle
+$B --home $S/homes/ui --out $S/runs/helper-session --state session --keep-bazel $S/repo 046c3e7 bench-helper --target //app:bundle
+# Mixed: 46 files, the root and four nested fixture workspaces, with the root warm.
+$B --home $S/homes/ui --out $S/runs/mixed-session --state "session (root warm, nested cold)" $S/repo 8cf8972 046c3e7 --target //app:bundle
+# No index (the UI pair, parsing, graph queries and reports only).
+$B --home $S/homes/noindex --out $S/runs/noindex --state cold $S/repo 6324470^ 6324470 --target //app:bundle --no-index
+# Rust: 9 .rs files in crates/core; Swift is indexed, TypeScript is not.
+$B --home $S/homes/rust --out $S/runs/rust-cold --state cold $S/repo f1df7b4^ f1df7b4 --target //app:bundle
+# Swift helper (synthetic).
+$B --home $S/homes/helper --out $S/runs/helper-cold --state cold $S/repo 046c3e7 bench-helper --target //app:bundle
+# Kotlin (synthetic), in the nested rules_kotlin fixture workspace: no --target, it gets //....
+$B --home $S/homes/kotlin --out $S/runs/kotlin-cold --state cold $S/repo 046c3e7 bench-kotlin
+$B --home $S/homes/kotlin --out $S/runs/kotlin-reopen --state "reopen, same pair" --keep-bazel --compare $S/runs/kotlin-cold/report.json $S/repo 046c3e7 bench-kotlin
+$B --home $S/homes/kotlin --out $S/runs/kotlin-next --state session $S/repo 046c3e7 bench-kotlin2
+```
+
+The analysis didn't record which review ran before its "Rust session", "Swift helper session" and "Mixed session" rows. They ran with the Swift index of their pair still to build and the root's servers warm, which is what running them in the UI home after the UI block gives. Compare later numbers with reruns of this list, not across the two. Before any `--state cold` run, use `scripts/bench-review.sh --clean <home>`. A cold mixed review starts 10 Bazel servers and needs a machine with memory to spare (see the report).
+
 ## What is gone
 
 - Cargo, npm and SwiftPM as ways to build: `helper/Package.swift` and `app/package-lock.json` are removed, and the code no longer looks for `helper/.build` or Cargo's `target/` directory. The CLI finds the app, and the core finds the helper, next to themselves in Bazel's output tree.

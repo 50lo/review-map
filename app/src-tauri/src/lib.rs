@@ -519,6 +519,8 @@ pub fn run() {
     let loaded = settings::load();
     settings::apply(&loaded);
     log(format!("started: {}", std::env::args().collect::<Vec<_>>().join(" ")));
+    // How long each step of a review took: Bazel commands, index reads, report builds (docs/rebuild-build.md).
+    reviewmap_core::proc::set_timing_log(|line: &str| log(line));
     let app = tauri::Builder::default()
         // Another start of the app lands here, in the instance that is already running.
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {

@@ -218,6 +218,7 @@ pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log:
         let mut cmd = job
             .env
             .command("build")
+            .what("swift index")
             .arg("--features=swift.index_while_building")
             .arg("--features=swift.use_global_index_store")
             .arg("--remote_download_regex=.*[.]indexstore(/.*)?")
@@ -267,9 +268,11 @@ pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log:
     let store_dir = cache.join("store");
     let _ = std::fs::remove_dir_all(&store_dir);
     let _ = std::fs::remove_dir_all(cache.join("db"));
+    let merging = crate::proc::timer(format!("swift merge stores ({}, {} stores)", job.side.name(), stores.len()));
     for store in &stores {
         merge_store(store, &store_dir).with_context(|| format!("could not copy {}", store.display()))?;
     }
+    drop(merging);
     let execution_root = job.env.info(&["execution_root"], cancel)?.remove("execution_root").unwrap_or_default();
     let mut roots = vec![IndexRoot { path: job.tree_dir.to_string_lossy().to_string(), prefix: String::new() }];
     if !execution_root.is_empty() {
@@ -285,7 +288,9 @@ pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log:
         prefix_map_root: (!execution_root.is_empty()).then_some(execution_root),
         files: job.files.clone(),
     };
+    let reading = crate::proc::timer(format!("swift helper read ({})", job.side.name()));
     let refs = helper.index(&request, cancel)?;
+    drop(reading);
     log(format!("Indexed {} of {} Swift files at {}{at} in {}s", refs.len(), job.files.len(), job.side.name(), start.elapsed().as_secs()));
     let partial = (!ok).then(|| format!("The Swift index build of {}{at} had errors, so the index covers only what compiled. Log: {}", job.side.name(), log_path.display()));
     if ok {
