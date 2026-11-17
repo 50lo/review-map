@@ -1,6 +1,7 @@
 //! The shared Bazel foundation: workspace discovery, app-owned reusable workspaces, and queries for
 //! target dependencies, source ownership, and configuration.
 
+pub mod cache;
 pub mod graph;
 pub mod query;
 pub mod workspace;

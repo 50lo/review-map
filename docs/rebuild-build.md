@@ -54,10 +54,10 @@ Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` st
 
 | Label | Step |
 | --- | --- |
-| `cmd <program> [<bazel command>] (<what>, …)` | One external command (`Cmd` in `crates/core/src/proc.rs`). `<what>` is its purpose: `graph`, `swift index`, `typescript index`, `kotlin index`, `scip-typescript`, `yarn install`, `kotlin indexer`, `download`. Bazel commands add the side and the workspace (`head, workspace ""` for the root), never `--output_base` |
+| `cmd <program> [<bazel command>] (<what>, …)` | One external command (`Cmd` in `crates/core/src/proc.rs`). `<what>` is its purpose: `graph`, `graph key` (`bazel --version` for the graph cache's key, once per Bazel version and process; it has no side or workspace), `swift index`, `typescript index`, `kotlin index`, `scip-typescript`, `yarn install`, `kotlin indexer`, `download`. Bazel commands add the side and the workspace (`head, workspace ""` for the root), never `--output_base` |
 | `open: resolve revisions`, `read trees`, `parse both sides`, `open: workspaces` | `Session::open` |
 | `workspace lock`, `materialize <side> tree` | `Session::trees`: the app-owned trees |
-| `graph <side> workspace "<w>"` | One workspace's build graph at one side (`load_graph`: its `cquery`, and its `query` when that fails) |
+| `graph <side> workspace "<w>"` | One workspace's build graph at one side: the graph cache's key and lookup, then on a miss `load_graph` (its `cquery`, and its `query` when that fails). A hit logs `Build graph of <side>: cached`, and base's graph taken from head's in the same review logs `Build graph of base: same as head` (`crates/core/src/bazel/cache.rs`) |
 | `index <language> <side> "<unit>"` | One language's index of one workspace or project at one side, cache hits included |
 | `swift merge stores (<side>, <n> stores)`, `swift helper read (<side>)` | Inside `index swift`: copying the index stores, and the Swift helper reading them |
 | `typescript resolve (<side>)` | Inside `index typescript`: turning the SCIP index into references |

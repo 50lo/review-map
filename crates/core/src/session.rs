@@ -11,7 +11,8 @@ use crate::analyze::components;
 use crate::analyze::finish::AnalysisExtras;
 use crate::analyze::{BuildOptions, Builder, Mode, SideData, SideSource};
 use crate::bazel::graph::{SideGraph, WorkspaceGraph};
-use crate::bazel::query::{load_graph, Scope};
+use crate::bazel::cache::{environment as graph_environment, graph_key, GraphCache};
+use crate::bazel::query::{load_graph_checked, Scope};
 use crate::bazel::workspace::{BazelEnv, Workspaces};
 use crate::bazel::{self, discover_workspaces, workspace_of};
 use crate::config::{Config, Glob};
@@ -378,7 +379,10 @@ impl Session {
             let (head_source, base_source) = (self.head.clone(), self.base.clone());
             let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
 
-            // Step 1: the build graph.
+            // Step 1: the build graph, from the graph cache when its inputs are unchanged (see `bazel::cache`).
+            // Head comes first, so base gets head's graph when they have the same key.
+            let graph_cache = GraphCache::new(self.repo.root());
+            let mut queried: BTreeMap<String, WorkspaceGraph> = BTreeMap::new();
             let mut graphs = (SideGraph::default(), SideGraph::default());
             for w in self.in_scope.clone() {
                 let mut info = WorkspaceInfo { path: if w.is_empty() { ".".to_string() } else { w.clone() }, graph: "none".to_string(), ..Default::default() };
@@ -394,9 +398,23 @@ impl Session {
                     }
                     scopes.insert((side, w.clone()), scope.clone());
                     let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
-                    emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
                     let querying = timer(format!("graph {} workspace {w:?}", side.name()));
-                    let loaded = load_graph(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name()))));
+                    let key = graph_environment(&bazel_tool, &t.spaces.workspace_dir(side, &w), &src.tree, &w, cancel).ok().map(|e| graph_key(&src.tree, &w, &scope, &args, &e));
+                    let hit = key.as_ref().and_then(|k| queried.get(k).cloned().map(|g| (g, "same as head")).or_else(|| graph_cache.get(k).map(|g| (g, "cached"))));
+                    let loaded = if let Some((graph, how)) = hit {
+                        emit(Event::Progress(format!("Build graph of {}{at}: {how}", side.name())));
+                        Ok(graph)
+                    } else {
+                        emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
+                        load_graph_checked(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))).map(|(graph, complete)| {
+                            if let Some(k) = key.as_ref().filter(|_| complete) {
+                                if graph_cache.put(k, &graph, &[t.spaces.root()]) {
+                                    queried.insert(k.clone(), graph.clone());
+                                }
+                            }
+                            graph
+                        })
+                    };
                     drop(querying);
                     match loaded {
                         Ok(graph) => {
