@@ -3,8 +3,9 @@
 title: Add Kotlin index mode for Bazel
 status: completed
 type: task
+priority: normal
 created_at: 2026-11-07T22:46:17Z
-updated_at: 2026-11-07T22:46:17Z
+updated_at: 2026-11-17T22:18:04Z
 parent: rm-lnrl
 blocked_by:
     - rm-mje8
@@ -61,3 +62,8 @@ Bazel's own output base is outside the export, under Bazel's default for the exp
 ## Summary of Changes
 
 Added `Sources/ReviewMapCore/Kotlin/KotlinBazel.swift`, which `KotlinIndex.load` calls for `--index-builder bazel` or a Bazel workspace without a Gradle build. It writes an aspect into the export (`.reviewmap_kotlin/kotlin_index.bzl`, removed afterwards) that reads rules_kotlin's `KtJvmInfo` (loaded from `@rules_kotlin//kotlin/internal:defs.bzl`, following a `repo_name` in MODULE.bazel), follows `deps`/`exports`/`associates`/`runtime_deps`, and writes one JSON manifest per target with its main-repo Kotlin sources, its compile classpath without its own jars (the Kotlin stdlib is already in `transitive_compile_time_jars`), and its main-repo dependencies. `bazel build --aspects=... --output_groups=reviewmap_kotlin --lockfile_mode=off` runs on `options.targets` (default `//...`) plus `bazelArgs`, in a temporary output base that is expunged and deleted afterwards, with the shared disk cache. Then `java -cp <launcher> org.scip_code.scip_java.kotlin_analysis.MainKt` (the 85 MB release launcher is a fat jar, so this works) indexes each target, and `java -jar <launcher> aggregate` merges the shards. The index and the targets are cached per commit and workspace as `kotlin/bazel-<name>.scip` and `.targets.json`. rules_kotlin jars carry no Maven coordinates, so every symbol is `scip-java maven . . ...`; only symbols that two targets declare are scoped to their declaring target, so cross-target references still link. Tests: `KotlinBazelIndexTests` (6) with `Fixtures/kotlin-bazel-indexed` (rules_kotlin 2.4.21, rules_java 9.9.0, Bazel 9.3.1, `jvm_target = "21"`), plus `IndexBazelTests.testKotlinLeavesSwiftBazelBuildAlone`. `.bazelignore` keeps the fixture out of this repo's Bazel build. The full suite (179 tests) passed locally with OpenJDK 27.0.1 and Bazel 9.3.1, with no failures. The `change` skill named in AGENTS.md was not available in this session.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites that this bean added to or ran were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. The rebuild's tests run with `bazel test //...` (`docs/rebuild-build.md`, "Tests").
