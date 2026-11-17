@@ -40,6 +40,11 @@ fn bazel() -> Option<Bazel<'static>> {
         return None;
     }
     let guard = BAZEL.lock().unwrap_or_else(|e| e.into_inner());
+    // Under `bazel test`, TEST_TMPDIR moves the nested Bazel's output user root, and with it the repository
+    // cache, into this run's temporary directory, which is gone after the run. The kept output bases link
+    // their external repositories into that cache, so every run downloaded the JDKs and the Kotlin compiler
+    // again. Without it, the nested Bazel uses the user's own repository cache, as it does in the app.
+    std::env::remove_var("TEST_TMPDIR");
     let home = home(Some("reviewmap-test-home"));
     Some(Bazel { home, _guard: guard })
 }

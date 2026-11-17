@@ -64,8 +64,9 @@ TEST_ENV = {
 # Index builds from start to end: the tests start Bazel themselves, in nested workspaces made from fixtures
 # that .bazelignore keeps out of this workspace (tests/fixtures and the prototype's kotlin-bazel-indexed). So
 # they run outside the sandbox, read the fixtures from the checkout, keep their app home in the checkout's
-# target/reviewmap-test-home so that the nested Bazel servers and output bases stay warm between runs, use
-# the network on a first run (rules, scip-java), and are never cached: their result depends on the Bazel,
+# target/reviewmap-test-home so that the nested output bases stay warm between runs, give the nested Bazel
+# the user's own repository cache (not one in TEST_TMPDIR, which every run starts empty), use the network
+# on a first run (rules, scip-java), and are never cached: their result depends on the Bazel,
 # JDK and Xcode installed on this Mac, which they find through the inherited PATH, HOME and JAVA_HOME. A
 # test whose tool is missing returns early and says why in its log (`skipped: …`).
 rust_test(
