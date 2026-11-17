@@ -7,7 +7,7 @@ priority: normal
 tags:
     - core
 created_at: 2026-11-16T21:36:10Z
-updated_at: 2026-11-16T21:58:29Z
+updated_at: 2026-11-17T22:15:01Z
 ---
 
 ## What
@@ -100,3 +100,8 @@ Note: the item appears only when Bazel is not found (set `REVIEWMAP_BAZEL=review
 
 - A Bazel target that gains its **first** setting (or loses its last) gets no build settings item: `add_targets` in `components.rs` registers `TargetSettings` only when the target has settings (`if !t.settings.is_empty()`), and `add_target_settings` skips targets missing at either side. TypeScript registers empty settings on purpose for this reason.
 - A change that touches only BUILD files puts no Bazel workspace in scope when the review has no `cwd` (`Session::open` in `session.rs` counts only changed source files). The CLI and app pass a cwd, so this affects library callers and tests only.
+
+
+## Tests removed (2026-11-18, test-suite cleanup)
+
+To cut `bazel test //...` time, three of the tests above were removed as location details that unit tests already cover: `a_changed_tsconfig_option_is_shown_at_its_line_in_tsconfig` and `a_setting_written_over_several_lines_is_shown_whole` (`crates/core/tests/typescript_fixtures.rs`), and `a_changed_bazel_attribute_is_shown_at_its_line_in_the_rule` (`crates/core/tests/bazel_fixtures.rs`, which started two nested Bazel servers). The line lookup each guarded stays tested in `crates/core/src/analyze/settings.rs` (`a_tsconfig_option_is_a_key_of_compiler_options`, including the multi-line `lib` array, and `a_bazel_attribute_is_found_in_its_rule`), and the end-to-end path stays tested by `build_settings_in_two_files_are_shown_where_each_is_set`.

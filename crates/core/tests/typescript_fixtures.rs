@@ -319,54 +319,6 @@ fn line_of(text: &str, needle: &str) -> u32 {
     text.lines().position(|l| l.contains(needle)).map(|i| i as u32 + 1).unwrap_or_else(|| panic!("no {needle}"))
 }
 
-const SETTINGS_PACKAGE_BASE: &str = r#"{
-  "name": "reviewmap-app",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "build": "tsc --noEmit && vite build"
-  },
-  "dependencies": {}
-}
-"#;
-
-const SETTINGS_TSCONFIG_BASE: &str = r#"{
-  // The app's compiler options.
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "strict": true,
-    "jsx": "react-jsx"
-  },
-  "include": ["src"]
-}
-"#;
-
-/// A tsconfig option added at head is shown at its line in tsconfig.json, not at line 1 of package.json,
-/// even when package.json changed too (its scripts were removed, which is no build setting).
-#[test]
-fn a_changed_tsconfig_option_is_shown_at_its_line_in_tsconfig() {
-    let _guard = lock();
-    let tsconfig_head = SETTINGS_TSCONFIG_BASE.replace("    \"strict\": true,\n", "    \"strict\": true,\n    \"noEmit\": true,\n");
-    let package_head = SETTINGS_PACKAGE_BASE.replace("  \"scripts\": {\n    \"build\": \"tsc --noEmit && vite build\"\n  },\n", "");
-    let repo = two_commits(
-        &[("app/package.json", SETTINGS_PACKAGE_BASE), ("app/tsconfig.json", SETTINGS_TSCONFIG_BASE), ("app/src/main.ts", "export const a = 1;\n")],
-        &[("app/package.json", Some(&package_head)), ("app/tsconfig.json", Some(&tsconfig_head))],
-    );
-    let mut request = request(&repo);
-    request.index = Some(false);
-    let report = analyze(request);
-    let item = review_item(&report, "reviewmap-app build settings");
-    assert_eq!(item.signature.head.as_deref(), Some("tsconfig noEmit = true"));
-    let line = line_of(&tsconfig_head, "\"noEmit\"");
-    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("app/tsconfig.json", line, line));
-    let regions = regions_of(&report, &item.id);
-    assert_eq!(regions.len(), 1, "{regions:?}");
-    let r = regions[0];
-    assert_eq!((r.kind.as_str(), r.file.as_str(), r.start_line, r.end_line, r.side), ("review", "app/tsconfig.json", line, line, reviewmap_core::model::Side::Head));
-    assert_eq!(r.reasons, vec!["typescript:compiler-options-changed".to_string()]);
-}
-
 /// Settings of one package in two files make one review item per file, each region in its item's file and
 /// naming only its own setting. A package.json field is found at the top level, not inside `exports`, and a
 /// removed tsconfig option is shown at its base line.
@@ -432,27 +384,4 @@ fn build_settings_in_two_files_are_shown_where_each_is_set() {
     assert_eq!(shown, vec![("review", strict, reviewmap_core::model::Side::Head, None), ("removed", removed, reviewmap_core::model::Side::Base, Some(strict))]);
     assert_eq!(regions[0].reasons, vec!["typescript:strictness-changed".to_string()]);
     assert!(tsconfig.base_location.as_ref().map(|b| b.file == "core/tsconfig.json" && b.start_line <= removed && removed <= b.end_line).unwrap_or(false), "{:?}", tsconfig.base_location);
-}
-
-/// A setting whose value spans lines is shown whole: the region over a changed `lib` array runs from the
-/// key to the array's end, so the changed entry inside it is on the page.
-#[test]
-fn a_setting_written_over_several_lines_is_shown_whole() {
-    let _guard = lock();
-    let base = SETTINGS_TSCONFIG_BASE.replace("    \"jsx\": \"react-jsx\"\n", "    \"jsx\": \"react-jsx\",\n    \"lib\": [\n      \"ES2022\",\n      \"DOM\"\n    ]\n");
-    let head = base.replace("      \"DOM\"\n", "      \"DOM\",\n      \"DOM.Iterable\"\n");
-    let repo = two_commits(
-        &[("app/package.json", SETTINGS_PACKAGE_BASE), ("app/tsconfig.json", &base), ("app/src/main.ts", "export const a = 1;\n")],
-        &[("app/tsconfig.json", Some(&head))],
-    );
-    let mut request = request(&repo);
-    request.index = Some(false);
-    let report = analyze(request);
-    let item = review_item(&report, "reviewmap-app build settings");
-    let (start, changed) = (line_of(&head, "\"lib\""), line_of(&head, "DOM.Iterable"));
-    let end = changed + 1;
-    assert_eq!(head.lines().nth(end as usize - 1).map(str::trim), Some("]"));
-    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("app/tsconfig.json", start, end));
-    let regions = regions_of(&report, &item.id);
-    assert_eq!(regions.iter().map(|r| (r.file.as_str(), r.start_line, r.end_line)).collect::<Vec<_>>(), vec![("app/tsconfig.json", start, end)]);
 }

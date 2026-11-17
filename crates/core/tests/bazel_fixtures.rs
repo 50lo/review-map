@@ -374,34 +374,3 @@ fn without_bazel_a_rules_ts_workspace_stays_syntax_only() {
     // The app imports @demo/lib by name: syntax links the two packages.
     assert!(report.edges.iter().any(|e| e.from == "npm:@demo/app" && e.to == "npm:@demo/lib"), "{:?}", report.edges);
 }
-
-/// A Bazel target's changed attribute is shown at its line in the target's rule, not at line 1 of the
-/// BUILD file: Feed's `copts` changes between two commits on the fixture's head.
-#[test]
-fn a_changed_bazel_attribute_is_shown_at_its_line_in_the_rule() {
-    let Some(bazel) = bazel() else { return };
-    let repo = fixture_repo_at(&own_fixture("swift-bazel"), &bazel.home.join("repos/swift-bazel-settings"));
-    let build = std::fs::read_to_string(own_fixture("swift-bazel").join("head/Sources/Feed/BUILD.bazel")).unwrap();
-    let with_copts = |copts: &str| build.replace("    module_name = \"Feed\",\n", &format!("    module_name = \"Feed\",\n    copts = [\"{copts}\"],\n"));
-    repo.write("Sources/Feed/BUILD.bazel", &with_copts("-Onone"));
-    let base = repo.commit("copts at base");
-    let head = with_copts("-strict-concurrency=complete");
-    repo.write("Sources/Feed/BUILD.bazel", &head);
-    repo.commit("copts at head");
-    let mut request = request(&repo);
-    request.base = base;
-    // Only a BUILD file changed: the review is started in the workspace, as the app and the CLI are, so that
-    // Bazel is asked for its graph.
-    request.cwd = Some(repo.path());
-    request.index = Some(false);
-    let report = analyze(request);
-    let item = report
-        .review_items
-        .iter()
-        .find(|i| i.kind == reviewmap_core::model::ItemKind::Target && i.component == "//Sources/Feed:Feed")
-        .unwrap_or_else(|| panic!("no build settings of Feed: {:?}", report.review_items.iter().map(|i| &i.qualified_name).collect::<Vec<_>>()));
-    let line = head.lines().position(|l| l.contains("copts")).unwrap() as u32 + 1;
-    assert_eq!((item.location.file.as_str(), item.location.start_line, item.location.end_line), ("Sources/Feed/BUILD.bazel", line, line));
-    let regions: Vec<_> = report.regions.iter().filter(|r| r.review_item == item.id).collect();
-    assert_eq!(regions.iter().map(|r| (r.file.as_str(), r.start_line, r.end_line)).collect::<Vec<_>>(), vec![("Sources/Feed/BUILD.bazel", line, line)]);
-}
