@@ -9,7 +9,7 @@
 #   log.txt       every stderr line, prefixed with the seconds since the start (the core's `[timing]` lines too)
 #   summary.txt   total time, load average at start and end, peak RSS, disk use of <home>/cache
 #   report.json   the report
-#   profiles/     with --profiles: Bazel's command.profile.gz after every Bazel command
+#   profiles/     with --profiles: Bazel's command.profile.gz after every Bazel build and query
 # scripts/bench-phases.py turns log.txt files into the phase table of docs/rebuild-step5-speed.md.
 #
 # Options:
@@ -19,7 +19,7 @@
 #   --compare <json>   after the run, compare the report with a baseline report (`jq -S` of both) and fail when
 #                      they differ. Both runs must use the same clone path and the same home path: the report
 #                      names the repository's root, and some warnings name log files under the home.
-#   --profiles         keep a copy of Bazel's JSON trace profile after every Bazel command (REVIEWMAP_PROFILE_DIR)
+#   --profiles         keep a copy of Bazel's JSON trace profile after every Bazel build and query (REVIEWMAP_PROFILE_DIR)
 #   --keep-bazel       leave the home's Bazel servers running at the end (REVIEWMAP_KEEP_BAZEL=1), as the app
 #                      does between reviews of one session; the next run is then a "session" run
 #   --label <text>     the run's name in the phase table (default: the basename of <dir>)

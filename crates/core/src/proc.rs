@@ -285,10 +285,14 @@ impl Cmd {
     }
 
     /// With `REVIEWMAP_PROFILE_DIR` set (scripts/bench-review.sh --profiles), keeps a copy of a Bazel command's
-    /// JSON trace profile, which Bazel rewrites with every command, as `<dir>/<n>-<command>-<side>-<output base>.profile.gz`.
+    /// JSON trace profile, which Bazel rewrites with every build or query, as `<dir>/<n>-<command>-<side>-<output base>.profile.gz`.
+    /// `bazel info` writes none, so the file it leaves is the previous command's.
     fn keep_profile(&self) {
         static KEPT: AtomicUsize = AtomicUsize::new(0);
         let (Some(dir), Some(base), Some(command)) = (std::env::var_os("REVIEWMAP_PROFILE_DIR"), self.output_base(), self.bazel_command()) else { return };
+        if command == "info" {
+            return;
+        }
         let base = Path::new(base);
         let from = base.join("command.profile.gz");
         if !from.exists() {

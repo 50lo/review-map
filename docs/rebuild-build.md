@@ -84,7 +84,7 @@ The script `cd`s into the repository and runs `reviewmap <repo> --base B --head 
 Its options:
 
 - `--compare <baseline report.json>` runs `diff <(jq -S . baseline) <(jq -S . new)` and fails when the two reports differ. Two runs of the same pair give the same report, cold or warm. Any difference is therefore a real change, as long as both runs used the same clone path and the same home path: the report names the repository's root, and some warnings name log files under the home.
-- `--profiles` sets `REVIEWMAP_PROFILE_DIR=<out>/profiles`. The core then copies Bazel's JSON trace profile (`<output_base>/command.profile.gz`, which every command rewrites) after each Bazel command.
+- `--profiles` sets `REVIEWMAP_PROFILE_DIR=<out>/profiles`. The core then copies Bazel's JSON trace profile (`<output_base>/command.profile.gz`, which every build and query rewrites) after each Bazel command except `info`, which writes none.
 - `--keep-bazel` sets `REVIEWMAP_KEEP_BAZEL=1`. The CLI then leaves the home's Bazel servers running at exit, as the app does between the reviews of one session, so the next run is a *session* run. The servers idle out after 15 minutes.
 - `--label` and `--state` name the run in the table.
 
