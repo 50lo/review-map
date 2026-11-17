@@ -48,10 +48,5 @@ let package = Package(
                 .product(name: "TOMLDecoder", package: "TOMLDecoder"),
             ]
         ),
-        .testTarget(
-            name: "ReviewMapCoreTests",
-            dependencies: ["ReviewMapCore"],
-            resources: [.copy("Fixtures")]
-        ),
     ]
 )

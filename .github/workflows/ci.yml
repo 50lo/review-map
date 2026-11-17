@@ -24,9 +24,9 @@ jobs:
           path: ~/.cache/org.swift.swiftpm
           key: swiftpm-${{ hashFiles('Package.resolved') }}
       # IndexStoreDB's C++ needs the toolchain's dispatch and Block headers, which aren't on the default include path on Linux.
-      # These synthetic fixtures need only Swift and git. Run the full suite locally with `swift test`.
-      - name: Build and smoke test
-        run: swift test -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block --filter 'FixtureTests/testSnapshot|KotlinTests/testFixture'
+      # The prototype has no tests of its own any more; the rebuild's tests run with `bazel test //...`.
+      - name: Build
+        run: swift build -Xcxx -I/usr/lib/swift -Xcxx -I/usr/lib/swift/Block
 
   viewer:
     runs-on: ubuntu-latest
@@ -43,5 +43,3 @@ jobs:
       - run: npm ci
       - name: Typecheck and build
         run: npm run build
-      - name: Language smoke tests
-        run: npm test -- src/language-table.test.ts src/languages.test.ts

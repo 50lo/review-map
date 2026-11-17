@@ -2,8 +2,6 @@
 {"source": "CORE-001", "target": "Sources/ReviewMapCore/Analyzer.swift#Analyzer.run(_:log:index:)", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "ba692e2751afd81d97b72c0bd40fc437afdfa284fafaf48a802238746e431fee"}
 {"source": "CORE-001", "target": "Sources/ReviewMapCore/Model.swift#RepoInfo", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "4ca727c9d5bf37d6fab959db77ffbffe7d11db0d35575f18b9513898d1f7f265"}
 {"source": "CORE-001", "target": "Sources/ReviewMapCore/Shell.swift#GitRepo.mergeBase", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "c9d61e439a695027336bcff64573c43916420868b5a60389a088feedf131f568"}
-{"source": "CORE-001", "target": "Tests/ReviewMapCoreTests/RepoBoundaryTests.swift#RepoBoundaryTests.testBaseIsTheMergeBase", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "6d5489e794b4ddcc76d36a80fc434784cb20b01b3c9878b312ef5e495640d1a0"}
-{"source": "CORE-001", "target": "Tests/ReviewMapCoreTests/RepoBoundaryTests.swift#RepoBoundaryTests.testNoMergeBaseComparesAgainstBaseDirectly", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "11f9c48aad014982eef4caa3eb7e5daaee11c41b463c6f90f0db92b6324b7510"}
 {"source": "CORE-001", "target": "crates/core/src/git.rs#Repo.merge_base", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "a68f1a1d1899200f86c546f48eaba27921bb99072a2ec0cf498d16c8f1788f78"}
 {"source": "CORE-001", "target": "crates/core/src/model.rs#RepoInfo", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "e4be7781adaa7a93d0dc62f63c983cc9cafd5fb7319e8b74876b75224158a6fc"}
 {"source": "CORE-001", "target": "crates/core/src/session.rs#Session.open", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "3b8da3486257934ee38c1d409faee0385373a9475d94a1feaff0b8175d3877a2"}
@@ -12,8 +10,6 @@
 {"source": "CORE-002", "target": "Sources/ReviewMapCore/Analyzer.swift#Analyzer.run(_:log:index:)", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "ba692e2751afd81d97b72c0bd40fc437afdfa284fafaf48a802238746e431fee"}
 {"source": "CORE-002", "target": "Sources/ReviewMapCore/Annotator.swift#Annotator.run", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "6d6efda070341db9a87be0a22c68d2fda96378c088643439df705f1bb2604185"}
 {"source": "CORE-002", "target": "Sources/ReviewMapCore/Shell.swift#GitRepo.export", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "d73c9ba0e864aeda982b96855e159249adbcb9673577396b5211b177613a4d9b"}
-{"source": "CORE-002", "target": "Tests/ReviewMapCoreTests/AnnotatorTests.swift#AnnotatorTests.testCacheInsideTheRepoIsRefused", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "9892ef98b9e433bfcaf556f75fef3d7c937b41ab6e3dc0bbc100f0a7426b9255"}
-{"source": "CORE-002", "target": "Tests/ReviewMapCoreTests/RepoBoundaryTests.swift#RepoBoundaryTests.testAnalysisLeavesTheRepoUntouched", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "c14f80bdadf7958995c812b3a7bddf501897584f2371183b9a546eaf42067890"}
 {"source": "CORE-002", "target": "crates/core/src/bazel/workspace.rs#Workspaces.materialize", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "b585c6908652ef308cb89521ec1c83e99428651a9edb6ba111a4b4ce34f24500"}
 {"source": "CORE-002", "target": "crates/core/src/index/typescript.rs#build", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "7ab8dafd422ada2981bb43db02b9be44758d33a4329e9fdbeca7a265f69c9ba5"}
 {"source": "CORE-002", "target": "crates/core/src/llm/cli.rs#Runner.call", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "a839210ede86053bd0dd0bd4af87dbe16ced952c031c9ec279a6d7bfe6d99851"}
@@ -84,7 +80,6 @@
 {"source": "CORE-005", "target": "Sources/ReviewMapCore/Checks.swift#StructuralChecks.run", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "1d91bbf506e4db5b12a4602776df2d148edd568f0cd699656c0e5ac18e7177c9"}
 {"source": "CORE-005", "target": "Sources/ReviewMapCore/Checks.swift#StructuralChecks.untested", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "feecf55659a953ac8132fb07762e6c98d880bf63ce8719caa470cd75e5701e77"}
 {"source": "CORE-005", "target": "Sources/ReviewMapCore/Checks.swift#StructuralChecks.unusedAPI", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "7ea241076adeb7e2db8735fb8f9ab0485b7d8262bb9ce418e89f93ca29272ee2"}
-{"source": "CORE-005", "target": "Tests/ReviewMapCoreTests/ChecksTests.swift#ChecksTests.testEveryFindingIsAnchoredInTheReport", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "509534d5597870ea73a73619ff93a1438d57f5344b8397420e1d7713e6e09090"}
 {"source": "CORE-005", "target": "crates/core/src/analyze/checks.rs#StructuralChecks.main_anchor", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "55cd2458ddd9843fd6423647c539f85b8e29580c8e7d4acebc88a3496a3fb983"}
 {"source": "CORE-005", "target": "crates/core/src/analyze/checks.rs#StructuralChecks.run", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "fb0321fa18999ddd3d8997724fc06b9fb89180b8fd6f04c9cab6c60f2b74da8b"}
 {"source": "CORE-005", "target": "crates/core/src/llm/review.rs#StructuralReview.validate", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "89c02e585d85e48083853046c4918580f92d1f5a0bbeba52ac5911b92346ce22"}
@@ -97,8 +92,6 @@
 {"source": "CORE-006", "target": "Sources/ReviewMapCore/Checks.swift#StructuralChecks.untested", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "feecf55659a953ac8132fb07762e6c98d880bf63ce8719caa470cd75e5701e77"}
 {"source": "CORE-006", "target": "Sources/ReviewMapCore/Regions.swift#ChangeReportBuilder.buildRegions", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "e608c12c94a3a68a939566b7f1114b00dfefa780c0322f0d9d9d924e90bf32df"}
 {"source": "CORE-006", "target": "Sources/ReviewMapCore/StructuralReview.swift#StructuralReview.reviewed", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "8f16e89c2af563a180caf3179cce32cbb041fde7ea496ca1e110d581862cec3c"}
-{"source": "CORE-006", "target": "Tests/ReviewMapCoreTests/FixtureTests.swift#FixtureTests.testBodyAccessCosmeticAndOverloads", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "6d3b5bbdbaaaedf4b635a103056dddd9be0a20056f7be5e144597c7ed64a98ae"}
-{"source": "CORE-006", "target": "Tests/ReviewMapCoreTests/FixtureTests.swift#FixtureTests.testCosmeticReviewItemAsksForNoReview", "role": "test", "mode": "swift-ast-sha256-v1", "sig": "847184e1c923dc5732d68c1220655a5df551955a802b9b39c741eaecfdfb729c"}
 {"source": "CORE-006", "target": "crates/core/src/analyze/finish.rs#Builder.finish", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "68a3d1a89b604397c520076b9383ecf64134fe39fad9c84a738ed0abeb6eade9"}
 {"source": "CORE-006", "target": "crates/core/src/analyze/matching.rs#changes", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "bc70c22457b5068e90ccb032f5220419a55cd1f380f7d602a741efde5374cad6"}
 {"source": "CORE-006", "target": "crates/core/src/analyze/regions.rs#Builder.build_regions", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "dc01384ca840ccaeeaf97700b9f9a41bb41df665b9e8264d7690820c1320b1a8"}

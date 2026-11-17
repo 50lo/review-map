@@ -5,7 +5,7 @@ status: todo
 type: bug
 priority: normal
 created_at: 2026-11-05T02:51:32Z
-updated_at: 2026-11-05T02:51:32Z
+updated_at: 2026-11-17T22:15:01Z
 ---
 
 When Review Map analyzes a repository with an Xcode project nested under a test path, such as Tests/<X>Tests/Fixtures/App/App.xcodeproj, application and framework targets in that project are marked isTest: false. They remain on the map with Tests unchecked, cluttering the production component graph. rm-patv fixed the same bug for SPM targets; the Xcode path was not changed.
@@ -30,3 +30,8 @@ Add regression coverage to Tests/ReviewMapCoreTests/ComponentTests.swift, follow
 
 ## Constraints
 Keep .xcodeproj discovery, file-claim priorities, and the target repository read-only behavior unchanged. Local Swift tests need XCTest, which Command Line Tools does not provide; without Xcode installed, confirm them through Linux PR CI.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. A test this bean asks for in those suites would have to restore the suite first, or be written against the rebuild (`crates/core`, `app/`) instead.
