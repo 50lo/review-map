@@ -58,7 +58,7 @@ Review Map reads committed content only, never the working tree. It builds both 
 | --- | --- | --- | --- |
 | Swift | Bazel (rules_swift) | SwiftSyntax, in the bundled helper | Bazel builds the scope targets with indexing on; the app reads the index store with Xcode's `libIndexStore`. |
 | Kotlin | Bazel (rules_kotlin) | tree-sitter | Bazel builds the targets' compile classpath; the Kotlin indexer from the scip-java launcher indexes each target. The launcher is downloaded once; `REVIEWMAP_SCIP_JAVA` names another. Needs a JDK 17 or newer. |
-| TypeScript, TSX | Yarn Classic projects and workspaces; Bazel with rules_ts and rules_js | tree-sitter | scip-typescript 0.4.0, run through `npx`. Yarn Classic projects get `yarn install` with scripts off; Bazel workspaces get no install, because Bazel lays out `node_modules` itself. Needs Node.js. |
+| TypeScript, TSX | Yarn Classic projects and workspaces; Bazel with rules_ts and rules_js | tree-sitter | scip-typescript 0.4.0, run through `npx`. Yarn Classic projects get `yarn install` with scripts off; Bazel workspaces get no install: Bazel builds only the npm links the review's targets depend on, which lays out `node_modules` itself. Needs Node.js. |
 
 Index mode is on by default. Without an index for a language or a file, Review Map shows only the links that syntax alone proves, never links matched by name, and says so with an `index-unavailable` or `index-partial` warning. Checks that need complete references, such as finding unused declarations, are held back until the index is there (`checks-held-back`).
 
