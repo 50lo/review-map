@@ -69,7 +69,7 @@ A SHA-256 (`crate::store::digest`) of:
 4. The workspace path, the `Scope` (kind and targets) and `Session::bazel_args`. Each list is prefixed with its length.
 5. The environment (`cache::environment`), computed for each side in the app-owned workspace directory:
    - `bazel --version` run there. Bazelisk resolves `.bazelversion` from that directory. The answer is kept per process for the same canonical Bazel binary (path and mtime) and the same `.bazelversion`, `.bazeliskrc` and `tools/bazel` blobs.
-   - The Xcode that `tools/bazel` would set: a caller's `XCODE_VERSION`, otherwise `DEVELOPER_DIR` or `xcode-select -p`, plus a digest of the selected Xcode's `version.plist`. Computed once per process.
+   - The Xcode that `tools/bazel` would set: a caller's `XCODE_VERSION`, otherwise `DEVELOPER_DIR` or `xcode-select -p`, plus a digest of the selected Xcode's `version.plist`. Read once per review (`Session::refine`), not once per process: the app runs many reviews in one process (`app/src-tauri/src/lib.rs`), and Xcode can be updated in place in the meantime.
    - The PATH tools get (`tools::child_path()`).
    - The environment variables `BAZEL*`, `USE_BAZEL*`, `DEVELOPER_DIR`, `XCODE_VERSION`, `JAVA_HOME`, `HOME`, `CC`, `CXX`, `SDKROOT`, `ANDROID_HOME`, `ANDROID_SDK_ROOT` and `ANDROID_NDK_HOME`.
    - The contents of `/etc/bazel.bazelrc` and `~/.bazelrc`, which Bazel reads because nothing passes `--nohome_rc`.

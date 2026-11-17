@@ -17,7 +17,7 @@ use crate::proc::{Cancel, Cmd};
 use anyhow::{anyhow, Result};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, OnceLock};
+use std::sync::Mutex;
 
 /// Bump when the stored value or the key changes meaning.
 const FORMAT: &str = "graph-cache-v1";
@@ -102,11 +102,12 @@ pub fn graph_key(tree: &Tree, workspace: &str, scope: &Scope, bazel_args: &[Stri
 /// What a graph depends on outside the tree, for the workspace at `dir` (in an app-owned tree): the Bazel
 /// version that runs there, the Xcode that `tools/bazel` and Bazel's toolchain detection see, the
 /// environment Bazel and Bazelisk read, the PATH tools get, and the bazelrc files outside the tree.
-/// Fails when Bazel can't say its version; the graph is then queried and not cached.
-pub fn environment(bazel: &Path, dir: &Path, tree: &Tree, workspace: &str, cancel: &Cancel) -> Result<String> {
+/// `xcode` is `xcode()`, read once per review. Fails when Bazel can't say its version; the graph is then
+/// queried and not cached.
+pub fn environment(bazel: &Path, dir: &Path, tree: &Tree, workspace: &str, xcode: &str, cancel: &Cancel) -> Result<String> {
     let mut parts: Vec<String> = Vec::new();
     parts.push(format!("bazel {}", bazel_version(bazel, dir, tree, workspace, cancel)?));
-    parts.push(format!("xcode {}", xcode()));
+    parts.push(format!("xcode {xcode}"));
     parts.push(format!("PATH {}", crate::tools::child_path().to_string_lossy()));
     let mut vars: Vec<(String, String)> = std::env::vars()
         .filter(|(k, _)| {
@@ -190,31 +191,27 @@ fn bazel_version(bazel: &Path, dir: &Path, tree: &Tree, workspace: &str, cancel:
 }
 
 /// The selected Xcode, as `tools/bazel` sets XCODE_VERSION: the caller's value, or the developer
-/// directory and the build number in its version.plist. Once per process.
-fn xcode() -> String {
-    static XCODE: OnceLock<String> = OnceLock::new();
-    XCODE
-        .get_or_init(|| {
-            let set = std::env::var("XCODE_VERSION").unwrap_or_default();
-            let developer_dir = match std::env::var("DEVELOPER_DIR") {
-                Ok(d) if !d.is_empty() => d,
-                _ => std::process::Command::new("/usr/bin/xcode-select")
-                    .arg("-p")
-                    .stdin(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .output()
-                    .ok()
-                    .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-                    .unwrap_or_default(),
-            };
-            let plist = if developer_dir.is_empty() {
-                "none".to_string()
-            } else {
-                std::fs::read(Path::new(&developer_dir).join("../version.plist")).map(|b| crate::store::digest([b])).unwrap_or_else(|_| "missing".to_string())
-            };
-            format!("set={set:?} dir={developer_dir:?} plist={plist}")
-        })
-        .clone()
+/// directory and a digest of its version.plist. Read for every review, not once per process: the app runs
+/// many reviews in one process, and Xcode can be updated in place meanwhile.
+pub fn xcode() -> String {
+    let set = std::env::var("XCODE_VERSION").unwrap_or_default();
+    let developer_dir = match std::env::var("DEVELOPER_DIR") {
+        Ok(d) if !d.is_empty() => d,
+        _ => std::process::Command::new("/usr/bin/xcode-select")
+            .arg("-p")
+            .stdin(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .output()
+            .ok()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default(),
+    };
+    let plist = if developer_dir.is_empty() {
+        "none".to_string()
+    } else {
+        std::fs::read(Path::new(&developer_dir).join("../version.plist")).map(|b| crate::store::digest([b])).unwrap_or_else(|_| "missing".to_string())
+    };
+    format!("set={set:?} dir={developer_dir:?} plist={plist}")
 }
 
 /// The graph cache of one repository.

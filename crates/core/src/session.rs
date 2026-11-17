@@ -382,6 +382,7 @@ impl Session {
             // Step 1: the build graph, from the graph cache when its inputs are unchanged (see `bazel::cache`).
             // Head comes first, so base gets head's graph when they have the same key.
             let graph_cache = GraphCache::new(self.repo.root());
+            let xcode = crate::bazel::cache::xcode();
             let mut queried: BTreeMap<String, WorkspaceGraph> = BTreeMap::new();
             let mut graphs = (SideGraph::default(), SideGraph::default());
             for w in self.in_scope.clone() {
@@ -399,7 +400,7 @@ impl Session {
                     scopes.insert((side, w.clone()), scope.clone());
                     let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
                     let querying = timer(format!("graph {} workspace {w:?}", side.name()));
-                    let key = graph_environment(&bazel_tool, &t.spaces.workspace_dir(side, &w), &src.tree, &w, cancel).ok().map(|e| graph_key(&src.tree, &w, &scope, &args, &e));
+                    let key = graph_environment(&bazel_tool, &t.spaces.workspace_dir(side, &w), &src.tree, &w, &xcode, cancel).ok().map(|e| graph_key(&src.tree, &w, &scope, &args, &e));
                     let hit = key.as_ref().and_then(|k| queried.get(k).cloned().map(|g| (g, "same as head")).or_else(|| graph_cache.get(k).map(|g| (g, "cached"))));
                     let loaded = if let Some((graph, how)) = hit {
                         emit(Event::Progress(format!("Build graph of {}{at}: {how}", side.name())));
