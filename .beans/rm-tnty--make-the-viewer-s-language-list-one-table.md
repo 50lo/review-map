@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-11-05T08:00:00Z
-updated_at: 2026-11-05T09:59:00Z
+updated_at: 2026-11-17T22:18:04Z
 parent: rm-yuz2
 blocking:
     - rm-1w6o
@@ -29,3 +29,8 @@ No model change. Keep the table plain data; no registry classes.
 ## Validation
 
 84 viewer tests pass, including the unchanged existing tests and 23 language-table tests. Production and single-file builds pass. Implementation and independent review found no behavior changes.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites that this bean added to or ran were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. The rebuild's tests run with `bazel test //...` (`docs/rebuild-build.md`, "Tests").

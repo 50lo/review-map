@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: normal
 created_at: 2026-11-05T02:14:18Z
-updated_at: 2026-11-05T02:23:39Z
+updated_at: 2026-11-17T22:18:04Z
 ---
 
 When Review Map analyzes its own repository, ordinary SPM targets inside Tests/ReviewMapCoreTests/Fixtures are marked isTest: false. They remain on the map with Tests unchecked, cluttering the production component graph.
@@ -37,3 +37,8 @@ Use the existing fix-tests-map branch. Keep nested package discovery and the tar
 
 ## Summary of Changes
 SPM targets now combine explicit test-target status with their repository-relative test path. Fixture library targets and split children follow the existing Tests filter, while ordinary nested packages and standalone fixtures keep their original classification. Added Swift coverage for all three contexts and viewer coverage for hiding/restoring fixture nodes and edges. Draft PR: https://github.com/50lo/review-map/pull/15.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites that this bean added to or ran were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. The rebuild's tests run with `bazel test //...` (`docs/rebuild-build.md`, "Tests").

@@ -5,7 +5,7 @@ status: completed
 type: bug
 priority: high
 created_at: 2026-11-07T11:53:57Z
-updated_at: 2026-11-07T12:19:58Z
+updated_at: 2026-11-17T22:18:04Z
 ---
 
 ## Problem
@@ -87,3 +87,8 @@ Review found that the restored fallback could also interpret base-only `usedBy` 
 - Retained regions change only IDs and six sets of synthetic context `keep`/`rank` metadata. `scripts/fake-llm.sh` hashes region IDs to choose `keep`, then assigns consecutive ranks. Renumbering therefore changes these canned values; the mock script and annotation implementation are unchanged.
 - Verified with snapshot updating disabled: `swift test --scratch-path /private/tmp/reviewmap-kotlin-context-build --filter 'AnnotatorTests|CallerContextTests|^ReviewMapCoreTests.IndexTests|ChecksTests|FixtureTests|KotlinTests'` — 57 tests, 0 failures.
 - Statute change checks: no affected rules or terms, 0 errors, 0 warnings.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites that this bean added to or ran were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. The rebuild's tests run with `bazel test //...` (`docs/rebuild-build.md`, "Tests").
