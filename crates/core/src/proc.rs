@@ -9,8 +9,8 @@ use std::io::{Read, Write};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
 /// A progress callback that may be called from worker threads.
@@ -86,17 +86,69 @@ pub fn is_cancelled(error: &anyhow::Error) -> bool {
     error.chain().any(|e| e.downcast_ref::<Cancelled>().is_some())
 }
 
+/// Where `[timing]` lines go: the CLI prints them to stderr, the app writes them to its log. Without a sink
+/// (tests, the CLI when it only launches the app) they are dropped.
+type TimingSink = Box<dyn Fn(&str) + Send + Sync>;
+static TIMING_SINK: RwLock<Option<TimingSink>> = RwLock::new(None);
+
+/// Sends every `[timing]` line of this process to `sink`. Worker threads log too, so it must be thread-safe.
+pub fn set_timing_log(sink: impl Fn(&str) + Send + Sync + 'static) {
+    *TIMING_SINK.write().unwrap_or_else(|e| e.into_inner()) = Some(Box::new(sink));
+}
+
+/// Logs that a step took `seconds`, as `[timing] 62.09s <label>`: one line per step, at its end, so a log with
+/// timestamps shows when each step ran. The format is what `scripts/bench-phases.py` reads (docs/rebuild-build.md,
+/// "Benchmarking a review").
+pub fn timing(label: &str, seconds: f64) {
+    if let Some(sink) = TIMING_SINK.read().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        sink(&format!("[timing] {seconds:.2}s {label}"));
+    }
+}
+
+/// Times a step: logs its `[timing]` line when dropped, so a step that returns early with an error is logged too.
+#[must_use = "a timer logs when it is dropped; bind it to a variable that lives as long as the step"]
+pub struct Timer {
+    label: String,
+    start: Instant,
+}
+
+pub fn timer(label: impl Into<String>) -> Timer {
+    Timer { label: label.into(), start: Instant::now() }
+}
+
+impl Drop for Timer {
+    fn drop(&mut self) {
+        timing(&self.label, self.start.elapsed().as_secs_f64());
+    }
+}
+
 /// A command with its environment: the tool environment of `tools::child_env` plus additions.
 pub struct Cmd {
     pub program: PathBuf,
     pub args: Vec<String>,
     pub cwd: Option<PathBuf>,
     pub env: BTreeMap<String, String>,
+    /// What the command is for, first in its `[timing]` line: `swift index`, `scip-typescript`, ….
+    pub what: Option<String>,
+    /// More about where it runs, for its `[timing]` line: a Bazel command's side and workspace.
+    pub context: Vec<String>,
 }
 
 impl Cmd {
     pub fn new(program: impl Into<PathBuf>) -> Cmd {
-        Cmd { program: program.into(), args: Vec::new(), cwd: None, env: BTreeMap::new() }
+        Cmd { program: program.into(), args: Vec::new(), cwd: None, env: BTreeMap::new(), what: None, context: Vec::new() }
+    }
+
+    /// Says what the command is for, in its `[timing]` line.
+    pub fn what(mut self, purpose: impl Into<String>) -> Cmd {
+        self.what = Some(purpose.into());
+        self
+    }
+
+    /// Adds to where the command runs, in its `[timing]` line.
+    pub fn context(mut self, note: impl Into<String>) -> Cmd {
+        self.context.push(note.into());
+        self
     }
 
     pub fn arg(mut self, a: impl Into<String>) -> Cmd {
@@ -146,6 +198,14 @@ impl Cmd {
     /// Runs the command and returns its standard output. Fails on a non-zero exit, with the end of its
     /// standard error in the message.
     pub fn output(&self, cancel: &Cancel) -> Result<Vec<u8>> {
+        let timer = timer(self.timing_label());
+        let result = self.output_inner(cancel);
+        drop(timer);
+        self.keep_profile();
+        result
+    }
+
+    fn output_inner(&self, cancel: &Cancel) -> Result<Vec<u8>> {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -177,6 +237,14 @@ impl Cmd {
 
     /// Like `output`, but the exit status doesn't matter: for tools that print what they have and then report errors.
     pub fn output_lenient(&self, cancel: &Cancel) -> Result<Vec<u8>> {
+        let timer = timer(self.timing_label());
+        let result = self.output_lenient_inner(cancel);
+        drop(timer);
+        self.keep_profile();
+        result
+    }
+
+    fn output_lenient_inner(&self, cancel: &Cancel) -> Result<Vec<u8>> {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::null());
@@ -191,12 +259,63 @@ impl Cmd {
         Ok(stdout)
     }
 
+    /// `cmd <program> [<bazel command>] (<what>, <context>…)`. Never the arguments: they hold paths, and a
+    /// Bazel command's `--output_base` would make the same step look different in every home.
+    fn timing_label(&self) -> String {
+        let mut label = format!("cmd {}", self.program.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default());
+        if let Some(command) = self.bazel_command() {
+            label.push(' ');
+            label.push_str(command);
+        }
+        let notes: Vec<&str> = self.what.iter().chain(self.context.iter()).map(String::as_str).collect();
+        if !notes.is_empty() {
+            label.push_str(&format!(" ({})", notes.join(", ")));
+        }
+        label
+    }
+
+    /// For a Bazel command (one with `--output_base`): the command after the startup options.
+    fn bazel_command(&self) -> Option<&str> {
+        self.output_base()?;
+        self.args.iter().find(|a| !a.starts_with('-')).map(String::as_str)
+    }
+
+    fn output_base(&self) -> Option<&str> {
+        self.args.iter().find_map(|a| a.strip_prefix("--output_base="))
+    }
+
+    /// With `REVIEWMAP_PROFILE_DIR` set (scripts/bench-review.sh --profiles), keeps a copy of a Bazel command's
+    /// JSON trace profile, which Bazel rewrites with every command, as `<dir>/<n>-<command>-<side>-<output base>.profile.gz`.
+    fn keep_profile(&self) {
+        static KEPT: AtomicUsize = AtomicUsize::new(0);
+        let (Some(dir), Some(base), Some(command)) = (std::env::var_os("REVIEWMAP_PROFILE_DIR"), self.output_base(), self.bazel_command()) else { return };
+        let base = Path::new(base);
+        let from = base.join("command.profile.gz");
+        if !from.exists() {
+            return;
+        }
+        let side = base.parent().and_then(Path::parent).and_then(Path::file_name).map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let name = base.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+        let n = KEPT.fetch_add(1, Ordering::SeqCst);
+        let dir = PathBuf::from(dir);
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::copy(from, dir.join(format!("{n:03}-{command}-{side}-{name}.profile.gz")));
+    }
+
     pub fn output_string(&self, cancel: &Cancel) -> Result<String> {
         Ok(String::from_utf8_lossy(&self.output(cancel)?).trim().to_string())
     }
 
     /// Runs the command with its output appended to a log file, and returns its exit status.
     pub fn run_logged(&self, log: &Path, cancel: &Cancel) -> Result<ExitStatus> {
+        let timer = timer(self.timing_label());
+        let result = self.run_logged_inner(log, cancel);
+        drop(timer);
+        self.keep_profile();
+        result
+    }
+
+    fn run_logged_inner(&self, log: &Path, cancel: &Cancel) -> Result<ExitStatus> {
         cancel.check()?;
         if let Some(dir) = log.parent() {
             std::fs::create_dir_all(dir)?;
@@ -240,4 +359,27 @@ pub fn log_tail(path: &Path, lines: usize) -> String {
     let Ok(text) = std::fs::read_to_string(path) else { return String::new() };
     let all: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
     all[all.len().saturating_sub(lines)..].join("\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bazel::workspace::BazelEnv;
+
+    #[test]
+    fn a_bazel_command_is_labelled_by_its_command_side_and_workspace_never_its_output_base() {
+        let root = PathBuf::from("/home/cache/bazel/repo-1");
+        let env = BazelEnv::new("/bin/bazel".into(), root.join("head/tree/crates/core/tests/fixtures/ts-bazel/head"), root.join("head/out/ts-bazel-head"), Vec::new());
+        let cmd = env.command("build").what("typescript index").arg("--keep_going").arg("--").arg("//...");
+        assert_eq!(cmd.timing_label(), r#"cmd bazel build (typescript index, head, workspace "crates/core/tests/fixtures/ts-bazel/head")"#);
+        let root_env = BazelEnv::new("/bin/bazel".into(), root.join("base/tree"), root.join("base/out/_root"), Vec::new());
+        assert_eq!(root_env.command("cquery").what("graph").timing_label(), r#"cmd bazel cquery (graph, base, workspace "")"#);
+    }
+
+    #[test]
+    fn other_commands_are_labelled_by_their_program_and_purpose() {
+        let cmd = Cmd::new("/usr/bin/curl").what("download").args(["-fsSL", "-o", "/tmp/x", "https://example.invalid/x"]);
+        assert_eq!(cmd.timing_label(), "cmd curl (download)");
+        assert_eq!(Cmd::new("/usr/bin/java").arg("-version").timing_label(), "cmd java");
+    }
 }

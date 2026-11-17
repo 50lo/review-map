@@ -144,6 +144,7 @@ pub fn load(job: &TypeScriptIndexJob, cancel: &Cancel, log: Log) -> Result<SideI
         }
         _ => build(job, &node, &program, &prefix, &cache, cancel, log)?,
     };
+    let _timer = crate::proc::timer(format!("typescript resolve ({})", job.side.name()));
     Ok(resolve(job, &index, notes.warnings))
 }
 
@@ -169,6 +170,8 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
             log(format!("Installing {} {} dependencies{at} for the TypeScript index (Yarn, scripts off)", job.side.name(), short(job.sha)));
             let lockfile = if *has_lockfile { "--frozen-lockfile" } else { "--pure-lockfile" };
             let status = Cmd::new(&yarn)
+                .what("yarn install")
+                .context(job.side.name())
                 .args(yarn_args)
                 .args(["install", lockfile, "--ignore-scripts", "--non-interactive", "--prefer-offline", "--no-progress"])
                 .cwd(&dir)
@@ -197,6 +200,7 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
             remove_links(&dir, &project, job.dir);
             let status = env
                 .command("build")
+                .what("typescript index")
                 .arg(format!("--disk_cache={}", Workspaces::disk_cache().display()))
                 .arg("--experimental_convenience_symlinks=ignore")
                 .arg("--keep_going")
@@ -227,7 +231,7 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
     let output = job.log_dir.join(format!("typescript-{}-{}.scip.tmp", job.side.name(), std::process::id()));
     let _ = std::fs::remove_file(&output);
     log(format!("Indexing {} {}{at} with scip-typescript", job.side.name(), short(job.sha)));
-    let mut cmd = Cmd::new(program).args(prefix.iter().cloned()).arg("index").arg("--output").arg(output.to_string_lossy()).arg("--no-progress-bar");
+    let mut cmd = Cmd::new(program).what("scip-typescript").context(job.side.name()).context(format!("{:?}", job.dir)).args(prefix.iter().cloned()).arg("index").arg("--output").arg(output.to_string_lossy()).arg("--no-progress-bar");
     cmd = if projects.is_empty() { cmd.arg("--infer-tsconfig") } else { cmd.args(projects) };
     let status = cmd.cwd(&dir).env("PATH", &path).env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0").run_logged(&log_path, cancel);
     links.remove();

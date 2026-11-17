@@ -155,6 +155,7 @@ pub fn load(job: &KotlinIndexJob, cancel: &Cancel, log: Log) -> Result<SideIndex
     let status = job
         .env
         .command("build")
+        .what("kotlin index")
         .arg(format!("--aspects=//{ASPECT_PACKAGE}:kotlin_index.bzl%reviewmap_kotlin"))
         .arg(format!("--output_groups={OUTPUT_GROUP}"))
         .arg(format!("--disk_cache={}", Workspaces::disk_cache().display()))
@@ -323,6 +324,8 @@ fn index_target(
         let target_root = scratch.join("targetroot");
         let classpath: Vec<String> = target.classpath.iter().map(|e| exec_root.join(&e.path).to_string_lossy().to_string()).collect();
         let mut cmd = Cmd::new(java)
+            .what("kotlin indexer")
+            .context(job.side.name())
             .arg("-cp")
             .arg(launcher.to_string_lossy())
             .arg(INDEXER_MAIN_CLASS)
@@ -340,6 +343,8 @@ fn index_target(
         }
         let output = scratch.join("index.scip");
         let aggregate = Cmd::new(java)
+            .what("kotlin indexer aggregate")
+            .context(job.side.name())
             .arg("-jar")
             .arg(launcher.to_string_lossy())
             .arg("aggregate")
@@ -453,7 +458,7 @@ pub fn scip_java_launcher(cancel: &Cancel, log: Log) -> Result<PathBuf> {
     let download = bin.join("scip-java.download");
     let checksum = bin.join("scip-java.sha256");
     let fetch = |from: &str, to: &Path| -> Result<bool> {
-        Ok(Cmd::new(&curl).args(["-fsSL", "-o"]).arg(to.to_string_lossy()).arg(from).cwd(&bin).run_logged(&install_log, cancel)?.success())
+        Ok(Cmd::new(&curl).what("download").args(["-fsSL", "-o"]).arg(to.to_string_lossy()).arg(from).cwd(&bin).run_logged(&install_log, cancel)?.success())
     };
     if !fetch(&url, &download)? || !fetch(&format!("{url}.sha256"), &checksum)? {
         bail!("Could not download scip-java. Log: {}", install_log.display());

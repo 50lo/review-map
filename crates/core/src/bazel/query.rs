@@ -246,7 +246,7 @@ fn expand_filegroups(targets: &mut BTreeMap<String, TargetNode>) {
 pub fn load_graph(env: &BazelEnv, workspace: &str, scope: &Scope, cancel: &Cancel, log: Log) -> Result<WorkspaceGraph> {
     let mut graph = WorkspaceGraph { workspace: workspace.to_string(), scope_targets: scope.targets.clone(), scope: scope.kind.clone(), ..Default::default() };
     let attrs = format!("--proto:output_rule_attrs={}", attr_names());
-    let common = |command: &str| -> Cmd { env.command(command).arg("--keep_going").arg("--noimplicit_deps").arg("--notool_deps").arg(attrs.clone()) };
+    let common = |command: &str| -> Cmd { env.command(command).what("graph").arg("--keep_going").arg("--noimplicit_deps").arg("--notool_deps").arg(attrs.clone()) };
     let expression = format!("deps(set({}))", scope.targets.join(" "));
     let mut errors: Vec<String> = Vec::new();
 

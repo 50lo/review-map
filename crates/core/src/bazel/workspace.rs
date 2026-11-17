@@ -238,6 +238,22 @@ impl BazelEnv {
             .arg("--max_idle_secs=900")
             .arg(command)
             .cwd(&self.dir)
+            .context(self.side_name())
+            .context(format!("workspace {:?}", self.workspace_name()))
+    }
+
+    /// The side this environment builds, from its output base (`<root>/<side>/out/<name>`), for `[timing]` lines.
+    fn side_name(&self) -> String {
+        self.output_base.parent().and_then(Path::parent).and_then(Path::file_name).map(|n| n.to_string_lossy().to_string()).unwrap_or_default()
+    }
+
+    /// The workspace's path in the repository (empty for the root), from its directory in the side's tree.
+    fn workspace_name(&self) -> String {
+        let tree = self.output_base.parent().and_then(Path::parent).map(|side| side.join("tree"));
+        match tree.as_deref().and_then(|t| self.dir.strip_prefix(t).ok()) {
+            Some(rel) => rel.to_string_lossy().to_string(),
+            None => self.output_base.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default(),
+        }
     }
 
     /// `bazel info` values by key.
@@ -260,10 +276,16 @@ impl BazelEnv {
 /// Stops the Bazel servers this process started. Output bases stay on disk; the servers' in-memory
 /// analysis state is lost, so reopening the app is slower than another review in the same session.
 pub fn shutdown_all() {
-    let bases: Vec<(PathBuf, PathBuf, PathBuf)> = std::mem::take(&mut *OUTPUT_BASES.lock().unwrap()).into_iter().collect();
-    let handles: Vec<_> = bases
+    let bases: Vec<(PathBuf, PathBuf, PathBuf)> = std::mem::take(&mut *OUTPUT_BASES.lock().unwrap())
         .into_iter()
         .filter(|(_, dir, base)| base.join("server").exists() && dir.exists())
+        .collect();
+    if bases.is_empty() {
+        return;
+    }
+    let _timer = crate::proc::timer(format!("shutdown bazel servers ({})", bases.len()));
+    let handles: Vec<_> = bases
+        .into_iter()
         .map(|(bazel, dir, base)| {
             std::thread::spawn(move || {
                 let _ = std::process::Command::new(&bazel)

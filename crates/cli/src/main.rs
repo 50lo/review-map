@@ -10,7 +10,7 @@
 
 use anyhow::{anyhow, bail, Result};
 use reviewmap_core::llm::LlmOptions;
-use reviewmap_core::proc::Cancel;
+use reviewmap_core::proc::{self, Cancel};
 use reviewmap_core::session::{self, Event, ReviewRequest};
 use std::path::PathBuf;
 
@@ -120,6 +120,7 @@ fn parse() -> Result<Args> {
 }
 
 fn main() {
+    let start = std::time::Instant::now();
     let args = match parse() {
         Ok(a) => a,
         Err(e) => {
@@ -127,11 +128,21 @@ fn main() {
             std::process::exit(2);
         }
     };
+    if args.report.is_some() {
+        // How long each step took, with the progress lines (docs/rebuild-build.md, "Benchmarking a review").
+        proc::set_timing_log(|line| eprintln!("{line}"));
+    }
     let result = match &args.report {
         Some(out) => write_report(&args, out),
         None => launch::open_app(&args.request, args.llm),
     };
-    reviewmap_core::bazel::workspace::shutdown_all();
+    // For benchmarks (scripts/bench-review.sh --keep-bazel): leave the Bazel servers up, as the app does between
+    // the reviews of one session, so the next run measures a review in a running session. They idle out after
+    // fifteen minutes.
+    if std::env::var_os("REVIEWMAP_KEEP_BAZEL").is_none() {
+        reviewmap_core::bazel::workspace::shutdown_all();
+    }
+    proc::timing("total", start.elapsed().as_secs_f64());
     if let Err(e) = result {
         eprintln!("reviewmap: {e:#}");
         std::process::exit(1);
@@ -150,6 +161,7 @@ fn write_report(args: &Args, out: &str) -> Result<()> {
     };
     let session = session::run(args.request.clone(), &cancel, &emit)?;
     let report = if args.name_based { session.name_based_report() } else { *last.into_inner().unwrap().ok_or_else(|| anyhow!("the analysis produced no report"))? };
+    let _writing = proc::timer("write report");
     let json = serde_json::to_string_pretty(&report)?;
     if out == "-" {
         println!("{json}");
