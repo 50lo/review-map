@@ -272,6 +272,17 @@ fn typescript_index_through_bazel() {
     assert_eq!(report.analyzer.resolution, "index", "{:?}", report.warnings);
     assert!(progress.iter().any(|m| m.starts_with("Building head") && m.contains("for the TypeScript index")), "{progress:?}");
     assert!(!progress.iter().any(|m| m.starts_with("Installing")), "nothing is installed for a Bazel workspace: {progress:?}");
+    // Bazel builds what scip-typescript reads, not the scope (//...): the npm links the scope depends on, and
+    // the generated version.ts, which lands under bazel-bin, where the indexer doesn't see it (see below).
+    let built: Vec<&String> = progress.iter().filter(|m| m.contains("for the TypeScript index")).filter(|m| !m.starts_with("Building")).collect();
+    for side in ["head", "base"] {
+        let line = built.iter().find(|m| m.starts_with(side)).unwrap_or_else(|| panic!("no build line for {side}: {progress:?}"));
+        assert!(
+            line.contains("Bazel builds 3 npm links for the TypeScript index and 1 generated TypeScript file")
+                && line.ends_with(": //:node_modules/@types/semver //:node_modules/typescript //packages/app:node_modules/@demo/lib //packages/app:src/generated/version.ts"),
+            "{line}"
+        );
+    }
 
     // Components are the ts_project targets, which compile the packages their package.json names.
     for (id, module) in [("//packages/app:app", "@demo/app"), ("//packages/lib:lib", "@demo/lib")] {

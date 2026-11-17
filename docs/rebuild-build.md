@@ -50,7 +50,7 @@ Every review logs how long each of its steps took. The CLI's `--report` mode pri
 [timing] 62.09s cmd bazel build (swift index, head, workspace "")
 ```
 
-Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` step holds its `cmd bazel build`. Kotlin's indexers also run several at a time. So the lines don't add up to the total. `scripts/bench-phases.py` reads these labels:
+Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` step holds its `cmd bazel build`. A TypeScript index of a Bazel workspace runs two Bazel commands: `cmd bazel query (typescript index, …)`, which finds the npm links to build, and `cmd bazel build (typescript index, …)`. `scripts/bench-phases.py` puts only the build in its "TS Bazel" column, so add the query's line to it when you compare with runs from before rm-9e2v, which had no query. Kotlin's indexers also run several at a time. So the lines don't add up to the total. `scripts/bench-phases.py` reads these labels:
 
 | Label | Step |
 | --- | --- |

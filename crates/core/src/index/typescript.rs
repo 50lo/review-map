@@ -4,11 +4,12 @@
 //!   reviewed working tree, with the lockfile frozen and install scripts off, as in the prototype. Yarn's
 //!   own package cache is shared by every install, and the tree's `node_modules` stays between reviews
 //!   unless the root is inside a Bazel workspace, where Bazel would trip over it.
-//! - **Bazel workspaces that use rules_ts** (with rules_js). Nothing is installed: Bazel builds the scope
-//!   targets in the app-owned tree, which fetches and lays out their `node_modules` under bazel-bin. For
-//!   the indexer, each package directory gets a `node_modules` of links for as long as it runs: a
-//!   first-party package links to its source directory, so references land in the repository's own files,
-//!   and anything else to what Bazel laid out.
+//! - **Bazel workspaces that use rules_ts** (with rules_js). Nothing is installed: Bazel builds, in the
+//!   app-owned tree, the npm links the scope targets depend on, which fetches and lays out their
+//!   `node_modules` under bazel-bin (one query finds them; see `input_query`). For the indexer, each
+//!   package directory gets a `node_modules` of links for as long as it runs: a first-party package links
+//!   to its source directory, so references land in the repository's own files, and anything else to what
+//!   Bazel laid out.
 //!
 //! scip-typescript runs through `npx` at a pinned version (`REVIEWMAP_SCIP_TYPESCRIPT` names another
 //! command) with Node.js found as `tools::node` finds it, so a Finder launch works too.
@@ -43,7 +44,7 @@ use std::path::{Path, PathBuf};
 pub const SCIP_TYPESCRIPT: &str = "@sourcegraph/scip-typescript@0.4.0";
 /// The Yarn Classic release corepack or npx runs when no Yarn is installed and the project pins none.
 pub const YARN_CLASSIC: &str = "yarn@1.22.22";
-const FORMAT: &str = "typescript-index-1";
+const FORMAT: &str = "typescript-index-2";
 
 /// How a project gets what the indexer needs.
 pub enum Setup<'a> {
@@ -195,9 +196,24 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
                 notes.warnings.push(w);
             }
         }
-        Setup::Bazel { env, targets } => {
-            log(format!("Building {} {}{at} with Bazel for the TypeScript index", job.side.name(), short(job.sha)));
+        Setup::Bazel { env, targets: scope } => {
             remove_links(&dir, &project, job.dir);
+            log(format!("Finding what the TypeScript index of {} {}{at} needs Bazel to build", job.side.name(), short(job.sha)));
+            let query = input_query(scope);
+            append_log(&log_path, &format!("bazel query --notool_deps --output=label_kind '{query}'\n"))?;
+            let found = env.command("query").what("typescript index").arg("--notool_deps").arg("--output=label_kind").arg(query).output_string(cancel);
+            cancel.check()?;
+            let found = match found {
+                Ok(out) => Ok(IndexInputs::parse(&out)),
+                Err(e) => {
+                    append_log(&log_path, &format!("{e}\n"))?;
+                    Err(format!("log: {}", log_path.display()))
+                }
+            };
+            let (targets, choice) = build_targets(found, scope);
+            log(format!("{} {}{at}: {choice}", job.side.name(), short(job.sha)));
+            append_log(&log_path, &format!("{choice}\n\n"))?;
+            log(format!("Building {} {}{at} with Bazel for the TypeScript index", job.side.name(), short(job.sha)));
             let status = env
                 .command("build")
                 .what("typescript index")
@@ -256,6 +272,93 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
     }
     log(format!("Indexed TypeScript at {}{at} in {}s", job.side.name(), start.elapsed().as_secs()));
     Ok((index, notes))
+}
+
+/// The query that finds what scip-typescript needs Bazel to build for the scope: the npm links the scope
+/// depends on, which rules_js lays out as `bazel-bin/<package>/node_modules/<name>`, and generated
+/// TypeScript sources (`.ts`, `.tsx`, `.mts`, `.cts`, `.d.ts`) that a `ts_project` or `js_library` in the
+/// scope names in its `srcs`, directly or through the rule that generates them. The outputs of
+/// `ts_project` itself are not inputs and are left out: building them would compile the TypeScript the
+/// indexer reads from source. Everything else in the scope (bundles, Vite, Rust, Swift) is never read.
+///
+/// It is a plain query, so `select()` branches count whichever the build would take, and it runs without
+/// the workspace's Bazel arguments, which are build options a query may reject (as the graph's `query`
+/// does). `--notool_deps` leaves out what only the exec configuration builds: that is laid out under
+/// another bin directory, not bazel-bin.
+fn input_query(scope: &[String]) -> String {
+    format!(
+        "let d = deps(set({})) in let s = labels(\"srcs\", kind(\"ts_project|js_library\", $d)) in kind(\"npm_link_package_store\", $d) + filter(\"\\.(ts|tsx|mts|cts)$\", kind(\"generated file\", rdeps(siblings($s), $s except kind(\"ts_project\", $s), 1)))",
+        scope.join(" ")
+    )
+}
+
+/// What the query of `input_query` found inside the workspace, by label.
+#[derive(Debug, Default, PartialEq)]
+struct IndexInputs {
+    /// `npm_link_package_store` targets.
+    links: Vec<String>,
+    /// Generated TypeScript files. They land under bazel-bin, not at their source path, so the indexer
+    /// still doesn't see them; a file that imports one is left out of the index, as before.
+    generated: Vec<String>,
+}
+
+impl IndexInputs {
+    /// Reads `--output=label_kind` lines (`npm_link_package_store rule //app:node_modules/react`,
+    /// `generated file //app:src/version.ts`). Targets in other repositories are left out: nothing of
+    /// theirs is laid out in the workspace's bazel-bin.
+    fn parse(out: &str) -> IndexInputs {
+        let mut inputs = IndexInputs::default();
+        for line in out.lines() {
+            let Some((kind, label)) = line.trim().rsplit_once(' ') else { continue };
+            if !label.starts_with("//") {
+                continue;
+            }
+            match kind {
+                "npm_link_package_store rule" => inputs.links.push(label.to_string()),
+                "generated file" => inputs.generated.push(label.to_string()),
+                _ => {}
+            }
+        }
+        inputs.links.sort();
+        inputs.links.dedup();
+        inputs.generated.sort();
+        inputs.generated.dedup();
+        inputs
+    }
+}
+
+/// The targets the TypeScript index builds, and a line for the log that says what they are. The inputs the
+/// query found (`found`); or, when it failed (`found` says why) or found no npm link (generated files
+/// alone lay nothing out), the scope targets, as before. A query that failed part-way gives no partial
+/// set: a missing link would leave out the packages it lays out.
+fn build_targets(found: Result<IndexInputs, String>, scope: &[String]) -> (Vec<String>, String) {
+    let fallback = |why: String| (scope.to_vec(), format!("{why}, so Bazel builds the scope targets for the TypeScript index: {}", scope.join(" ")));
+    match found {
+        Err(why) => fallback(format!("The query for what the TypeScript index needs failed ({why})")),
+        Ok(inputs) if inputs.links.is_empty() => fallback("The query for what the TypeScript index needs found no npm links".to_string()),
+        Ok(inputs) => {
+            let mut what = format!("Bazel builds {} npm {} for the TypeScript index", inputs.links.len(), if inputs.links.len() == 1 { "link" } else { "links" });
+            if !inputs.generated.is_empty() {
+                what.push_str(&format!(
+                    " and {} generated TypeScript {} (Bazel puts {} under bazel-bin, where the indexer does not see {})",
+                    inputs.generated.len(),
+                    if inputs.generated.len() == 1 { "file" } else { "files" },
+                    if inputs.generated.len() == 1 { "it" } else { "them" },
+                    if inputs.generated.len() == 1 { "it" } else { "them" },
+                ));
+            }
+            let targets: Vec<String> = inputs.links.into_iter().chain(inputs.generated).collect();
+            let line = format!("{what}: {}", targets.join(" "));
+            (targets, line)
+        }
+    }
+}
+
+/// Appends text to a log file.
+fn append_log(path: &Path, text: &str) -> Result<()> {
+    use std::io::Write;
+    std::fs::OpenOptions::new().create(true).append(true).open(path)?.write_all(text.as_bytes())?;
+    Ok(())
 }
 
 /// Puts back any tracked package.json or yarn.lock that an install rewrote. The tree's manifest trusts
@@ -583,6 +686,51 @@ mod tests {
         let (side, incomplete) = resolve_documents(&documents, &|_| None, &p);
         assert!(side.refs["a/src/main.ts"].is_empty());
         assert!(incomplete.is_empty());
+    }
+
+    /// The query's lines become the npm links and generated TypeScript files of the workspace; other
+    /// repositories' targets and other kinds are dropped.
+    #[test]
+    fn index_inputs_from_the_query() {
+        let out = "npm_link_package_store rule //app:node_modules/react\n\
+                   npm_link_package_store rule //:node_modules/@types/semver\n\
+                   generated file //packages/app:src/generated/version.ts\n\
+                   npm_link_package_store rule @npm//:node_modules/vite\n\
+                   generated file @other//:types.d.ts\n\
+                   js_library rule //app:node_modules\n\
+                   npm_link_package_store rule //app:node_modules/react\n";
+        let inputs = IndexInputs::parse(out);
+        assert_eq!(inputs.links, ["//:node_modules/@types/semver", "//app:node_modules/react"]);
+        assert_eq!(inputs.generated, ["//packages/app:src/generated/version.ts"]);
+    }
+
+    /// The index builds the links and generated files the query found, not the scope targets, and the log
+    /// line names them.
+    #[test]
+    fn the_build_is_the_npm_links_the_scope_needs() {
+        let scope = vec!["//app:bundle".to_string()];
+        let inputs = IndexInputs { links: vec!["//app:node_modules/react".into(), "//app:node_modules/vite".into()], generated: vec!["//app:src/version.ts".into()] };
+        let (targets, line) = build_targets(Ok(inputs), &scope);
+        assert_eq!(targets, ["//app:node_modules/react", "//app:node_modules/vite", "//app:src/version.ts"]);
+        assert_eq!(
+            line,
+            "Bazel builds 2 npm links for the TypeScript index and 1 generated TypeScript file (Bazel puts it under bazel-bin, where the indexer does not see it): //app:node_modules/react //app:node_modules/vite //app:src/version.ts"
+        );
+    }
+
+    /// A failed query, or one that found no npm link, builds the scope targets as before and says so.
+    #[test]
+    fn without_npm_links_the_build_falls_back_to_the_scope() {
+        let scope = vec!["//app:bundle".to_string(), "//app:test".to_string()];
+        let (targets, line) = build_targets(Err("log: /tmp/ts.log".to_string()), &scope);
+        assert_eq!(targets, scope);
+        assert_eq!(line, "The query for what the TypeScript index needs failed (log: /tmp/ts.log), so Bazel builds the scope targets for the TypeScript index: //app:bundle //app:test");
+        let generated_only = IndexInputs { links: Vec::new(), generated: vec!["//app:src/version.ts".into()] };
+        for found in [IndexInputs::default(), generated_only] {
+            let (targets, line) = build_targets(Ok(found), &scope);
+            assert_eq!(targets, scope);
+            assert!(line.starts_with("The query for what the TypeScript index needs found no npm links, so Bazel builds the scope targets"), "{line}");
+        }
     }
 
     #[test]
