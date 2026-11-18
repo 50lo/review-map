@@ -1,2 +1,12 @@
 # A test fixture: a rules_kotlin workspace that this repo does not build.
 Tests/ReviewMapCoreTests/Fixtures/kotlin-bazel-indexed
+# Not Bazel packages, and large to walk: the Bazel fixture tests' home (target/), the link to the UI's
+# packages that `bazel run //app:dev` makes (app/node_modules), and what builds before Bazel left behind.
+target
+app/node_modules
+app/dist
+helper/.build
+# Test fixtures that are Bazel workspaces of their own.
+crates/core/tests/fixtures
+# Claude Code's local files, including the git worktrees of other sessions, each a checkout of this workspace.
+.claude

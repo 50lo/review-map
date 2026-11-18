@@ -1,0 +1,128 @@
+load("@crates//:defs.bzl", "aliases", "all_crate_deps")
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+load("//:version.bzl", "VERSION")
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "reviewmap_core",
+    srcs = glob(["src/**/*.rs"]),
+    aliases = aliases(),
+    crate_name = "reviewmap_core",
+    edition = "2021",
+    proc_macro_deps = all_crate_deps(proc_macro = True),
+    # The analyzer does a lot of string and tree work; unoptimized, the first view of a large repository
+    # takes many times longer, and so do the tests.
+    rustc_flags = select({
+        "//:opt": [],
+        "//conditions:default": ["-Copt-level=2"],
+    }),
+    version = VERSION,
+    visibility = ["//visibility:public"],
+    deps = all_crate_deps(normal = True),
+)
+
+rust_test(
+    name = "unit_tests",
+    size = "small",
+    crate = ":reviewmap_core",
+    deps = all_crate_deps(normal_dev = True),
+)
+
+# What every acceptance test (tests/*.rs) has: the helpers in tests/common, which find the checkout through
+# their own runfile, the Swift helper, which the Swift tests run, and scripts/fake-llm.sh, which stands in for
+# claude and codex: no test runs a real coding agent.
+TEST_DATA = [
+    "tests/common/mod.rs",
+    "//helper:reviewmap-swift-helper",
+    "//:scripts/fake-llm.sh",
+]
+
+TEST_ENV = {
+    "REVIEWMAP_FAKE_LLM": "$(rootpath //:scripts/fake-llm.sh)",
+    "REVIEWMAP_SWIFT_HELPER": "$(rootpath //helper:reviewmap-swift-helper)",
+}
+
+[rust_test(
+    name = name,
+    size = "medium",
+    srcs = [
+        "tests/%s.rs" % name,
+        "tests/common/mod.rs",
+    ],
+    crate_root = "tests/%s.rs" % name,
+    data = TEST_DATA + data,
+    edition = "2021",
+    env = TEST_ENV,
+    deps = all_crate_deps(normal_dev = True) + [":reviewmap_core"],
+) for name, data in [
+    ("core_rules", []),
+    ("llm", []),
+    ("swift_rules", ["//:prototype_fixture_basic"]),
+]]
+
+# Index builds from start to end: the tests start Bazel themselves, in nested workspaces made from fixtures
+# that .bazelignore keeps out of this workspace (tests/fixtures and the prototype's kotlin-bazel-indexed). So
+# they run outside the sandbox, read the fixtures from the checkout, keep their app home in the checkout's
+# target/reviewmap-test-home so that the nested output bases stay warm between runs, give the nested Bazel
+# the user's own repository cache (not one in TEST_TMPDIR, which every run starts empty), use the network
+# on a first run (rules, scip-java), and are never cached: their result depends on the Bazel,
+# JDK and Xcode installed on this Mac, which they find through the inherited PATH, HOME and JAVA_HOME. A
+# test whose tool is missing returns early and says why in its log (`skipped: …`).
+rust_test(
+    name = "bazel_fixtures",
+    size = "large",
+    srcs = [
+        "tests/bazel_fixtures.rs",
+        "tests/common/mod.rs",
+    ],
+    crate_root = "tests/bazel_fixtures.rs",
+    data = TEST_DATA,
+    edition = "2021",
+    env = TEST_ENV,
+    env_inherit = [
+        "HOME",
+        "JAVA_HOME",
+        "PATH",
+    ],
+    tags = [
+        "exclusive",
+        "local",
+        "no-cache",
+        "requires-network",
+    ],
+    deps = all_crate_deps(normal_dev = True) + [":reviewmap_core"],
+)
+
+# TypeScript outside Bazel from start to end: a Yarn Classic and a Yarn Berry workspace made from
+# tests/fixtures/ts-yarn and ts-berry, which .bazelignore keeps out of this workspace, so the target reads them
+# from the checkout and runs outside the sandbox. The tests that index fetch Yarn Classic and Yarn 4
+# (corepack) and scip-typescript (npx) on a first run and find Node.js through the inherited PATH and HOME
+# (Volta, nvm, fnm, mise, asdf); without Node.js they pass early and say `skipped: …` in their log. The
+# fallback and package-manager tests need no tools.
+rust_test(
+    name = "typescript_fixtures",
+    size = "large",
+    srcs = [
+        "tests/common/mod.rs",
+        "tests/typescript_fixtures.rs",
+    ],
+    crate_root = "tests/typescript_fixtures.rs",
+    data = TEST_DATA + ["//:prototype_fixture_typescript"],
+    edition = "2021",
+    env = TEST_ENV,
+    env_inherit = [
+        "HOME",
+        "PATH",
+    ],
+    tags = [
+        "local",
+        "no-cache",
+        "requires-network",
+    ],
+    # serde_json, which the core depends on, reads the prototype's expected report.
+    deps = all_crate_deps(
+        normal = True,
+        normal_dev = True,
+    ) + [":reviewmap_core"],
+)

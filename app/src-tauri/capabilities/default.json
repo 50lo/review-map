@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the review UI may ask of the app: its own commands, events, and the folder dialog.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:default"]
+}

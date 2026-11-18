@@ -1,0 +1,15 @@
+[package]
+name = "reviewmap-cli"
+description = "The `reviewmap` command: opens or focuses the Review Map app on a repository and two refs."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "reviewmap"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+reviewmap-core = { path = "../core" }
+serde_json = "1"

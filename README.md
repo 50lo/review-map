@@ -1,318 +1,132 @@
 # Review Map
 
-A code review tool that shows a change as structure (components, dependency edges, changed contracts) instead of line diffs. It supports Swift, TypeScript, Go, and Rust, plus Kotlin with name matching. It has two parts joined by one file: an analyzer that reads two git refs and writes `change-report.json`, and a browser viewer that reads it. The plan is in [docs/plan.md](docs/plan.md).
+A macOS app for code review that shows a change as structure (components, dependency edges, changed contracts, findings) instead of line diffs. It reviews Swift and Kotlin in Bazel workspaces, and TypeScript in Yarn workspaces (Classic and Berry) and in Bazel workspaces that use rules_ts with rules_js. The app is Tauri 2 with a React UI over a Rust core; a small SwiftSyntax helper parses Swift. The plan is in [docs/rebuild-phase1-proposal.md](docs/rebuild-phase1-proposal.md).
 
-## Run it
+## Requirements
 
-The install script requires Bazel (Bazelisk is recommended), the Swift 6.2 toolchain (full Xcode 26 on macOS), Node 20 or later, and git. You can also install manually with SwiftPM without Bazel, as described below. Go 1.22 or later is needed for Go index mode, a Rust toolchain with rust-analyzer and rust-src for Rust index mode, and a JDK 17 or newer with Gradle or Bazel (rules_kotlin) for Kotlin index mode. The analyzer also builds and runs on Linux with SwiftPM; the Bazel build on Linux is unverified.
+- macOS 14 or later.
+- [Bazelisk](https://github.com/bazelbuild/bazelisk), installed as `bazel` (`brew install bazelisk`). Bazelisk is required: it runs the Bazel version pinned in `.bazelversion` (9.3.1) and the workspace's `tools/bazel` wrapper, which makes Bazel detect Xcode again after an Xcode update. A plain Bazel binary skips that wrapper.
+- Full Xcode, selected with `xcode-select`. Command Line Tools alone aren't enough: Bazel needs Xcode for Swift, and the app reads Swift indexes with Xcode's `libIndexStore`.
+- git.
+
+Bazel fetches Rust, Node.js, and every Rust and npm package itself. You don't need Cargo, Node.js, or npm to build Review Map.
+
+The projects you review need their own tools for index mode (see [Languages](#languages)): Bazel and Xcode for Swift, Bazel and a JDK 17 or newer for Kotlin, and Node.js for TypeScript.
+
+## Build and install
 
 ```sh
 git clone https://github.com/50lo/review-map.git
-review-map/scripts/install.sh
+cd review-map
+scripts/build-app.sh --install
+```
+
+`scripts/build-app.sh --install` builds an optimized `Review Map.app` (`bazel build --config=release //app:bundle`), copies it to `~/Applications`, and links `~/.local/bin/reviewmap` to the command inside it. `PREFIX=/some/dir` puts the link in `/some/dir/bin` instead. If that directory isn't on your `PATH`, the script says so. Run it again after pulling to update.
+
+Without `--install`, the script only builds the app and prints where it is in Bazel's output tree.
+
+## Use it
+
+```sh
 cd /path/to/repo
 reviewmap
 ```
 
-`scripts/install.sh` builds the release binary and installs it to `~/.local/bin/reviewmap`, with the viewer and its npm dependencies in `~/.local/share/reviewmap/viewer`. `PREFIX=/some/dir` installs under another prefix. If the `bin` directory isn't on your `PATH`, the script prints the line to add to your shell profile. Run it again after pulling to update; it reinstalls npm dependencies only when they changed. `scripts/install.sh --uninstall` removes both. The installed copy doesn't use the checkout, which can be moved or deleted. `REVIEWMAP_VIEWER` points the binary at another viewer directory.
-
-You can build the analyzer with either:
-
-```sh
-swift build -c release --product reviewmap
-```
-
-or
-
-```sh
-bazel build --config=release //:reviewmap
-```
-
-The installation script uses the Bazel release build. To install without Bazel, run the following from the checkout after building with SwiftPM:
-
-```sh
-prefix="$HOME/.local"  # or another installation prefix
-mkdir -p "$prefix/bin" "$prefix/share/reviewmap/viewer"
-install -m 755 "$(swift build -c release --show-bin-path)/reviewmap" "$prefix/bin/reviewmap"
-(cd viewer && tar -cf - --exclude ./node_modules --exclude ./dist .) | (cd "$prefix/share/reviewmap/viewer" && tar -xf -)
-(cd "$prefix/share/reviewmap/viewer" && npm ci --no-audit --no-fund)
-```
-
-Add `"$prefix/bin"` to your `PATH` if needed. The viewer and its dependencies are copied into the same layout as the script's installation, so the installed copy can run without the checkout.
-
-Without installing, `.build/release/reviewmap` runs the SwiftPM build too, using the viewer in the checkout. On Linux, add `-Xcxx -I<toolchain>/usr/lib/swift -Xcxx -I<toolchain>/usr/lib/swift/Block` to `swift build` and `swift test` (IndexStoreDB's C++ needs those headers); CI does this.
-
-The native Bazel build and repeatable SwiftPM/Bazel timing script are described in [docs/bazel-experiment.md](docs/bazel-experiment.md). The macOS Bazel build requires full Xcode; Command Line Tools alone are insufficient.
-
-With no arguments, `reviewmap` compares the branch checked out in the current directory with `main`, writes the change report to `~/.reviewmap/reports/<repo>/<head>/change-report.json`, starts the viewer on it, and opens the browser. It's the same as `reviewmap review . --base main --head <current branch> --view`. Nothing is written to the target repo, and each branch keeps its own change report, reviewed marks, and notes (a branch name like `feature/login` becomes `feature-login`). When run from a build in the checkout, the first run installs the viewer's npm dependencies. By default the LLM annotator runs through the local `claude` CLI; `--no-llm` skips it.
-
-Change reports written before version 4 (saved as `change-model.json` under `~/.reviewmap/models/`) can't be opened; run `reviewmap` again to create a new one.
-
-The subcommands do one step each: `reviewmap analyze` only writes the change report (add `--view` to open it), `reviewmap annotate [report]` runs the LLM annotator on an existing report, and `reviewmap view [report]` opens an existing report. Without a path, `annotate` and `view` use the report of the current branch of the repo in the current directory. Options for the default command and `analyze`:
+`reviewmap` opens the app, or focuses it if it's already running, and starts a review of the branch checked out in the current directory against `main`. The app shows the structural review as soon as it has one, then refines it with compiler indexes. Progress is shown, and you can cancel.
 
 | Option | Meaning |
 | --- | --- |
-| `[repo]` | Path to the repo, or any directory inside it (default: the current directory). |
-| `--base`, `--head` | Any git refs (default: `main` and the current branch). The base is the merge-base of the two, which is what a PR shows. |
-| `--no-merge-base` | Compare against `--base` directly. |
-| `-o <file>` | Output path, or `-` for stdout (default: `~/.reviewmap/reports/<repo>/<head>/change-report.json`). |
-| `--config <file>` | A `reviewmap.yml`. By default it's read from the head of the repo, if one exists there. |
-| `--dump-package` | Evaluate `Package.swift` with `swift package dump-package` instead of parsing it. More exact for computed manifests, but it compiles and runs the manifest. |
-| `--max-refs <n>` | References kept per edge (default 50). |
-| `--summary` | Print a short summary to stderr. |
-| `--view`, `--no-view` | Serve the result in the viewer and open the browser; stop it with Ctrl-C. On by default, off for `analyze`. |
-| `--port <n>` | Viewer port (default 5173). |
-| `--editor <e>` | Editor that Open uses: `xcode`, `vscode`, `cursor`, `zed`, `idea`, `webstorm`, `goland`, `rustrover`, or a command with `{file}` and `{line}`, such as `"subl {file}:{line}"` (split on spaces). Default: `$REVIEWMAP_EDITOR`, else `xcode` on macOS. `reviewmap view` takes it too. |
-| `--no-llm` | Skip the LLM annotator. |
-| `--llm <tool>` | CLI that runs the annotator: `claude` (default) or `codex`. |
-| `--llm-model <name>` | Model passed to the CLI. By default the CLI picks. |
-| `--llm-command <path>` | Executable to run in place of `claude` or `codex`, with the same arguments. |
-| `--llm-cache <dir>` | Cache directory (default `~/.reviewmap/cache`). It must be outside the target repo. |
-| `--llm-jobs <n>` | Batches run at the same time (default 4). |
-| `--llm-timeout <s>` | Seconds before one CLI call is stopped (default 300). |
-| `--description <file>` | The change's description for the structural review, or `-` for stdin. Default: the PR of the head branch from `gh pr view`, else the commit messages. |
-| `--no-review` | Skip the LLM's structural review of the whole change. |
-| `--index`, `--no-index` | Resolve references exactly from each language's index (see Index mode). Default: `index.enabled` in `reviewmap.yml`, else on. `--no-index` matches by name only, with no build. |
-| `--index-builder <b>` | Swift: `bazel`, `xcodebuild`, or `swift` (default: `bazel` for a Bazel workspace with targets, else `xcodebuild` where it exists, else `swift build`). Kotlin: `gradle` (default where there is a Gradle build) or `bazel` (default for a Bazel workspace without a Gradle build). |
-| `--index-target <label>` | Swift: Bazel target to build; repeat for several (default: `top_level_targets` of the repo's rules_xcodeproj `xcodeproj` rule). |
-| `--index-project <path>` | Swift: the `.xcworkspace`, `.xcodeproj`, or package directory to build: relative to the current directory or the repo root, or absolute. |
-| `--index-scheme <name>` | Swift: xcodebuild scheme (default: the only one, the one named after the project, or a package's `-Package` scheme). |
-| `--index-destination <d>` | Swift: xcodebuild destination (default `generic/platform=iOS Simulator`). |
-| `--index-cache <dir>` | Where indexes are kept (default `~/.reviewmap/index`). |
-| `--rebuild-index` | Build again even when a commit's index is cached. |
+| `[repo]` | The repository, or any directory inside it (default: the current directory). |
+| `--base <ref>` | Base ref: a branch, tag, or sha (default: `main`). |
+| `--head <ref>` | Head ref (default: the branch checked out in the repository). |
+| `--no-merge-base` | Compare against the base itself instead of the merge-base of base and head. |
+| `--target <label>` | A Bazel target that defines the review scope; repeat for several (default: `index.targets` in `reviewmap.yml`, else the `top_level_targets` of the repo's rules_xcodeproj rule). |
+| `--bazel-arg <arg>` | An extra argument for Bazel queries and builds, such as `--config=sim`; repeat for several. |
+| `--no-index` | Don't build indexes: only links that syntax proves are shown. |
+| `--llm <tool>` | Run the [LLM pass](#llm-pass) with `claude` or `codex` (default: the app's settings, where it is off). |
+| `--llm-command <path>` | Run this executable in place of the LLM tool, such as `scripts/fake-llm.sh`. |
+| `--llm-model <name>` | The model the LLM tool uses. |
+| `--no-llm` | Don't run the LLM pass, whatever the settings say. |
+| `-h`, `--help` | Show help. |
+| `-V`, `--version` | Show the version. |
 
-`reviewmap annotate [report]` runs only the annotator on an existing change report and writes it back (or to `-o`). It takes the same `--llm…` options.
-
-The analyzer never writes to the target repo. Both trees are exported with `git archive` into a temporary directory, which is removed on exit.
+Review Map reads committed content only, never the working tree. It builds both sides of the change in its own copies outside your repository, so nothing is written to the repository you review.
 
 ## Languages
 
-The core is language-neutral: git export, components, declaration matching, edges, usage, regions, risk, the LLM layer, and the change report. Each language plugs in through the `Language` protocol (`Sources/ReviewMapCore/Language.swift`) with its parser, the components its manifests declare, the modules its platform provides, its lockfile pins, its contract flags and their risk weights, its non-code contracts, public-API classification, conformer discovery and implementation matching, reference isolation, and its index. Exact references come in as a `SideIndex` per side: Swift's comes from the compiler's index store, and other languages read SCIP indexes (`SCIP.swift`) from their own indexers.
+| Language | Projects | Syntax | Index mode |
+| --- | --- | --- | --- |
+| Swift | Bazel (rules_swift) | SwiftSyntax, in the bundled helper | Bazel builds the scope targets with indexing on; the app reads the index store with Xcode's `libIndexStore`. |
+| Kotlin | Bazel (rules_kotlin) | tree-sitter | Bazel builds the targets' compile classpath; the Kotlin indexer from the scip-java launcher indexes each target. The launcher is downloaded once; `REVIEWMAP_SCIP_JAVA` names another. Needs a JDK 17 or newer. |
+| TypeScript, TSX | Yarn projects and workspaces, Classic (1.x) and Berry (2 and later); Bazel with rules_ts and rules_js | tree-sitter | scip-typescript 0.4.0, run through `npx`. Yarn Classic projects get `yarn install` with scripts off; Yarn Berry projects get `yarn install` with the project's own Yarn release, scripts off, and the `node-modules` linker whatever `.yarnrc.yml` sets (scip-typescript cannot resolve through Plug'n'Play); Bazel workspaces get no install: Bazel builds only the npm links the review's targets depend on, which lays out `node_modules` itself. Needs Node.js. |
 
-- **Swift** (`Sources/ReviewMapCore/Swift/`): SwiftSyntax, SPM and Xcode targets, `Package.resolved`, and the compiler's index store.
-- **TypeScript** (`Sources/ReviewMapCore/TypeScript/`): `.ts`, `.tsx`, `.mts`, and `.cts` files, parsed with tree-sitter's C library and its TypeScript and TSX grammars (`TreeSitter.swift` is the language-neutral wrapper, with query predicates). Declarations come from a walk over the tree; references and risk marks from tree-sitter queries. Components are npm packages and `tsconfig` projects, pins come from npm, pnpm, yarn, and bun lockfiles, and exact references from scip-typescript.
-- **Go** (`Sources/ReviewMapCore/Go/`): `.go` files outside `vendor` and `testdata`, parsed with tree-sitter's Go grammar. Components are packages (directories) inside the modules that `go.mod` files declare, pins come from `go.mod` requirements, and exact references from scip-go. Interfaces are implicit, so conformers are found by method set.
+Index mode is on by default. Without an index for a language or a file, Review Map shows only the links that syntax alone proves, never links matched by name, and says so with an `index-unavailable` or `index-partial` warning. Checks that need complete references, such as finding unused declarations, are held back until the index is there (`checks-held-back`).
 
-## What it extracts
+Every install runs in the app's own copy of the revision, never in the reviewed repository. For a Yarn Berry project, index mode runs the Yarn release the project commits (`yarnPath` in `.yarnrc.yml`) and the Yarn plugins it configures, as a Bazel build runs the workspace's own rules; without a committed release it runs the `packageManager` version through corepack (or npx on Node.js 25 and later), and without a `packageManager` pin either, Yarn 4.18.1 for a lockfile in a Yarn 4 format and Yarn 3.8.7 for an older one. pnpm, npm and Bun projects outside Bazel are detected and reported as not indexed. Go, Rust, Gradle, SwiftPM, and direct Xcode builds are outside phase 1. Java and Objective-C files in the review scope are reported as coverage gaps.
 
-- **Components**: SPM targets (from every `Package.swift`, including local packages), Xcode native targets (with XcodeProj: build-phase files and Xcode 16 synchronized folders), and top-level folders for any remaining files. A target with more than 30 source files is split by folder, recursively, up to depth 3. Split folders keep a `parent` pointing to their target. Third-party packages become `external` components. For TypeScript, the components are npm packages (every `package.json` with a name, except a workspace root) and `tsconfig.json` projects outside them; a component's test files (`*.test.ts`, `*.spec.ts`, and files under `__tests__`, `test`, `tests`, or `e2e`) form a test component of their own (`npm:<name>:tests`). For Go, every directory with `.go` files inside a module (the nearest `go.mod` above it; a `go.work` lists modules that have one) is a package component named by its import path (`go:<import path>`), its `_test.go` files form `go:<import path>:tests`, and each module's root package holds the module's settings even when it has no Go files.
-- **Dependency edges**: `import` statements, target dependencies in manifests, and type-level references. Without index mode, references are resolved by name against a table of top-level declarations; a reference only counts when the referring file can see the declaring module (same module or imported), and ambiguous names are recorded in `warnings` and not resolved. In TypeScript, a name only counts as a reference where it's imported: a relative import resolves to the file it names, and a package import narrows the name to that package. In Go, `pkg.Name` is looked up in the package that `pkg` imports (an alias, or the import path's last element without a major version), and the standard library (an import path whose first element has no dot) is neither an edge nor a warning; unqualified names are the file's own package's, so they only reach another component from a test file or through a dot import. Index mode, which is on by default, resolves every reference exactly instead, and falls back to these name rules per language when it can't index. `analyzer.resolution` records which was used. Each edge is `added`, `removed`, `changed` (the set of referenced symbols changed), or `unchanged`, and keeps its references.
-- **Review items**: types, extensions, functions, initializers, properties, enum cases, and typealiases, matched between base and head by component, scope, name, and kind. Overloads are paired by exact signature, then by argument labels. The change kinds are `added`, `removed`, `signature`, `body`, `modifiers`, and `cosmetic` (trivia only). `changes` lists every aspect that changed. A type appears as a review item only when its own header changed or it carries contract flags; its members are reported one by one. TypeScript's declarations use the same kinds: an interface is a `protocol`, an enum member a `case`, a constructor an `init`, an accessor a `var`, and a function assigned to a `const` or a property a `func`. Namespaces only qualify names. Comments, whitespace, and semicolons are cosmetic. In Go, a struct is a `struct`, an interface a `protocol`, any other named type a `typealias`, a field, constant, or variable a `var`, and a function or method a `func`; methods are scoped to their receiver's type, and an interface's embedded interfaces are its inherited names. A field's struct tag is compared with its modifiers. Files with a `// Code generated ... DO NOT EDIT.` header, `*.pb.go`, `*_gen.go`, and `zz_generated*.go` are generated.
-- **Contract flags**: prefixed with their language, as in `swift:codable-shape`. Swift's are `protocol-requirement-added|removed|changed`, `conformance-added|removed:<P>` (compared per type, across its extensions), `conformance-isolation-changed:<P>`, `access-changed:<a>-><b>`, `async-…`, `throws-…`, `typed-throws-changed`, `mainactor-…`, `nonisolated-…`, `sendable-…`, `kind-changed:class->actor`, `enum-case-added|removed|changed`, `codable-shape`, `swiftdata-model-changed`, `observable-state-changed`, `observable-added|removed`. TypeScript's are `interface-member-added|removed|changed`, `enum-member-added|removed|changed`, `abstract-member-added|removed|changed`, `supertype-added|removed:<T>` (from `extends` and `implements`), `export-…`, `access-changed:<a>-><b>` (class members, `public` by default), `async-…`, `readonly-…`, `optional-…`, `static-…`, `abstract-…`, and `const-enum-changed`. Go's are `api-added|removed` (exported names), `api-signature-changed`, `unexported` (an exported name that became unexported), `interface-method-added|removed|changed`, `field-added|removed` (exported fields of exported types), and `field-tag-changed:<key>` (`json`, `yaml`, `xml`, `db`, `bson`, `toml`, `protobuf`). Test files' exported names aren't API.
-- **Non-code contracts**: `Info.plist` (plus `url-schemes-changed`), entitlements, `PrivacyInfo.xcprivacy`, and Core Data models appear as `file` review items. Target build settings appear as `target` review items: Package.swift `swiftSettings`, and Xcode settings such as `SWIFT_DEFAULT_ACTOR_ISOLATION`, `SWIFT_STRICT_CONCURRENCY`, and `SWIFT_VERSION`. Their flags include `default-isolation-changed`, `strict-concurrency-changed`, `swift-features-changed`, `swift-version-changed`, and `deployment-target-changed`. A TypeScript component's settings are its package.json `type`, `main`, `module`, `types`, `exports`, `bin`, `sideEffects`, and `engines`, and the compiler options of its own `tsconfig.json` (without following `extends`), with the flags `package-exports-changed`, `engines-changed`, `strictness-changed`, `target-changed`, `module-resolution-changed`, and `compiler-options-changed`. A Go module's settings are the `go`, `toolchain`, and `replace` directives of its `go.mod`, with the flags `go-version-changed`, `toolchain-changed`, and `replace-changed`.
-- **External packages**: `Package.resolved` pins, and the versions that `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, and `bun.lock` give the packages a `package.json` lists, and the modules a `go.mod` requires (direct and indirect), that were added, removed, or bumped. A Go import belongs to the required module with the longest matching path.
-- **Usage**: `usedBy` lists declarations in other components that reference a review item, and `dependsOn` lists what the review item references in other components. A review item is an interface when it's `public`/`open`/`package`, used from another non-test component, or a requirement or case of an interface type.
+## LLM pass
 
-- **Review regions**: each non-cosmetic changed review item gets one region per run of changed lines (compared ignoring indentation, spacing, and blank lines). A run with head lines is a `review` region; a run that only deletes lines is a `removed` region on the base side, with `anchor` set to the head line it followed. A new or deleted declaration is one region, and a type's region covers only its header, since its members are review items of their own. Flags that a type carries for its members (a Codable shape, an enum case) put a region on its declaration line.
-- **Risk**: each region combines its signals as `1 - Π(1 - weight)`. High (0.6): a contract flag on an interface review item, a concurrency or persisted-model flag, an isolation annotation in code (`@MainActor` or `@Sendable` closures, `nonisolated(unsafe)`), or a removed check (`guard`, early return, `throw`, `precondition`, `assert`). Medium (0.3): other contract flags, a changed interface signature, a removed interface declaration, new crash points (force unwrap, `try!`, `as!`, `fatalError`), tasks, continuations, and locks added or removed, and changed control flow (branches, loops, `catch`, `try?`). Control flow in SwiftUI view code (a `View` type, `some View`, or a `ui` layer) counts 0.15. TypeScript's crash points are non-null assertions, type assertions (not `as const`), `any`, and `@ts-ignore`-style suppressions; its checks are `throw`, early returns, `assert`, and `invariant`; its concurrency marks are `new Promise`, `Promise.all` and the like, timers, workers, and `Atomics`; and its view code is React components (declarations that return JSX, class components, and declarations typed as components or elements). Go's crash points are `panic`, `log.Fatal…` and `log.Panic…`, `os.Exit`, type assertions without `ok`, `unsafe`, and ignored errors (a call whose last result is assigned to `_`); its checks are early returns; its control flow adds `select`, `defer`, `goto`, and `recover`; and its concurrency marks are `go` statements, `select`, `sync` primitives, and `atomic`. Every region adds 0.1, and an interface review item adds 0.05 per other component that uses it (up to 0.2). Test and generated code is scaled by 0.2. Checks inside a deleted declaration don't count. `reasons` lists the signals, most significant first.
-- **Context regions**: unchanged code that explains a review region, with `relation` and `supports` (the review regions it explains): `definition` (same-type members, and top-level declarations or members of mentioned types, when the name resolves to one declaration; up to 6 per review item), `caller` (usedBy first, then the review item's own component, tests last; up to 5, for interface review items and signature or flag changes), `conformer` (other conformers of a changed protocol, or their implementation of a changed requirement), `override` (overrides of a changed method, and the method a changed override overrides), and `state` (the stored properties of the enclosing type when a body changed). `lines` lists the lines that matter, such as the signature and the referencing lines. Test and generated code gets no context.
+Review Map can ask a coding-agent CLI, `claude` or `codex`, to annotate a review: a risk for every changed region, which context regions to keep and in what order, a one-line summary of each component and review item, and a structural review of the whole change (findings of kind intent, placement, missing, duplicate, and complexity). The pass runs after the analysis is complete, on the final report; the review is usable while it runs, and cancelling it keeps the review as it was. A reply that fails validation, or a call that fails, is dropped and the deterministic scores and findings stay, with an `llm-rejected` warning. Accepted replies are cached, so the same change reviewed again makes no calls.
 
-## Index mode
+The pass is off by default, because each call costs money. Turn it on for every review in the app's `settings.json` (in `~/Library/Application Support/reviewmap`):
 
-Name matching is fast and needs no build, but it guesses: a common member name (`load()`, `id`) counts as a use of every changed declaration with that name in files that mention its type, and a type name declared in two modules isn't resolved. Index mode replaces the guess with the compiler's own answer. It is on by default.
-
-- **Turning it off**: `--no-index` for one run, or `index: {enabled: false}` in the repo's `reviewmap.yml`. `--index` turns it back on over the config.
-- **What it runs**: indexing builds or type-checks both sides of the change in temporary copies, so the first run on a commit is slow, and later runs read the cache. It runs the repo's own build code: Gradle scripts, Rust build scripts and proc macros, an `xcodebuild` or Bazel build, and a package install (scripts off). Indexers that aren't installed are fetched once into `~/.reviewmap/index/tools/`: scip-typescript through `npx`, scip-go through `go install`, and the scip-java launcher (85 MB). Use `--no-index` for a repo whose build you don't want to run.
-- **Without the tools**: a language whose toolchain is missing, or whose build fails, is matched by name at both sides, and the report gets an `index-unavailable` warning with the reason. The run never fails because of indexing.
-
-### Swift
-
-- **Building**: each side's exported tree is built once with indexing on. For a Bazel workspace with targets (`MODULE.bazel` or `WORKSPACE` in the current directory or above it, or else the one below it, such as `ios/` in a monorepo), it's `bazel build <targets> --features=swift.index_while_building --features=swift.use_global_index_store` (`bazelisk` when there's no `bazel`). The targets come from `--index-target`, `index.targets`, or the `top_level_targets` of the rules_xcodeproj `xcodeproj` rule in the workspace's root `BUILD` file, so a repo that runs `bazel run //:xcodeproj` needs no setup. Each build gets a temporary output base that is expunged afterwards; downloads are shared through Bazel's repository cache, and actions through a disk cache in `~/.reviewmap/index/.bazel-disk-cache`. `index.bazelArgs` adds flags such as a `--config`. Otherwise: `xcodebuild build` for the workspace, project, or package (or `--index-project`), with `-destination generic/platform=iOS Simulator` and code signing off, or `swift build --enable-index-store` for a package where there is no Xcode. Builds run outside the target repo, and resolved packages are shared in `~/.reviewmap/index/.packages`. Without `--index-project`, the whole repo is searched (skipping `Pods`, build folders, and the like): a workspace wins over a project, and a project over a `Package.swift`. When there are several, the ones under the directory you run from are preferred, so in a monorepo running from the app's directory picks its project.
-- **Cache**: the index store is kept per repo and commit in `~/.reviewmap/index/<repo>/<sha>/`, with the build log. A base shared by several branches is built once, and running again on the same head builds nothing. `--rebuild-index` builds again; the old store stays until the new build succeeds.
-- **Reading**: IndexStoreDB, with `libIndexStore` from the same toolchain (`xcrun --find swift`, or `swift` on the `PATH`; `REVIEWMAP_LIBINDEXSTORE` overrides it), gives every reference in a file and the declaration it points at.
-
-### TypeScript
-
-- **Dependencies**: each side's exported tree gets its dependencies installed, with scripts off, in the outermost directories that have a lockfile (or, without one, a `package.json`): `npm ci`, `pnpm install --frozen-lockfile`, `yarn install` (frozen, or immutable for Yarn 2 and later), or `bun install --frozen-lockfile`. The package manager runs from the `PATH`, else through `corepack`, else through `npx`. If the install fails, indexing goes on without third-party types, with an `index-partial` warning.
-- **Indexing**: `npx --yes @sourcegraph/scip-typescript@0.4.0 index` type-checks the projects (the outermost `tsconfig.json` directories, and the ones under a root that has `references`; `--infer-tsconfig` when there are none) and writes a SCIP index. Nothing is compiled. `REVIEWMAP_SCIP_TYPESCRIPT` names another command to run in its place.
-- **Cache**: the index is kept per repo and commit in `~/.reviewmap/index/<repo>/<sha>/typescript/`, with the log of the install and the indexer. `--rebuild-index` indexes again.
-
-### Go
-
-- **Dependencies**: `go mod download` in each module of each side's exported tree. If it fails, indexing goes on without third-party types, with an `index-partial` warning.
-- **Indexing**: scip-go type-checks each module (`./...`) and writes a SCIP index. Nothing is built. scip-go runs from the `PATH`, or is installed once with `go install github.com/scip-code/scip-go/cmd/scip-go@v0.2.9` into `~/.reviewmap/index/tools/`. `REVIEWMAP_SCIP_GO` names another command to run in its place. Without the Go toolchain, Go is matched by name, with an `index-unavailable` warning.
-- **Cache**: the indexes are kept per repo, commit, and module in `~/.reviewmap/index/<repo>/<sha>/go/`, each with its log. `--rebuild-index` indexes again.
-
-### Rust
-
-- **Name matching**: Cargo manifests and lockfiles are read directly; Cargo is not required. Workspace crates, library and binary targets, test components, dependency pins, and build settings appear in the map. Rust contracts include public API, trait requirements, enum variants, serde shapes, async and Send/Sync bounds, and visibility changes.
-- **Indexing**: install the components with `rustup component add rust-analyzer rust-src`. Each side runs `cargo metadata` and `rust-analyzer scip` on its outermost Cargo workspaces. rust-analyzer runs build scripts and loads proc macros in the exported commit tree. `REVIEWMAP_RUST_ANALYZER` names another executable. Missing tools or an indexer failure fall back to name matching at both sides; recoverable dependency, build-script, macro, and symbol failures retain available references with an `index-partial` warning.
-- **Cache**: indexes and logs are kept per repo, commit, and workspace under `~/.reviewmap/index/<repo>/<sha>/rust/`. `--rebuild-index` indexes again. Syntax-only analysis does not expand macros or trace file-module visibility; index mode supplies compiler-resolved references where available.
-
-### Kotlin
-
-- **Name matching**: `.kt` and `.kts` sources are parsed with tree-sitter. Gradle scripts are read as text; Java, Gradle, and an Android SDK are not required. Java source files are not parsed.
-- **Indexing** (Gradle builds): needs a JDK 17 or newer (`java` on the `PATH`) and Gradle (the build's `gradlew`, or `gradle` on the `PATH`). Each side's outermost Gradle builds (directories with a `settings.gradle(.kts)`, or else a `build.gradle(.kts)`) are compiled and indexed by `scip-java index`, which runs `clean` and the compile tasks through an init script, then indexes the Kotlin sources with the Kotlin Analysis API. That is a full build per side, and it runs the repo's Gradle scripts, unlike TypeScript's install with scripts off. scip-java runs from the `PATH`, or its v0.14.1 release launcher (85 MB) is downloaded once, checked against its SHA-256, into `~/.reviewmap/index/tools/`. `REVIEWMAP_SCIP_JAVA` names another command. A missing JDK or Gradle, a compile error, or an Android module without the Android SDK falls back to name matching at both sides with an `index-unavailable` warning. `--index-builder gradle` is accepted and ignored by Swift.
-- **Indexing** (Bazel builds with rules_kotlin): needs a JDK 17 or newer and Bazel or Bazelisk. Review Map writes a small aspect into the exported tree (`.reviewmap_kotlin/`, removed afterwards) and runs `bazel build` with it on `--index-target`/`index.targets` (default `//...`) plus `index.bazelArgs`; the aspect follows dependency edges and lists each `kt_jvm_library`/`kt_jvm_binary`/`kt_jvm_test` target's Kotlin sources and compile classpath. The Kotlin indexer inside the scip-java launcher then indexes each target, and `scip-java aggregate` merges the result. Bazel runs in a temporary output base that is expunged afterwards and shares the disk cache under `~/.reviewmap/index/.bazel-disk-cache`; it is a separate run from Swift's Bazel build, so Swift's flags and outputs don't change. The aspect loads `KtJvmInfo` from rules_kotlin's `//kotlin/internal:defs.bzl`, so rules_kotlin must be a direct `bazel_dep` of the workspace (a `repo_name` is followed); Android rules are not covered. `REVIEWMAP_SCIP_JAVA` must name the launcher jar itself here, and `REVIEWMAP_BAZEL` names another Bazel command. A missing tool, a failed build, or no rules_kotlin targets falls back to name matching with `index-unavailable`.
-- **Cache**: indexes and logs are kept per repo, commit, and Gradle build or Bazel workspace under `~/.reviewmap/index/<repo>/<sha>/kotlin/`. A Bazel index is cached per commit regardless of the targets, so pass `--rebuild-index` after changing them. `--rebuild-index` indexes again.
-- **Components and references**: literal Gradle module includes, project-directory overrides, JVM/Android/Multiplatform source sets, and declared dependencies form the map. Version catalog aliases contribute dependencies only when a build script uses them; versions are requested versions, not resolved pins. Kotlin packages stay separate from Gradle modules. Explicit, aliased, star, and same-package references are matched within their packages; ambiguous names are reported without choosing a target.
-- **Contracts and review**: public API, nullability, suspend, data-class and serialized/persisted shapes, sealed subclasses, enum entries, visibility, and inheritance modifiers have contract flags. Android manifest permissions, exported components, intent filters, SDK levels, JVM targets, and Kotlin versions are contracts too. Interface and abstract-class requirements feed conformance checks. Android main-thread annotations and UI classes supply isolation, overridden by the innermost explicit dispatcher block; Compose functions and Android UI classes receive view-code risk treatment.
-- **Validation**: small synthetic Gradle fixtures cover the supported behavior, including deliberate ambiguity and duplicate names across packages. They do not establish performance or reference accuracy on large Android projects. See [Step 7 notes](docs/progress.md#step-7-notes).
-
-### All languages
-
-- **What it changes**: edge references (named by the referenced top-level declaration, as before), `usedBy` and `dependsOn` (exact, members included), caller context (every reference in any component, instead of usedBy plus a name search in the review item's own component), and definition context (the declarations the changed lines reference). Conformer and override context still come from inheritance clauses (Go's conformers from method sets).
-- **Fallback**: if either side can't be built or read, the language's files are matched by name at both sides, so the two sides never mix methods, and an `index-unavailable` warning gives the reason and the build log. Files the index doesn't cover (not part of the built scheme or targets, for example) are matched by name, with an `index-partial` warning. Test files are matched by name when the scheme doesn't build their targets, without a warning.
-
-Index mode runs for each language in the change. To turn it off for a repo, add `index: {enabled: false}` to its `reviewmap.yml`. Add `scheme` and `project` there if the Swift defaults don't pick the right ones.
-
-## Structural review
-
-Review Map has both sides of the whole repo, the dependency graph, and usage; a CI review agent only sees the diff. The structural review uses that. Its findings go in the change report's `findings`, each with a kind, a severity (`high`, `medium`, `low`), a one-sentence message, its evidence, a suggestion when it has one, and the components, edges, or review items it is anchored to.
-
-**Deterministic checks** run in the analyzer, with no LLM:
-
-| Kind | Finds |
-| --- | --- |
-| `cycle` | A dependency cycle between targets that wasn't there at base. Split folders count as their target and external packages are left out. The finding shows the shortest cycle through a new edge, with a reference for each step. |
-| `layering` | An edge from a component to one in a layer above it, against `layers` in `reviewmap.yml`. An edge that already broke the layering at base is only reported when it uses new symbols. Tests are exempt. |
-| `new-external` | A component that newly depends on an external package, and packages new in a lockfile. |
-| `unused-api` | A new public declaration (Swift's `public`, `open`, and `package`; TypeScript's named exports and their public members; Go's exported names) that nothing outside tests references. |
-| `orphaned` | A non-public declaration that had references at base and has none outside tests at head: the change removed its last callers. |
-| `conformers` | A new or changed protocol requirement, interface member, or abstract member, and the conformers that have no implementation of it (unless an extension of the protocol provides a default) or whose implementation didn't change with a changed signature. Only conformers that can see the protocol count. Go's interfaces are implicit: the types whose method set (by name and parameter count) covered the interface at base are its conformers, in any package. |
-| `untested` | Changed functions, initializers, and properties that no test references, one finding per component. Only components that tests reach at all, and not private members or view code. |
-
-Without index mode, "referenced" means the identifier appears somewhere outside the declaration itself (and outside extension headers of a type). That over-counts uses, so `unused-api` and `orphaned` stay quiet when in doubt. With index mode, references come from the index. Initializers, overrides, protocol requirements, entry points (`@objc`, `@IBAction`, `@main`), and members of a type or extension that conforms to something are left out of both, since they are called without being named.
-
-**One LLM review per change** runs with the annotator (below) and asks whether the shape of the change matches its intent, whether responsibilities sit in the right place, what's missing, what's duplicated, and what's more complex than the usage shows it needs to be: checks that can't fail, concurrency protection for impossible scenarios, data structures beyond what the input needs, abstractions without a second use, retries and fallbacks for failures that can't happen, and re-implementations of existing helpers. Its finding kinds are `intent`, `placement`, `missing`, `duplicate`, and `complexity`.
-
-- **Input**: the change's description (`--description`, else the PR from `gh pr view`, else the commit messages), `REVIEW.md`, the changed components, the edge diff with up to three references per edge and their source lines, the interface diff, usage of the changed review items (callers in other components, how many, the isolation each call runs in, and the call-site lines), existing declarations with names similar to new ones (`similar` on added review items), the deterministic findings, and the changed code, riskiest regions first, up to about 80,000 characters.
-- **Reply**: up to 12 findings, each citing evidence from the usage data, with a suggestion and 1 to 3 anchors that must name components, edges, or review items in the change report. A reply that fails validation is retried once with the errors; if it fails again, the report keeps only the deterministic findings and an `llm-rejected` warning names the errors.
-- **Cache**: keyed by a hash of the whole prompt, so it is reused until something it shows changes.
-
-## LLM annotator
-
-The LLM only annotates facts the analyzer already produced. It never adds review items, edges, or regions, and it never changes the deterministic scores; its results sit next to them in `llm` fields. It also runs the structural review above.
-
-- **Tasks**: give every review and removed region a risk from 0 to 1; mark each context region as kept or left out, and rank the kept ones; write a one-line behavior summary for each component and each changed review item.
-- **Scope**: changed review items outside test components and without `test` or `generated` tags. Cosmetic changes are skipped.
-- **Batches**: one per component, split by size (about 60,000 characters of review item material) for large components. The first batch of a component also asks for its summary.
-- **Prompt**: per review item, its kind, change, contract flags, signatures, usage, the head code (and base code when it changed), its regions with their deterministic risk and reasons, and the lines of each context region that matter. Declarations longer than 150 lines show their first lines and their regions. `REVIEW.md` from the head of the target repo, if there is one, goes in as domain notes. The prompt ends with a reply template that already holds every id, so the reply only fills in values.
-- **Execution**: `claude -p --output-format json --tools "" --no-session-persistence`, or `codex exec --sandbox read-only --output-last-message <file> -`, with the prompt on stdin and `--model` when `--llm-model` is set. Each call runs in an empty temporary directory, so the agent never sees or writes to the target repo.
-- **Validation**: the reply must be the template filled in, with the same review items, regions, and context regions, risks in 0 to 1, one-line summaries, and a rank from 1 on every kept context region. Text around the JSON, such as a code fence, is ignored. A batch that fails is retried once with the errors; if it fails again, its regions keep only their deterministic scores and an `llm-rejected` warning names the errors.
-- **Cache**: one file per review item and one per component summary, keyed by a hash of the prompt version, tool, model, `REVIEW.md`, and everything the prompt says about the review item. A second run only calls the CLI for review items whose material changed.
-- **Missing CLI**: the annotator is skipped with an `llm-unavailable` warning, and the change report has no `llm` fields.
-
-`scripts/fake-llm.sh` stands in for either CLI in tests and demos: it fills the reply template with canned values picked by a hash of each id, and answers the structural review with one canned finding on the first component it lists. `FAKE_LLM_MODE` makes it wrap the JSON in prose (`prose`), return a risk outside 0 to 1 and an unknown finding kind (`invalid`), exit with an error (`fail`), or return claude's `is_error` result (`error`).
-
-## Viewer
-
-`viewer/` is a React + TypeScript app (Vite, React Flow, elkjs, Shiki). It has three levels, and a breadcrumb (Map › Component › Review item) with back and forward on top.
-
-**Level 1, component map**
-
-- Nodes are components. Split folders are drawn inside their target. A badge shows changed review items and interface changes, and the tint follows `changeScore`. Components with structural review findings (on themselves or on code in them) carry a findings count on their top border, colored by the most severe one; a collapsed group counts the findings inside it. Edges with findings are labeled with their count. Components that exist on one side only have a dashed border. External packages are small pills with their version change.
-- Edges point from the user to the used component. Added edges are green, removed edges red and dashed, changed edges amber, and unchanged edges grey. Line weight follows the reference count.
-- By default the map shows changed components and their direct neighbors, without test targets. Toggles show the whole system, tests, and unchanged edges. The layout only changes when the set of visible components changes.
-- A target split into folders can be collapsed into one node (drawn as a stack, with the number of components inside) and expanded again, with the arrow button on the node or in the side panel. Edges into a collapsed group are bundled into one arrow per pair of nodes. Above 40 visible components every group starts collapsed; "Collapse groups" and "Expand groups" in the toolbar do all of them. A focus inside a collapsed group opens it.
-- Clicking a component focuses it: unrelated nodes and edges dim, and the side panel lists its changed review items. Clicking it again, or "Open interface view", opens level 2. Clicking an edge lists the references that create it, with added and removed symbols marked. Clicking a bundled edge lists the dependencies inside it; picking one opens its group.
-- "Show N more neighbors" in the side panel adds a component's hidden neighbors to the map, whatever the scope.
-- **Structural review**, at the top of the side panel, lists the findings, most severe first, with their evidence, suggestion, and links to what they are anchored to. A finding's message opens its review item, code, edge, or component. The side panel of a component or an edge, and levels 2 and 3, list the findings anchored there.
-- **Start here** lists the highest-risk review items, each scored by its riskiest region, with changed members folded into their type, and opens that region at level 3. "Review regions by risk" starts at the riskiest region. A change report without regions is ranked by contract flags.
-- Each component shows a review progress bar.
-
-**Level 2, interface view**
-
-- One component's changed interface review items, grouped by kind. Each shows its head signature with changed tokens highlighted (the base signature is behind a "base" toggle), its contract flags, and Used by and Depends on lists that lead to the code behind them.
-- Internal changes are one line each below. Cosmetic, test, and generated changes are behind a count.
-
-**Level 3, implementation view**
-
-- An added review item lists existing declarations with similar names, which it may duplicate.
-- The review item's head code, highlighted (Swift, TypeScript, and Go). Review regions are tinted, with a label row above each that shows the risk, the reasons, a Note button, and Open. Removed lines are collapsed markers that expand to the base lines; a removed region's label sits on its marker. Code outside regions is folded. A removed review item shows its base code.
-- Context regions appear after the region they support as one-line labels in a second color ("caller in Checkout", "definition", "state"). A label expands to the lines that matter, with the rest of the declaration folded, and links to the code.
-- Notes attach to a region and show under it.
-- Previous and Next step through the component's review items. Changed type names and dependencies in the code are links. Callers in unchanged code open as a code location.
-- **Open** opens the file at the line in your working copy, in the editor set with `--editor` (local server only).
-
-**LLM layer**
-
-- When the change report has LLM annotations, Start here shows a **Ranking** toggle: Deterministic or LLM. It switches the risk that Start here, region order, `j`/`k`, and the risk badges use. The LLM layer is on by default, and the choice is kept in browser storage.
-- With the LLM layer on, review item and component summaries show under their headers (side panel, level 2, level 3), and the LLM's structural review findings join the deterministic ones, marked LLM. A risk badge that comes from the LLM has an outline, and its tooltip shows both scores.
-- Context the LLM left out folds into a "Show N context snippets left out by the LLM" link after the kept ones, which follow the LLM's rank.
-- With the LLM layer off, the viewer shows only deterministic facts, as if the annotator hadn't run.
-- The overview names the CLI that scored the change and the batches that kept deterministic scores, which open their validation errors.
-
-**Across levels**
-
-- Every review item has a reviewed checkbox at levels 2 and 3 and in the side panel. The overview shows progress and lists notes, with Copy as Markdown and Download for a GitHub review.
-- `j` or `]` moves to the next region in risk order, `k` or `[` to the previous one, from any level. Level 3 also has buttons for this.
-- With the local server, reviewed marks and notes are saved next to the change report, as `change-report.review.json` for `change-report.json`, keyed by head commit. The single-file build keeps them in browser storage.
-
-The focus, including the region, is kept in the URL, so browser back and forward move through it. Escape goes up one level.
-
-To work on the viewer directly:
-
-```sh
-cd viewer
-npm ci
-REVIEWMAP_REPORT=/path/to/change-report.json npm run dev   # serves the report, sources, and Open (REVIEWMAP_EDITOR picks the editor)
-npm test                                                  # logic tests against the analyzer fixture
-REVIEWMAP_REPORT=/path/to/change-report.json npm run build:single
+```json
+{ "llm": { "tool": "claude", "model": "sonnet" } }
 ```
 
-`build:single` writes `dist/index.html`, one self-contained file with the change report and the relevant source files embedded, which opens in any browser without a server. Sources are read from the repo at the report's commits (`REVIEWMAP_REPO` overrides the path recorded in the report, and `REVIEWMAP_EMBED_MAX` the 8 MB cap).
+or for one review with `reviewmap --llm claude` (or `--llm codex`, with `--llm-model <name>`). `--no-llm` turns it off for one review whatever the settings say. The CLI must be signed in already; Review Map runs it with the prompt on stdin, in an empty temporary directory, with no tools. If the repository has a `REVIEW.md` at the head commit, both prompts include it.
 
-The dev server reads file contents with `git show <sha>:<file>` in the repo recorded in the change report, so it never touches the working copy. Without a report the page asks for a file, and `?report=<url>` loads one from a URL.
+To try the pass without a model, use the stand-in that the tests use: `reviewmap --llm-command scripts/fake-llm.sh` (with `--llm codex` to imitate codex). `FAKE_LLM_MODE` makes it reply with prose around the JSON (`prose`), out-of-range values (`invalid`), a failing exit (`fail`), or claude's error result (`error`).
 
 ## reviewmap.yml
 
+An optional `reviewmap.yml` at the root of the reviewed repository, read from the head commit:
+
 ```yaml
-components:            # glob rules; the first match wins and overrides the inferred component
+components:
   - name: Checkout
     paths: ["App/Features/Checkout/**"]
     layer: domain
-layers:                # top to bottom: a component may use its own layer and the ones below it
-  - name: ui
-    components: ["App", "Features/*"]   # component names, as globs; split folders take their target's layer
-  - name: domain       # also has the components whose rule above says `layer: domain`
-  - name: data
-    components: ["Networking", "Persistence"]
-split:
-  threshold: 30        # split targets with more source files than this
-  maxDepth: 3
-exclude: ["**/Vendor/**"]
-generated: ["**/*.generated.swift"]   # tagged "generated"
-index:                 # index mode; the CLI flags win
-  enabled: true        # the default; false matches by name only
-  project: App.xcworkspace
-  scheme: App
-  destination: "generic/platform=iOS Simulator"
-  builder: xcodebuild  # or bazel, swift
-  targets: ["//ios:App"]          # Bazel; default: top_level_targets of the xcodeproj rule
-  bazelArgs: ["--config=sim"]     # extra bazel build flags
+layers:               # top to bottom: a component may use its own layer and the ones below it
+  - name: app
+    components: ["App", "App/*"]
+split: { threshold: 30, maxDepth: 3 }
+exclude: ["**/Pods/**"]
+generated: ["**/*.generated.swift"]
+index:
+  enabled: true
+  targets: ["//ios:App"]        # the Bazel targets that define the review scope
+  bazelArgs: ["--config=sim"]   # extra arguments for Bazel queries and builds
 ```
 
-## change-report.json
+## Where data lives
 
-The schema is in `Sources/ReviewMapCore/Model.swift`. Fields worth knowing:
+- Notes, reviewed marks, and settings: `~/Library/Application Support/reviewmap`.
+- Analysis and index caches, which are safe to delete: `~/Library/Caches/reviewmap`.
+- `REVIEWMAP_HOME` moves both under one directory (`data` and `cache`).
 
-- `version` is 4: review items are under `reviewItems`, and fields that point to one are named `reviewItem`. Version 3 added structural review findings and dropped notes and removal candidates from region annotations. Version 2 added the language prefix on contract flags. `analyzer` has the version, the resolution mode, and the `languages` in the change; `repo` has `usesMergeBase`.
-- Components: `module`, `parent`, `isTest`, `status` (`added`/`removed`), `changedReviewItems`, `interfaceChanges`.
-- Edges: `symbolsAdded`, `symbolsRemoved`, `refCount`. `refs` is capped, with differing symbols listed first. A ref with `line: 0` comes from a manifest.
-- Review items: `changes`, `parent` (the id of the enclosing declaration, which may be an unchanged declaration that isn't a review item and isn't listed), `tags` (`test`, `generated`), and `baseLocation`. Review item kinds also include `file` and `target`.
-- `usedBy` and `dependsOn` are `{component, symbol, file, line}` objects rather than review item ids, because the referring declaration usually didn't change and so has no review item. A `usedBy` entry has `side: "base"` when the use only exists at base (a caller the change removed), and `isolation` when the declaration around the reference, or a type around it, says (`@MainActor`, `nonisolated`, `actor CartStore`, or a SwiftUI view). Added review items have `similar`: up to five existing declarations with close names, in the same shape.
-- `findings`: `{id, source, kind, severity, message, evidence, suggestion?, anchors, location?}`. `source` is `check` or `llm`; each anchor is `{component}`, `{from, to}`, or `{reviewItem}`, the first being the main one; `location` is the declaration a finding is about.
-- Regions: `anchor` (removed regions), and `component` and `lines` (context regions). Region ids are `<review item id>/r<n>` for review and removed regions and `<review item id>/c<n>` for context. A context region's `reasons` holds the qualified name of the declaration shown.
-- LLM annotations: review and removed regions get `llm: {risk}`, and context regions `llm: {keep, rank?}`. Components and review items get `llm: {summary}`. The top-level `llm` records the tool, model, stand-in command, prompt version, how many batches ran, came from the cache, and were rejected, the structural review's outcome (`review`: `ok`, `cached`, `rejected`, or `skipped`), and where the description came from (`description`).
+The Open button opens a file in your editor: `REVIEWMAP_EDITOR`, else the editor chosen in the app's settings, else Xcode.
 
-Fields that are `null` are omitted. Consumers should ignore fields they don't know.
-
-## Tests
+## Development
 
 ```sh
-swift test
+bazel build //...                                   # everything
+bazel test //...                                    # Rust tests, the UI's Vitest tests, the fixture tests
+scripts/build-app.sh                                # Review Map.app, optimized; prints where it is
+REVIEWMAP_REPORT=<report.json> bazel run //app:dev  # the UI in a browser, reloading on changes
+bazel run @rules_rust//tools/rust_analyzer:gen_rust_project  # rust-project.json for rust-analyzer
 ```
 
-`Tests/ReviewMapCoreTests/Fixtures/basic` is a small SPM repo with a base and a head tree, with one scenario per contract flag. The test builds a two-commit git repo from it, checks the important facts, and compares the whole output with `expected.json`. `Fixtures/indexed` is a package that builds anywhere; the index tests build it with `swift build`, compare index mode with name matching on a common member name and a type declared in two modules, and check the cache and the fallback. They are skipped when the toolchain has no `libIndexStore`. The SCIP tests decode indexes written field by field, without an indexer. `Fixtures/typescript` is an npm workspace with a base and a head tree that covers TypeScript's components, edges, flags, settings, lockfiles, and risk marks, with its own `expected.json`; the TypeScript tests also check the parser on its own. `Fixtures/typescript-indexed` has the common member name case for scip-typescript; its tests are skipped without Node.js or when scip-typescript can't be fetched. `Fixtures/go` is a Go module with a base and a head tree that covers packages, test packages, `vendor` and `testdata`, pins, edges, flags, settings, risk marks, generated files, and implicit conformers; `Fixtures/go-indexed` has the common member name case for scip-go, and its tests are skipped without Go. The checks tests build a small two-commit repo per check. The annotator tests run `scripts/fake-llm.sh` on the basic fixture, cover validation, retries, the cache, both CLIs, and the structural review, and compare the result with `annotated.json`, which the viewer tests also read. Run `UPDATE_SNAPSHOTS=1 swift test` to accept new snapshots.
+No test runs a real coding agent: the LLM tests use `scripts/fake-llm.sh`. Some fixture tests start Bazel, Node.js, or a JDK from your `PATH`. A test whose tool is missing passes early and says `skipped: …` in its log. `--test_env=REVIEWMAP_SKIP_BAZEL_TESTS=1` skips the tests that start nested Bazel workspaces.
 
-## Known limits
+[docs/rebuild-build.md](docs/rebuild-build.md) describes the build: how the Rust, Swift, and UI parts fit together, how to add a Rust or npm package, what each test target covers, and how Xcode updates are handled.
 
-- Name-based resolution (with `--no-index`, or for a language that couldn't be indexed): member usage (`x.foo`) is matched by name within files that reference the owning type, so common member names (`id`, `name`) can over-count `usedBy` and caller context. Index mode resolves them exactly but needs both sides to build.
-- TypeScript without index mode: imports through `tsconfig` path aliases (`@/`, `~/`) aren't resolved to files, so their names are looked up by name alone and may be ambiguous. JavaScript files aren't parsed, and merged declarations (an interface declared twice, a namespace merged with a class) aren't combined.
-- Go without index mode: a package whose name differs from its import path's last element is only matched when the import has an alias. Conformers match methods by name and parameter count, ignore methods promoted from embedded struct fields, and an interface that embeds one from outside the repo (`io.Reader`) has none. Methods of a type declared in another file are top-level for name lookup.
-- Risk signals are syntactic: a changed line that contains an `if` counts as changed control flow even when only its body changed.
-- A declaration that moves between components shows up as removed plus added.
-- Files that belong to several Xcode targets are assigned to one, preferring the app target, and a warning gives the count.
-- Without `--dump-package`, manifests that build their targets with loops or helper functions are only partly read.
-- The annotator has only run against `scripts/fake-llm.sh`, not yet against the real `claude` or `codex` CLI.
-- The structural checks' notion of a conformer is syntactic: a type conforms when its declaration or an extension lists the protocol. Conformances through a superclass, or a protocol inheriting another, aren't followed.
+| Part | Where |
+| --- | --- |
+| Core: Git access, analysis, Bazel queries, indexing | `crates/core` |
+| The `reviewmap` command | `crates/cli` |
+| App (Tauri 2) | `app/src-tauri` |
+| UI (React, React Flow, ELK, Shiki) | `app/src` |
+| Swift helper (SwiftSyntax, IndexStoreDB) | `helper/` |
+| Product rules and decisions | `statute/` |
+| Work items | `.beans/` |

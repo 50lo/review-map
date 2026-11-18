@@ -1,0 +1,35 @@
+#!/bin/sh
+# Bazelisk runs this instead of Bazel in this workspace, with the real Bazel in $BAZEL_REAL.
+#
+# Bazel detects Xcode once (@local_config_xcode and @local_config_apple_cc) and detects it again only when
+# DEVELOPER_DIR or XCODE_VERSION changes. Updating Xcode in place changes neither, so Bazel kept the old
+# Xcode's settings and the build failed until `bazel clean --expunge`. Neither rule reads XCODE_VERSION's
+# value; it only marks the detection stale. Setting it to the selected Xcode's build number makes every
+# Xcode update or switch redo the detection, and leaves the rest of the cache alone.
+set -eu
+
+# Bazelisk puts this directory first on the PATH it gives this script, so everything Bazel starts with that
+# PATH (tests that run Bazel in other workspaces, `bazel run` targets) would find this script as `bazel`, in a
+# workspace that isn't this one and without BAZEL_REAL. So the directory comes off the PATH here, and a run
+# without BAZEL_REAL hands over to the next `bazel` on the PATH.
+here=$(cd "$(dirname "$0")" && pwd)
+PATH=$(printf '%s\n' "$PATH" | tr ':' '\n' | grep -vxF "$here" | paste -sd ':' -)
+export PATH
+
+if [ -z "${BAZEL_REAL:-}" ]; then
+  exec bazel "$@"
+fi
+
+# A value set by the caller wins.
+if [ -z "${XCODE_VERSION:-}" ] && [ "$(uname -s)" = Darwin ]; then
+  developer_dir=${DEVELOPER_DIR:-$(xcode-select -p 2>/dev/null || true)}
+  # version.plist is read in a few milliseconds; `xcodebuild -version` takes about ten times longer.
+  build=$(plutil -extract ProductBuildVersion raw "$developer_dir/../version.plist" 2>/dev/null ||
+    xcodebuild -version 2>/dev/null | tr '\n' ' ' || true)
+  if [ -n "$build" ]; then
+    XCODE_VERSION="$developer_dir $build"
+    export XCODE_VERSION
+  fi
+fi
+
+exec "$BAZEL_REAL" "$@"

@@ -1,1 +1,5 @@
-[]
+- id: G261115-g8qi8
+  rule: CORE-003
+  status: closed
+  opened_at: 2026-11-15T11:33:35Z
+  note: 'Conformers and overrides (the conformers check, and conformer and override context in regions) find supertypes by resolving names in inheritance clauses, even in a language with a complete index: Kotlin through imports and package (lang/kotlin.rs conformers, resolve_type), Swift by qualified-name text (lang/mod.rs default_conformers) and Builder.inheritors by name. Two types with the same name can be confused. They are held back for syntax-only languages; resolving supertypes through the index is not done.'

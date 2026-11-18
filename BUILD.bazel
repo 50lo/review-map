@@ -1,6 +1,35 @@
+load("@bazel_lib//lib:copy_to_bin.bzl", "copy_to_bin")
 load("@build_bazel_rules_swift//swift:swift.bzl", "swift_binary", "swift_library")
 
-exports_files(["Package.swift", "Package.resolved"])
+exports_files([
+    "Cargo.toml",
+    "Package.resolved",
+    "Package.swift",
+    # The stand-in for the LLM CLIs, the only LLM the tests run (crates/core/tests).
+    "scripts/fake-llm.sh",
+])
+
+# Prototype fixtures that the rebuild's tests read in place: a fixture repository for the Swift tests
+# (crates/core/tests/swift_rules.rs), and the prototype's reports for the UI's tests (app/src/*.test.ts).
+filegroup(
+    name = "prototype_fixture_basic",
+    srcs = glob(["Tests/ReviewMapCoreTests/Fixtures/basic/**"]),
+    visibility = ["//crates/core:__pkg__"],
+)
+
+# The prototype's TypeScript fixture, for crates/core/tests/typescript_fixtures.rs.
+filegroup(
+    name = "prototype_fixture_typescript",
+    srcs = glob(["Tests/ReviewMapCoreTests/Fixtures/typescript/**"]),
+    visibility = ["//crates/core:__pkg__"],
+)
+
+# Copied to bazel-bin, where rules_js runs the tests.
+copy_to_bin(
+    name = "prototype_reports",
+    srcs = glob(["Tests/ReviewMapCoreTests/Fixtures/*/*.json"]),
+    visibility = ["//app:__pkg__"],
+)
 
 swift_library(
     name = "ReviewMapCore",
@@ -31,4 +60,10 @@ swift_binary(
         ":ReviewMapCore",
         "@swiftpkg_swift_argument_parser//:ArgumentParser",
     ],
+)
+
+config_setting(
+    name = "opt",
+    values = {"compilation_mode": "opt"},
+    visibility = ["//visibility:public"],
 )

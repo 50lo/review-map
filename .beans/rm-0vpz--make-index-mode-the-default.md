@@ -3,8 +3,9 @@
 title: Make index mode the default
 status: completed
 type: task
+priority: normal
 created_at: 2026-11-15T04:40:01Z
-updated_at: 2026-11-15T04:40:01Z
+updated_at: 2026-11-17T22:18:04Z
 ---
 
 ## What
@@ -33,3 +34,8 @@ CORE-003 (agreed): a language that falls back to name matching must carry an `in
 
 ## Summary of Changes
 Flipped the default in `Analyzer.run`, kept the library default off, pinned the name-matching comparison tests to `enabled: false`, added a default/opt-out test, and rewrote the README's default wording with a note on what indexing runs (builds, scripts, tool downloads) and how to turn it off. Full `swift test`: 186 tests, 0 failures.
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites that this bean added to or ran were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. The rebuild's tests run with `bazel test //...` (`docs/rebuild-build.md`, "Tests").

@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/cli", "app/src-tauri"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "MIT"
+
+[profile.release]
+debug = "line-tables-only"
+
+# The analyzer does a lot of string and tree work; unoptimized, the first view of a large repository takes many times longer.
+[profile.dev.package.reviewmap-core]
+opt-level = 2
+[profile.dev.package.tree-sitter]
+opt-level = 2
+[profile.dev.package.tree-sitter-kotlin]
+opt-level = 2

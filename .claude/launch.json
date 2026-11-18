@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "reviewmap-ui-preview",
+      "runtimeExecutable": "bazel",
+      "runtimeArgs": ["run", "//app:dev"],
+      "port": 1420
+    }
+  ]
+}

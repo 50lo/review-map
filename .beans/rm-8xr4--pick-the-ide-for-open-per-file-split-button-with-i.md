@@ -3,8 +3,9 @@
 title: Pick the IDE for Open per file (split button with IDE dropdown)
 status: todo
 type: feature
+priority: normal
 created_at: 2026-11-07T21:30:17Z
-updated_at: 2026-11-07T21:30:17Z
+updated_at: 2026-11-17T22:15:01Z
 ---
 
 ## What
@@ -58,3 +59,8 @@ Opening Kotlin files in Xcode fails or opens the wrong app; the reviewer has to 
 
 - Open stays POST-only and limited to files inside the repo's working copy (existing `openInEditor` checks).
 - Open stays hidden when the page isn't served by the local server (`canOpenInEditor`).
+
+
+## Note (2026-11-18): prototype tests removed
+
+The prototype's test suites were removed from the `rebuild` branch to speed up the test runs: `Tests/ReviewMapCoreTests/*.swift` (with the `ReviewMapCoreTests` target in `Package.swift`) and `viewer/src/*.test.ts`. CI now only builds the prototype (`swift build`, `npm run build` in `viewer/`). The fixtures under `Tests/ReviewMapCoreTests/Fixtures/` are kept. A test this bean asks for in those suites would have to restore the suite first, or be written against the rebuild (`crates/core`, `app/`) instead.

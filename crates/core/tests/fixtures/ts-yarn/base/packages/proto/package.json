@@ -1,0 +1,6 @@
+{
+  "name": "@demo/proto",
+  "version": "1.0.0",
+  "types": "dist/index.d.ts",
+  "scripts": { "postinstall": "tsc -p ." }
+}
