@@ -98,6 +98,20 @@ impl Cancel {
     }
 }
 
+/// Starts a child process while no other thread of this process starts one.
+///
+/// On macOS, which has no `pipe2`, the standard library makes a child's pipes first and marks them
+/// close-on-exec a moment later. A child that another thread starts in between inherits them. When that child
+/// is a Bazel client that starts a server, the server keeps them open for as long as it lives, so the first
+/// child's reader never sees the end of its output and the review hangs (seen with the Bazel commands that
+/// `bazel::jobs` runs at once). Every child the core starts goes through here; the lock is held only while
+/// it starts, not while it runs.
+pub fn spawn(command: &mut Command) -> std::io::Result<Child> {
+    static SPAWN: Mutex<()> = Mutex::new(());
+    let _only = SPAWN.lock().unwrap_or_else(|e| e.into_inner());
+    command.spawn()
+}
+
 /// Whether an error is a cancellation, however deep it is wrapped.
 pub fn is_cancelled(error: &anyhow::Error) -> bool {
     error.chain().any(|e| e.downcast_ref::<Cancelled>().is_some())
@@ -226,7 +240,7 @@ impl Cmd {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let pid = child.id();
         cancel.register(pid);
         let mut out = child.stdout.take().unwrap();
@@ -265,7 +279,7 @@ impl Cmd {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::null());
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let pid = child.id();
         cancel.register(pid);
         let mut stdout = Vec::new();
@@ -345,7 +359,7 @@ impl Cmd {
         writeln!(file, "$ {}\n", self.display())?;
         let mut command = self.command();
         command.stdout(file.try_clone()?).stderr(file.try_clone()?);
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let status = wait(&mut child, cancel);
         let _ = writeln!(file);
         cancel.check()?;

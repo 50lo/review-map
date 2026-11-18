@@ -197,12 +197,11 @@ pub fn xcode() -> String {
     let set = std::env::var("XCODE_VERSION").unwrap_or_default();
     let developer_dir = match std::env::var("DEVELOPER_DIR") {
         Ok(d) if !d.is_empty() => d,
-        _ => std::process::Command::new("/usr/bin/xcode-select")
-            .arg("-p")
-            .stdin(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()
+        _ => crate::proc::spawn(
+            std::process::Command::new("/usr/bin/xcode-select").arg("-p").stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null()),
+        )
+        .and_then(|c| c.wait_with_output())
+        .ok()
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default(),
     };

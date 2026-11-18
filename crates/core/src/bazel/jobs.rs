@@ -2,8 +2,9 @@
 //!
 //! Each workspace has an output base, and so a Bazel server, of its own at each side
 //! (`Workspaces::output_base`). A server runs one command at a time, but commands of different output bases
-//! can run together: the graph queries of a review that touches several workspaces, and the index builds of
-//! workspaces that don't contain one another. `Session::refine` runs them on a pool of `jobs()` threads.
+//! can run together. `Session::refine` runs the graph queries of every workspace and side on a pool of
+//! `jobs()` threads, and lets a TypeScript workspace's base build start while head's index is still being
+//! made (`Session::index_workspaces`) when `jobs()` is more than one.
 //!
 //! Each server that starts takes memory (0.3–0.7 GB measured cold, more while it analyses a large scope),
 //! so the bound is small: half the cores, at most 4, and lower when the machine has little memory free.
@@ -77,23 +78,6 @@ fn sysctl_u64(name: &str) -> Option<u64> {
     }
 }
 
-/// Splits units (repo-relative directories, in their order) into batches that run one after another. Units
-/// in one batch may run at the same time, because none contains another: an index step changes files in its
-/// unit's directory (the `node_modules` links of TypeScript, the aspects of Swift and Kotlin), which a unit
-/// around it would see. A unit goes into the last batch when it is disjoint from every unit there, so a
-/// unit still runs after every unit before it that contains it or that it contains.
-pub fn batches(units: &[String]) -> Vec<Vec<String>> {
-    let nests = |a: &str, b: &str| crate::paths::is_under(a, b) || crate::paths::is_under(b, a);
-    let mut out: Vec<Vec<String>> = Vec::new();
-    for u in units {
-        match out.last_mut() {
-            Some(last) if !last.iter().any(|v| nests(u, v)) => last.push(u.clone()),
-            _ => out.push(vec![u.clone()]),
-        }
-    }
-    out
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -118,19 +102,5 @@ mod tests {
         assert_eq!(bound(Some("6"), 8, Some(GB)), 6, "the setting wins over free memory");
         assert_eq!(bound(Some("0"), 8, None), 1);
         assert_eq!(bound(Some("many"), 8, None), 4, "a setting that is no number is ignored");
-    }
-
-    #[test]
-    fn units_that_contain_one_another_go_into_later_batches() {
-        let units = |list: &[&str]| list.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        let fixtures = "crates/core/tests/fixtures";
-        assert_eq!(
-            batches(&units(&["", &format!("{fixtures}/ts-bazel/base"), &format!("{fixtures}/ts-bazel/head")])),
-            vec![units(&[""]), units(&[&format!("{fixtures}/ts-bazel/base"), &format!("{fixtures}/ts-bazel/head")])]
-        );
-        assert_eq!(batches(&units(&["a", "b", "c"])), vec![units(&["a", "b", "c"])]);
-        assert_eq!(batches(&units(&["a", "a/x", "b"])), vec![units(&["a"]), units(&["a/x", "b"])]);
-        assert_eq!(batches(&units(&["ab", "a"])), vec![units(&["ab", "a"])], "a/b is not under a when the name only starts with it");
-        assert!(batches(&[]).is_empty());
     }
 }

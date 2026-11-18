@@ -110,14 +110,16 @@ pub fn java() -> Option<PathBuf> {
             }
             candidates.into_iter().find(|p| {
                 is_executable(p)
-                    && std::process::Command::new(p)
-                        .arg("-version")
-                        .stdin(std::process::Stdio::null())
-                        .stdout(std::process::Stdio::null())
-                        .stderr(std::process::Stdio::null())
-                        .status()
-                        .map(|s| s.success())
-                        .unwrap_or(false)
+                    && crate::proc::spawn(
+                        std::process::Command::new(p)
+                            .arg("-version")
+                            .stdin(std::process::Stdio::null())
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::null()),
+                    )
+                    .and_then(|mut c| c.wait())
+                    .map(|s| s.success())
+                    .unwrap_or(false)
             })
         })
         .clone()
@@ -132,7 +134,9 @@ pub fn lib_index_store() -> Option<PathBuf> {
     }
     let mut swift_paths: Vec<PathBuf> = Vec::new();
     if let Some(xcrun) = find("xcrun", None) {
-        if let Ok(out) = std::process::Command::new(xcrun).args(["--find", "swift"]).output() {
+        let mut find_swift = std::process::Command::new(xcrun);
+        find_swift.args(["--find", "swift"]).stdin(std::process::Stdio::null()).stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::null());
+        if let Ok(out) = crate::proc::spawn(&mut find_swift).and_then(|c| c.wait_with_output()) {
             let p = String::from_utf8_lossy(&out.stdout).trim().to_string();
             if out.status.success() && !p.is_empty() {
                 swift_paths.push(PathBuf::from(p));

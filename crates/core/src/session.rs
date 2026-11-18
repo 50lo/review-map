@@ -499,7 +499,7 @@ impl Session {
                 let bazel_units = self.bazel_units();
                 if languages.contains(&"swift") {
                     let result = SwiftHelper::start().and_then(|helper| {
-                        // One helper reads every side's stores, one request at a time; the builds run at once.
+                        // One helper reads every side's stores, one request at a time.
                         let helper = Mutex::new(helper);
                         self.index_workspaces("swift", "Swift", &bazel_units, &source, cancel, &|_| false, |w, side, src, files, _| {
                             let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
@@ -704,12 +704,12 @@ impl Session {
     /// its files syntax-only and says why in an `index-partial` warning (CORE-003); it doesn't take the other
     /// units' indexes with it. Only when no unit could be indexed is the language without an index.
     ///
-    /// Units run at the same time, up to `bazel::jobs`, except units that contain one another, which run in
-    /// order (`bazel::jobs::batches`). Within a unit head comes before base, so base's build finds head's
-    /// actions in the shared disk cache. When `overlap` says so for a unit, base starts once head's Bazel
-    /// work is done: `build`'s last argument is called then (by head; base gets one that does nothing), and
-    /// when head ends, whatever happened. The results are taken in the units' order and head before base, as
-    /// if everything had run one after another.
+    /// Units are indexed one after another, head before base, so base's build finds head's actions in the
+    /// shared disk cache. (Indexing units at the same time saved little and raised the peak memory of Bazel
+    /// servers, which the review keeps alive until it ends.) When `overlap` says so for a unit, and
+    /// `bazel::jobs` allows two commands at once, base starts as soon as head's Bazel work is done, while head
+    /// finishes: `build`'s last argument is called then (by head; base gets one that does nothing), or when
+    /// head ends, whatever happened. The results are taken in the units' order and head before base.
     #[allow(clippy::too_many_arguments)]
     fn index_workspaces(
         &self,
@@ -721,11 +721,16 @@ impl Session {
         overlap: &dyn Fn(&str) -> bool,
         build: impl Fn(&str, Side, &SideSource, Vec<String>, &dyn Fn()) -> Result<SideIndex> + Sync,
     ) -> Result<(SideIndex, SideIndex)> {
-        // What each unit has to index: its files of the language at every side it exists at.
         type SideWork = (Side, Arc<SideSource>, Vec<String>);
-        let mut work: Vec<(String, Vec<SideWork>, bool)> = Vec::new();
+        let index_side = |w: &str, (side, src, files): &SideWork, bazel_done: &dyn Fn()| -> Result<SideIndex> {
+            let _indexing = timer(format!("index {language} {} {w:?}", side.name()));
+            build(w, *side, src, files.clone(), bazel_done)
+        };
+        let may_overlap = crate::bazel::jobs::jobs() > 1;
+        let mut results: BTreeMap<String, Vec<(Side, Result<SideIndex>)>> = BTreeMap::new();
         for w in &units.dirs {
-            let mut unit_sides = Vec::new();
+            // The unit's files of the language at every side it exists at.
+            let mut unit_sides: Vec<SideWork> = Vec::new();
             for side in [Side::Head, Side::Base] {
                 let src = source(side);
                 let files: Vec<String> = src.files.iter().filter(|(p, f)| f.language == language && (units.of)(p).as_deref() == Some(w.as_str())).map(|(p, _)| p.clone()).collect();
@@ -733,46 +738,34 @@ impl Session {
                     unit_sides.push((side, src, files));
                 }
             }
-            work.push((w.clone(), unit_sides, overlap(w)));
-        }
-        let index_side = |w: &str, (side, src, files): &SideWork, bazel_done: &dyn Fn()| -> Result<SideIndex> {
-            let _indexing = timer(format!("index {language} {} {w:?}", side.name()));
-            build(w, *side, src, files.clone(), bazel_done)
-        };
-        let index_unit = |(w, unit_sides, overlap): &(String, Vec<SideWork>, bool)| -> Vec<(Side, Result<SideIndex>)> {
-            if let ([head, base], true) = (unit_sides.as_slice(), overlap) {
+            let mut out = Vec::new();
+            if let ([head, base], true) = (unit_sides.as_slice(), may_overlap && overlap(w)) {
                 let head_done = Latch::default();
-                let (h, b) = rayon::join(
-                    || {
-                        let _done = head_done.open_on_drop();
-                        index_side(w, head, &|| head_done.open())
-                    },
-                    || {
+                let (h, b) = std::thread::scope(|scope| {
+                    let base_job = scope.spawn(|| {
                         head_done.wait();
                         index_side(w, base, &|| {})
-                    },
-                );
-                return vec![(head.0, h), (base.0, b)];
-            }
-            let mut out = Vec::new();
-            for s in unit_sides {
-                let result = index_side(w, s, &|| {});
-                let failed = result.is_err();
-                out.push((s.0, result));
-                // A unit that failed at head isn't built at base: its index would be of no use.
-                if failed || cancel.is_cancelled() {
-                    break;
+                    });
+                    let h = {
+                        let _done = head_done.open_on_drop();
+                        index_side(w, head, &|| head_done.open())
+                    };
+                    (h, base_job.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+                });
+                out.push((head.0, h));
+                out.push((base.0, b));
+            } else {
+                for s in &unit_sides {
+                    let result = index_side(w, s, &|| {});
+                    let failed = result.is_err();
+                    out.push((s.0, result));
+                    // A unit that failed at head isn't built at base: its index would be of no use.
+                    if failed || cancel.is_cancelled() {
+                        break;
+                    }
                 }
             }
-            out
-        };
-        let pool = crate::bazel::jobs::pool()?;
-        let busy: Vec<String> = work.iter().filter(|(_, s, _)| !s.is_empty()).map(|(w, _, _)| w.clone()).collect();
-        let mut results: BTreeMap<String, Vec<(Side, Result<SideIndex>)>> = BTreeMap::new();
-        for batch in crate::bazel::jobs::batches(&busy) {
-            let jobs: Vec<&(String, Vec<SideWork>, bool)> = work.iter().filter(|(w, _, _)| batch.contains(w)).collect();
-            let done: Vec<Vec<(Side, Result<SideIndex>)>> = pool.install(|| jobs.par_iter().map(|j| index_unit(j)).collect());
-            results.extend(jobs.iter().map(|(w, _, _)| w.clone()).zip(done));
+            results.insert(w.clone(), out);
             if cancel.is_cancelled() {
                 break;
             }

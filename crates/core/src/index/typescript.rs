@@ -132,9 +132,9 @@ fn cache_key(job: &TypeScriptIndexJob, indexer: &str) -> String {
 }
 
 /// Loads the TypeScript index of one project at one side.
-/// Held while Yarn or scip-typescript runs. The units and sides of a review are indexed at the same time
-/// (`Session::index_workspaces`), but npx and Yarn Classic share caches that are not safe for two installs at
-/// once, and each scip-typescript takes most of a gigabyte. Bazel's part runs without it.
+/// Held while Yarn or scip-typescript runs. A Bazel workspace's base is built while head is still being
+/// indexed (`Session::index_workspaces`), but npx and Yarn Classic share caches that are not safe for two
+/// installs at once, and each scip-typescript takes most of a gigabyte. Bazel's part runs without it.
 static NODE_TOOLS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub fn load(job: &TypeScriptIndexJob, cancel: &Cancel, log: Log) -> Result<SideIndex> {
