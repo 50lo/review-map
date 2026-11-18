@@ -1,11 +1,11 @@
 ---
 # rm-xt4l
 title: Read what a Yarn Berry root needs for an install
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-18T21:10:16Z
-updated_at: 2026-11-18T21:10:23Z
+updated_at: 2026-11-18T21:50:45Z
 parent: rm-t9hw
 ---
 

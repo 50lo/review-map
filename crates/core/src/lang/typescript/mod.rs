@@ -396,6 +396,12 @@ pub fn pins(direct: &BTreeSet<String>, lockfiles: &[(String, String)]) -> BTreeM
                     } else if let Some(rest) = line.trim_start().strip_prefix("version") {
                         if line.starts_with("  ") && !line.starts_with("    ") {
                             let v = rest.trim_start_matches(':').trim().trim_matches('"');
+                            // How a Berry lockfile lists a workspace package (`"@demo/lib@workspace:packages/lib":`):
+                            // first-party, never a pinned external package.
+                            if v == "0.0.0-use.local" {
+                                names.clear();
+                                continue;
+                            }
                             for n in &names {
                                 pin(n, v);
                             }
@@ -437,6 +443,17 @@ mod tests {
         assert_eq!(pins.get("typescript").map(String::as_str), Some("5.9.3"));
         let berry = "__metadata:\n  version: 6\n\n\"react@npm:^18.2.0\":\n  version: 18.3.1\n  resolution: \"react@npm:18.3.1\"\n";
         assert_eq!(super::pins(&direct, &[("yarn.lock".into(), berry.into())]).get("react").map(String::as_str), Some("18.3.1"));
+    }
+
+    /// A Berry lockfile lists workspace packages at version 0.0.0-use.local: they are not pinned, even when
+    /// a package.json depends on them.
+    #[test]
+    fn berry_workspace_packages_are_not_pins() {
+        let direct: BTreeSet<String> = ["@demo/lib", "react"].iter().map(|s| s.to_string()).collect();
+        let berry = "__metadata:\n  version: 8\n\n\"@demo/lib@workspace:*, @demo/lib@workspace:packages/lib\":\n  version: 0.0.0-use.local\n  resolution: \"@demo/lib@workspace:packages/lib\"\n  languageName: unknown\n  linkType: soft\n\n\"react@npm:^18.2.0\":\n  version: 18.3.1\n";
+        let pins = pins(&direct, &[("yarn.lock".into(), berry.into())]);
+        assert_eq!(pins.get("@demo/lib"), None);
+        assert_eq!(pins.get("react").map(String::as_str), Some("18.3.1"));
     }
 
     #[test]
