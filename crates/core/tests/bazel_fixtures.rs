@@ -335,6 +335,94 @@ fn typescript_index_through_bazel() {
     assert!(leftovers.is_empty(), "{leftovers:?}");
 }
 
+/// Cancelling stops the review's Bazel commands, which run several at a time (`bazel::jobs`), within two
+/// seconds, during the graph queries and during the index builds alike. The review then ends with its final
+/// report, in which TypeScript is syntax-only because indexing was cancelled (CORE-003).
+#[test]
+fn cancelling_stops_every_bazel_command_and_ends_syntax_only() {
+    use reviewmap_core::proc::Cancel;
+    use reviewmap_core::session::{self, Event};
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let Some(bazel) = bazel() else { return };
+    let Some(bazel_tool) = reviewmap_core::tools::bazel() else { return };
+    if reviewmap_core::tools::node().is_none() {
+        eprintln!("skipped: Node.js was not found");
+        return;
+    }
+    let repo = fixture_repo_at(&own_fixture("ts-bazel"), &bazel.home.join("repos/ts-bazel"));
+    let graph_step = |m: &str| m.starts_with("Asking Bazel for the head build graph");
+    let index_step = |m: &str| m.starts_with("Building head") && m.contains("for the TypeScript index");
+    for (step, during) in [("graph", &graph_step as &(dyn Fn(&str) -> bool + Sync)), ("index", &index_step)] {
+        // Nothing cached, so the step runs Bazel.
+        let _ = std::fs::remove_dir_all(bazel.home.join("cache/graphs"));
+        let _ = std::fs::remove_dir_all(bazel.home.join("cache/index/typescript"));
+        let cancel = Cancel::new();
+        let cancelled_at: Arc<std::sync::Mutex<Option<Instant>>> = Arc::default();
+        let reports = std::sync::Mutex::new(Vec::new());
+        let progress = std::sync::Mutex::new(Vec::new());
+        let emit = |event: Event| match event {
+            Event::Report(report) => reports.lock().unwrap().push(*report),
+            // A moment after the step's command starts, so that it is running.
+            Event::Progress(message) if during(&message) => {
+                progress.lock().unwrap().push(message);
+                let (cancel, at) = (cancel.clone(), cancelled_at.clone());
+                std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(300));
+                    *at.lock().unwrap() = Some(Instant::now());
+                    cancel.cancel();
+                });
+            }
+            Event::Progress(message) => progress.lock().unwrap().push(message),
+        };
+        session::run(request(&repo), &cancel, &emit).expect("a cancelled review ends with a report");
+        let stopped = Instant::now();
+        let at = cancelled_at.lock().unwrap().unwrap_or_else(|| panic!("the {step} step never ran Bazel, so nothing was cancelled"));
+        let took = stopped.duration_since(at);
+        eprintln!("cancelled during the {step} step: the review ended {:.2} s later", took.as_secs_f64());
+        assert!(took < Duration::from_secs(3), "the {step} step went on for {took:?} after cancelling");
+
+        let reports = reports.into_inner().unwrap();
+        let progress = progress.into_inner().unwrap();
+        // The step was stopped in the middle: the graph queries never returned a graph, and the index build
+        // never got as far as scip-typescript.
+        if step == "graph" {
+            assert_eq!(stages(&reports), ["preliminary", "complete"], "the graph query was interrupted: {progress:?}");
+        } else {
+            assert!(!progress.iter().any(|m| m.starts_with("Indexing head")), "the build was interrupted before scip-typescript: {progress:?}");
+        }
+        let report = reports.last().expect("a report");
+        assert_eq!(report.analysis.stage, "complete", "the report after cancelling is final");
+        assert!(
+            report.warnings.iter().any(|w| w.kind == "index-unavailable" && w.message.contains("TypeScript") && w.message.contains("indexing was cancelled")),
+            "{step}: {:?}",
+            report.warnings
+        );
+        assert_eq!(report.analyzer.resolution, "syntax", "{step}");
+
+        // No Bazel server of the review is still busy: a command in its output base runs at once, without
+        // "Another command is running".
+        let bazel_dir = bazel.home.join("cache/bazel");
+        for entry in std::fs::read_dir(&bazel_dir).unwrap().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("ts-bazel")) {
+            for side in ["head", "base"] {
+                let output_base = entry.path().join(side).join("out/_root");
+                if !output_base.join("server").exists() {
+                    continue;
+                }
+                let info = std::process::Command::new(&bazel_tool)
+                    .arg(format!("--output_base={}", output_base.display()))
+                    .args(["info", "output_base"])
+                    .current_dir(entry.path().join(side).join("tree"))
+                    .output()
+                    .expect("bazel info runs");
+                let stderr = String::from_utf8_lossy(&info.stderr);
+                assert!(!stderr.contains("Another command"), "{step}: the {side} server was still busy: {stderr}");
+            }
+        }
+    }
+}
+
 /// Needs no tools: when Bazel can't be found, the review ends syntax-only and says why (CORE-003).
 #[test]
 fn without_bazel_the_review_stays_syntax_only() {

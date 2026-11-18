@@ -45,7 +45,7 @@ pub(crate) fn run(program: &Path, args: &[String], input: &[u8], cwd: &Path, tim
         .stderr(Stdio::piped())
         // Its own process group, so stopping it stops whatever it started.
         .process_group(0);
-    let mut child = command.spawn()?;
+    let mut child = crate::proc::spawn(&mut command)?;
     let pid = child.id();
     cancel.register(pid);
     // Prompts are larger than a pipe's buffer, so the prompt is written while the output is read. A CLI

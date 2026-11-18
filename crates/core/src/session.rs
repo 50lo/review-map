@@ -380,43 +380,87 @@ impl Session {
             let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
 
             // Step 1: the build graph, from the graph cache when its inputs are unchanged (see `bazel::cache`).
-            // Head comes first, so base gets head's graph when they have the same key.
+            // Each workspace and side has a Bazel server of its own, so the queries run at the same time, up to
+            // `bazel::jobs`. Both sides' keys come first: when they are equal, head is queried first and base
+            // gets head's graph; when they differ, the two sides are queried at once. The results are taken in
+            // order, workspace by workspace and head before base, so the report doesn't depend on which query
+            // finished first.
             let graph_cache = GraphCache::new(self.repo.root());
             let xcode = crate::bazel::cache::xcode();
-            let mut queried: BTreeMap<String, WorkspaceGraph> = BTreeMap::new();
-            let mut graphs = (SideGraph::default(), SideGraph::default());
+            let pool = crate::bazel::jobs::pool()?;
+            let mut graph_jobs: Vec<(String, Vec<(Side, Arc<SideSource>, Scope)>)> = Vec::new();
             for w in self.in_scope.clone() {
-                let mut info = WorkspaceInfo { path: if w.is_empty() { ".".to_string() } else { w.clone() }, graph: "none".to_string(), ..Default::default() };
+                let mut sides = Vec::new();
                 for side in [Side::Head, Side::Base] {
                     let src = source(side);
-                    if !Self::has_workspace(&src, &w) {
-                        continue;
+                    if Self::has_workspace(&src, &w) {
+                        let scope = self.scope(&w, &src);
+                        scopes.insert((side, w.clone()), scope.clone());
+                        sides.push((side, src, scope));
                     }
-                    let scope = self.scope(&w, &src);
-                    if side == Side::Head {
-                        info.targets = scope.targets.clone();
-                        info.scope = scope.kind.clone();
+                }
+                graph_jobs.push((w, sides));
+            }
+            // One side's graph: the cache's key (computed before), then head's graph, the cache, or a query.
+            // Returns whether a queried graph was stored, which is when base may take it.
+            let side_graph = |w: &str, side: Side, scope: &Scope, key: Option<&String>, key_time: f64, from_head: Option<&WorkspaceGraph>| -> (Result<WorkspaceGraph>, bool) {
+                let start = std::time::Instant::now();
+                let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
+                let hit = key.and_then(|k| from_head.cloned().map(|g| (g, "same as head")).or_else(|| graph_cache.get(k).map(|g| (g, "cached"))));
+                let mut stored = false;
+                let loaded = if let Some((graph, how)) = hit {
+                    emit(Event::Progress(format!("Build graph of {}{at}: {how}", side.name())));
+                    Ok(graph)
+                } else {
+                    emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
+                    load_graph_checked(&env(side, w), w, scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))).map(|(graph, complete)| {
+                        if let Some(k) = key.filter(|_| complete) {
+                            stored = graph_cache.put(k, &graph, &[t.spaces.root()]);
+                        }
+                        graph
+                    })
+                };
+                // The side's own work, without the time it waited for head's graph.
+                crate::proc::timing(&format!("graph {} workspace {w:?}", side.name()), key_time + start.elapsed().as_secs_f64());
+                (loaded, stored)
+            };
+            let workspace_graphs = |(w, sides): &(String, Vec<(Side, Arc<SideSource>, Scope)>)| -> Vec<(Side, Result<WorkspaceGraph>)> {
+                let keyed: Vec<(Side, &Scope, Option<String>, f64)> = sides
+                    .iter()
+                    .map(|(side, src, scope)| {
+                        let start = std::time::Instant::now();
+                        let key = graph_environment(&bazel_tool, &t.spaces.workspace_dir(*side, w), &src.tree, w, &xcode, cancel).ok().map(|e| graph_key(&src.tree, w, scope, &args, &e));
+                        (*side, scope, key, start.elapsed().as_secs_f64())
+                    })
+                    .collect();
+                match keyed.as_slice() {
+                    [(_, head_scope, head_key, head_time), (_, base_scope, base_key, base_time)] if head_key.is_some() && head_key == base_key => {
+                        let (head, stored) = side_graph(w, Side::Head, head_scope, head_key.as_ref(), *head_time, None);
+                        let from_head = head.as_ref().ok().filter(|_| stored);
+                        let (base, _) = side_graph(w, Side::Base, base_scope, base_key.as_ref(), *base_time, from_head);
+                        vec![(Side::Head, head), (Side::Base, base)]
                     }
-                    scopes.insert((side, w.clone()), scope.clone());
-                    let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
-                    let querying = timer(format!("graph {} workspace {w:?}", side.name()));
-                    let key = graph_environment(&bazel_tool, &t.spaces.workspace_dir(side, &w), &src.tree, &w, &xcode, cancel).ok().map(|e| graph_key(&src.tree, &w, &scope, &args, &e));
-                    let hit = key.as_ref().and_then(|k| queried.get(k).cloned().map(|g| (g, "same as head")).or_else(|| graph_cache.get(k).map(|g| (g, "cached"))));
-                    let loaded = if let Some((graph, how)) = hit {
-                        emit(Event::Progress(format!("Build graph of {}{at}: {how}", side.name())));
-                        Ok(graph)
-                    } else {
-                        emit(Event::Progress(format!("Asking Bazel for the {} build graph{at}", side.name())));
-                        load_graph_checked(&env(side, &w), &w, &scope, cancel, &|m| emit(Event::Progress(format!("{m} ({})", side.name())))).map(|(graph, complete)| {
-                            if let Some(k) = key.as_ref().filter(|_| complete) {
-                                if graph_cache.put(k, &graph, &[t.spaces.root()]) {
-                                    queried.insert(k.clone(), graph.clone());
-                                }
-                            }
-                            graph
-                        })
-                    };
-                    drop(querying);
+                    [(head_side, head_scope, head_key, head_time), (base_side, base_scope, base_key, base_time)] => {
+                        let ((head, _), (base, _)) = rayon::join(
+                            || side_graph(w, *head_side, head_scope, head_key.as_ref(), *head_time, None),
+                            || side_graph(w, *base_side, base_scope, base_key.as_ref(), *base_time, None),
+                        );
+                        vec![(*head_side, head), (*base_side, base)]
+                    }
+                    one => one.iter().map(|(side, scope, key, time)| (*side, side_graph(w, *side, scope, key.as_ref(), *time, None).0)).collect(),
+                }
+            };
+            let results: Vec<Vec<(Side, Result<WorkspaceGraph>)>> = pool.install(|| graph_jobs.par_iter().map(workspace_graphs).collect());
+            // A query that was stopped by cancelling fails with `Cancelled`; the first one, in order, ends the review.
+            let mut graphs = (SideGraph::default(), SideGraph::default());
+            for ((w, sides), loaded) in graph_jobs.iter().zip(results) {
+                let mut info = WorkspaceInfo { path: if w.is_empty() { ".".to_string() } else { w.clone() }, graph: "none".to_string(), ..Default::default() };
+                if let Some((_, _, scope)) = sides.iter().find(|(side, _, _)| *side == Side::Head) {
+                    info.targets = scope.targets.clone();
+                    info.scope = scope.kind.clone();
+                }
+                let at = if w.is_empty() { String::new() } else { format!(" of {w}") };
+                for (side, loaded) in loaded {
                     match loaded {
                         Ok(graph) => {
                             if side == Side::Head {
@@ -454,8 +498,10 @@ impl Session {
                 let repo_key = crate::store::repo_key(self.repo.root());
                 let bazel_units = self.bazel_units();
                 if languages.contains(&"swift") {
-                    let result = SwiftHelper::start().and_then(|mut helper| {
-                        self.index_workspaces("swift", "Swift", &bazel_units, &source, cancel, |w, side, src, files| {
+                    let result = SwiftHelper::start().and_then(|helper| {
+                        // One helper reads every side's stores, one request at a time.
+                        let helper = Mutex::new(helper);
+                        self.index_workspaces("swift", "Swift", &bazel_units, &source, cancel, &|_| false, |w, side, src, files, _| {
                             let scope = scopes.get(&(side, w.to_string())).ok_or_else(|| anyhow!("Bazel could not report its build graph"))?;
                             if scope.kind == "all" {
                                 return Err(anyhow!(
@@ -472,7 +518,7 @@ impl Session {
                                 files,
                                 cache_dir: cache.join("swift").join(&repo_key),
                             };
-                            let result = crate::index::swift::load(&job, &mut helper, cancel, &|m| emit(Event::Progress(m)))?;
+                            let result = crate::index::swift::load(&job, &helper, cancel, &|m| emit(Event::Progress(m)))?;
                             let mut index = SideIndex { refs: result.refs, warnings: Vec::new() };
                             if let Some(p) = result.partial {
                                 index.warnings.push(Warning::new("index-partial", p));
@@ -484,7 +530,7 @@ impl Session {
                     emit(Event::Report(Box::new(self.report())));
                 }
                 if languages.contains(&"kotlin") {
-                    let result = self.index_workspaces("kotlin", "Kotlin", &bazel_units, &source, cancel, |w, side, src, files| {
+                    let result = self.index_workspaces("kotlin", "Kotlin", &bazel_units, &source, cancel, &|_| false, |w, side, src, files, _| {
                         if !bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "rules_kotlin") {
                             return Err(anyhow!("it does not build Kotlin with rules_kotlin"));
                         }
@@ -600,7 +646,13 @@ impl Session {
         let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
         let args = self.bazel_args();
         let log_dir = crate::store::cache_root().join("index").join("typescript").join("logs").join(crate::store::repo_key(self.repo.root()));
-        self.index_workspaces("typescript", "TypeScript", &units, &source, cancel, |u, side, src, files| {
+        // The trees are still made the first time a unit needs them, now by whichever job comes first.
+        let trees = Mutex::new(trees);
+        // A Bazel unit's base starts as soon as head's Bazel build is done, while head runs scip-typescript:
+        // each side has its own tree and Bazel server, and base's build finds head's actions in the disk cache.
+        // A Yarn project's sides run one after the other.
+        let overlap = |u: &str| rules_ts(&self.head, u) && rules_ts(&self.base, u);
+        self.index_workspaces("typescript", "TypeScript", &units, &source, cancel, &overlap, |u, side, src, files, bazel_done| {
             let bazel_unit = rules_ts(src, u);
             if !bazel_unit {
                 let p = project(src);
@@ -617,12 +669,16 @@ impl Session {
                     "TypeScript indexing needs Node.js, which was not found (looked on the PATH, in the usual install locations, and in Volta, nvm, fnm, mise, and asdf; REVIEWMAP_NODE names another)"
                 ));
             }
-            let t = self.trees(trees, cancel, emit)?;
+            let (tree_dir, workspace_dir, output_base) = {
+                let mut trees = trees.lock().unwrap_or_else(|e| e.into_inner());
+                let t = self.trees(&mut trees, cancel, emit)?;
+                (t.dir(side).to_path_buf(), t.spaces.workspace_dir(side, u), t.spaces.output_base(side, u))
+            };
             let env;
             let default_targets = vec!["//...".to_string()];
             let setup = if bazel_unit {
                 let bazel_tool = bazel_tool.expect("checked above");
-                env = BazelEnv::new(bazel_tool.clone(), t.spaces.workspace_dir(side, u), t.spaces.output_base(side, u), args.clone());
+                env = BazelEnv::new(bazel_tool.clone(), workspace_dir, output_base, args.clone());
                 let targets = scopes.get(&(side, u.to_string())).filter(|s| s.kind != "all").map(|s| &s.targets).unwrap_or(&default_targets);
                 Setup::Bazel { env: &env, targets }
             } else {
@@ -634,7 +690,7 @@ impl Session {
                     in_bazel_workspace: workspace_of(&self.workspaces, &crate::paths::join(u, "package.json")).is_some(),
                 }
             };
-            let job = TypeScriptIndexJob { side, sha: &src.sha, dir: u, tree_dir: t.dir(side), source: src, files: &files, setup, log_dir: log_dir.clone() };
+            let job = TypeScriptIndexJob { side, sha: &src.sha, dir: u, tree_dir: &tree_dir, source: src, files: &files, setup, log_dir: log_dir.clone(), bazel_done };
             load(&job, cancel, &|m| emit(Event::Progress(m)))
         })
     }
@@ -647,6 +703,14 @@ impl Session {
     /// language with Bazel, it has no scope targets, its build failed, it is a Yarn Berry project) leaves
     /// its files syntax-only and says why in an `index-partial` warning (CORE-003); it doesn't take the other
     /// units' indexes with it. Only when no unit could be indexed is the language without an index.
+    ///
+    /// Units are indexed one after another, head before base, so base's build finds head's actions in the
+    /// shared disk cache. (Indexing units at the same time saved little and raised the peak memory of Bazel
+    /// servers, which the review keeps alive until it ends.) When `overlap` says so for a unit, and
+    /// `bazel::jobs` allows two commands at once, base starts as soon as head's Bazel work is done, while head
+    /// finishes: `build`'s last argument is called then (by head; base gets one that does nothing), or when
+    /// head ends, whatever happened. The results are taken in the units' order and head before base.
+    #[allow(clippy::too_many_arguments)]
     fn index_workspaces(
         &self,
         language: &str,
@@ -654,8 +718,60 @@ impl Session {
         units: &Units,
         source: &dyn Fn(Side) -> Arc<SideSource>,
         cancel: &Cancel,
-        mut build: impl FnMut(&str, Side, &SideSource, Vec<String>) -> Result<SideIndex>,
+        overlap: &dyn Fn(&str) -> bool,
+        build: impl Fn(&str, Side, &SideSource, Vec<String>, &dyn Fn()) -> Result<SideIndex> + Sync,
     ) -> Result<(SideIndex, SideIndex)> {
+        type SideWork = (Side, Arc<SideSource>, Vec<String>);
+        let index_side = |w: &str, (side, src, files): &SideWork, bazel_done: &dyn Fn()| -> Result<SideIndex> {
+            let _indexing = timer(format!("index {language} {} {w:?}", side.name()));
+            build(w, *side, src, files.clone(), bazel_done)
+        };
+        let may_overlap = crate::bazel::jobs::jobs() > 1;
+        let mut results: BTreeMap<String, Vec<(Side, Result<SideIndex>)>> = BTreeMap::new();
+        for w in &units.dirs {
+            // The unit's files of the language at every side it exists at.
+            let mut unit_sides: Vec<SideWork> = Vec::new();
+            for side in [Side::Head, Side::Base] {
+                let src = source(side);
+                let files: Vec<String> = src.files.iter().filter(|(p, f)| f.language == language && (units.of)(p).as_deref() == Some(w.as_str())).map(|(p, _)| p.clone()).collect();
+                if !files.is_empty() && (units.exists)(&src, w) {
+                    unit_sides.push((side, src, files));
+                }
+            }
+            let mut out = Vec::new();
+            if let ([head, base], true) = (unit_sides.as_slice(), may_overlap && overlap(w)) {
+                let head_done = Latch::default();
+                let (h, b) = std::thread::scope(|scope| {
+                    let base_job = scope.spawn(|| {
+                        head_done.wait();
+                        index_side(w, base, &|| {})
+                    });
+                    let h = {
+                        let _done = head_done.open_on_drop();
+                        index_side(w, head, &|| head_done.open())
+                    };
+                    (h, base_job.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+                });
+                out.push((head.0, h));
+                out.push((base.0, b));
+            } else {
+                for s in &unit_sides {
+                    let result = index_side(w, s, &|| {});
+                    let failed = result.is_err();
+                    out.push((s.0, result));
+                    // A unit that failed at head isn't built at base: its index would be of no use.
+                    if failed || cancel.is_cancelled() {
+                        break;
+                    }
+                }
+            }
+            results.insert(w.clone(), out);
+            if cancel.is_cancelled() {
+                break;
+            }
+        }
+        cancel.check()?;
+
         let mut sides = (SideIndex::default(), SideIndex::default());
         let mut built = 0;
         let mut problems: Vec<(String, String)> = Vec::new();
@@ -663,15 +779,7 @@ impl Session {
             let name = (units.name)(w);
             let mut pair = (None, None);
             let mut problem = None;
-            for side in [Side::Head, Side::Base] {
-                let src = source(side);
-                let files: Vec<String> = src.files.iter().filter(|(p, f)| f.language == language && (units.of)(p).as_deref() == Some(w.as_str())).map(|(p, _)| p.clone()).collect();
-                if files.is_empty() || !(units.exists)(&src, w) {
-                    continue;
-                }
-                let indexing = timer(format!("index {language} {} {w:?}", side.name()));
-                let built_index = build(w, side, &src, files);
-                drop(indexing);
+            for (side, built_index) in results.remove(w).unwrap_or_default() {
                 match built_index {
                     Ok(index) => *(if side == Side::Head { &mut pair.1 } else { &mut pair.0 }) = Some(index),
                     Err(e) => {
@@ -682,7 +790,6 @@ impl Session {
                         break;
                     }
                 }
-                cancel.check()?;
             }
             match (problem, pair) {
                 (Some(reason), _) => problems.push((name, reason)),
@@ -744,6 +851,38 @@ impl Session {
         }
         self.stage = "complete".to_string();
         self.report()
+    }
+}
+
+/// A gate that opens once: `wait` blocks until `open`.
+#[derive(Default)]
+struct Latch {
+    open: Mutex<bool>,
+    opened: std::sync::Condvar,
+}
+
+impl Latch {
+    fn open(&self) {
+        *self.open.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        self.opened.notify_all();
+    }
+
+    fn wait(&self) {
+        let mut open = self.open.lock().unwrap_or_else(|e| e.into_inner());
+        while !*open {
+            open = self.opened.wait(open).unwrap_or_else(|e| e.into_inner());
+        }
+    }
+
+    /// Opens the latch when the returned guard is dropped, however its scope ends.
+    fn open_on_drop(&self) -> impl Drop + '_ {
+        struct Opener<'l>(&'l Latch);
+        impl Drop for Opener<'_> {
+            fn drop(&mut self) {
+                self.0.open();
+            }
+        }
+        Opener(self)
     }
 }
 

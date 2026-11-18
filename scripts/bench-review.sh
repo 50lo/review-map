@@ -7,7 +7,7 @@
 # Runs `reviewmap <repo> --base <base> --head <head> --no-llm --report <dir>/report.json [reviewmap args...]`
 # from inside <repo> with REVIEWMAP_HOME=<home>, and writes to <dir>:
 #   log.txt       every stderr line, prefixed with the seconds since the start (the core's `[timing]` lines too)
-#   summary.txt   total time, load average at start and end, peak RSS, disk use of <home>/cache
+#   summary.txt   total time, load average at start and end, peak RSS, swap in use, disk use of <home>/cache
 #   report.json   the report
 #   profiles/     with --profiles: Bazel's command.profile.gz after every Bazel build and query
 # scripts/bench-phases.py turns log.txt files into the phase table of docs/rebuild-step5-speed.md.
@@ -129,11 +129,16 @@ pipe=$!
 # first number is a lower bound.
 rss() { ps -axo rss=,command= | grep -F -- "$1" | grep -v -e grep -e bench-review | awk '{ s += $1 } END { print s + 0 }'; }
 peak_home=0 peak_tools=0
+# Swap in use, in MB (the machine's, so other work counts too).
+swap() { sysctl -n vm.swapusage | sed -E 's/.*used = ([0-9.]+)M.*/\1/' | cut -d. -f1; }
+swap_start=$(swap) peak_swap=$(swap)
 while kill -0 "$pipe" 2>/dev/null; do
   h=$(rss "$home")
   t=$(ps -axo rss=,command= | grep -E -- "$reviewmap|reviewmap-swift-helper|scip-typescript|scip-java|kotlin_analysis" | grep -v -e grep -e bench-review | awk '{ s += $1 } END { print s + 0 }')
+  s=$(swap)
   [ "$h" -gt "$peak_home" ] && peak_home=$h
   [ "$t" -gt "$peak_tools" ] && peak_tools=$t
+  [ "$s" -gt "$peak_swap" ] && peak_swap=$s
   sleep 0.5
 done
 wait "$pipe"
@@ -152,6 +157,7 @@ rm -f "$out/.exit" "$out/.end"
   echo "load at end: $(sysctl -n vm.loadavg)"
   echo "peak RSS, processes naming the home (Bazel servers): $((peak_home / 1024)) MB"
   echo "peak RSS, reviewmap and indexers: $((peak_tools / 1024)) MB"
+  echo "swap in use (whole machine): $swap_start MB at start, $peak_swap MB at peak"
   echo "disk:"
   du -sk "$home"/cache/* "$home"/cache/bazel/* "$home"/cache/bazel/*/* 2>/dev/null | awk '{ printf "  %8.0f MB %s\n", $1 / 1024, $2 }'
 } > "$out/summary.txt"

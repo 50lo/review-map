@@ -85,13 +85,7 @@ impl SwiftHelper {
         let path = Self::locate().ok_or_else(|| {
             anyhow!("The Swift helper is not built. Run `bazel build //helper:reviewmap-swift-helper`, or set REVIEWMAP_SWIFT_HELPER to its path.")
         })?;
-        let mut child = Command::new(&path)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .env("PATH", crate::tools::child_path())
-            .process_group(0)
-            .spawn()
+        let mut child = crate::proc::spawn(Command::new(&path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).env("PATH", crate::tools::child_path()).process_group(0))
             .with_context(|| format!("could not start {}", path.display()))?;
         let stdin = child.stdin.take().unwrap();
         let stdout = BufReader::with_capacity(1 << 20, child.stdout.take().unwrap());

@@ -50,14 +50,14 @@ Every review logs how long each of its steps took. The CLI's `--report` mode pri
 [timing] 62.09s cmd bazel build (swift index, head, workspace "")
 ```
 
-Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` step holds its `cmd bazel build`. A TypeScript index of a Bazel workspace runs two Bazel commands: `cmd bazel query (typescript index, …)`, which finds the npm links to build, and `cmd bazel build (typescript index, …)`. `scripts/bench-phases.py` puts only the build in its "TS Bazel" column, so add the query's line to it when you compare with runs from before rm-9e2v, which had no query. Kotlin's indexers also run several at a time. So the lines don't add up to the total. `scripts/bench-phases.py` reads these labels:
+Steps nest: a `graph` step holds its `cmd bazel cquery`, and an `index swift` step holds its `cmd bazel build`. A TypeScript index of a Bazel workspace runs two Bazel commands: `cmd bazel query (typescript index, …)`, which finds the npm links to build, and `cmd bazel build (typescript index, …)`. `scripts/bench-phases.py` puts only the build in its "TS Bazel" column, so add the query's line to it when you compare with runs from before rm-9e2v, which had no query. Kotlin's indexers also run several at a time, and so do Bazel commands of different output bases (rm-zm5r): the graph queries of every workspace and side run up to `REVIEWMAP_BAZEL_JOBS` at once (default: half the cores, at most 4, fewer when little memory is free; `crates/core/src/bazel/jobs.rs`), and a TypeScript workspace's base build starts once head's build is done, while head runs scip-typescript. Index builds of different workspaces still run one after another. `REVIEWMAP_BAZEL_JOBS=1` runs every Bazel command after the previous one, as before. So the lines don't add up to the total, and `scripts/bench-phases.py` gives each phase the wall time its lines cover together, not their sum. `scripts/bench-phases.py` reads these labels:
 
 | Label | Step |
 | --- | --- |
 | `cmd <program> [<bazel command>] (<what>, …)` | One external command (`Cmd` in `crates/core/src/proc.rs`). `<what>` is its purpose: `graph`, `graph key` (`bazel --version` for the graph cache's key, once per Bazel version and process; it has no side or workspace), `swift index`, `typescript index`, `kotlin index`, `scip-typescript`, `yarn install`, `kotlin indexer`, `download`. Bazel commands add the side and the workspace (`head, workspace ""` for the root), never `--output_base` |
 | `open: resolve revisions`, `read trees`, `parse both sides`, `open: workspaces` | `Session::open` |
 | `workspace lock`, `materialize <side> tree` | `Session::trees`: the app-owned trees |
-| `graph <side> workspace "<w>"` | One workspace's build graph at one side: the graph cache's key and lookup, then on a miss `load_graph` (its `cquery`, and its `query` when that fails). A hit logs `Build graph of <side>: cached`, and base's graph taken from head's in the same review logs `Build graph of base: same as head` (`crates/core/src/bazel/cache.rs`) |
+| `graph <side> workspace "<w>"` | One workspace's build graph at one side: the graph cache's key and lookup, then on a miss `load_graph` (its `cquery`, and its `query` when that fails). A hit logs `Build graph of <side>: cached`, and base's graph taken from head's in the same review logs `Build graph of base: same as head` (`crates/core/src/bazel/cache.rs`). The seconds are the side's own work: when base waits for head's graph, the wait is not counted |
 | `index <language> <side> "<unit>"` | One language's index of one workspace or project at one side, cache hits included |
 | `swift merge stores (<side>, <n> stores)`, `swift helper read (<side>)` | Inside `index swift`: copying the index stores, and the Swift helper reading them |
 | `typescript resolve (<side>)` | Inside `index typescript`: turning the SCIP index into references |
@@ -78,7 +78,7 @@ scripts/bench-review.sh --clean $S/homes/ui                 # stop the home's Ba
 The script `cd`s into the repository and runs `reviewmap <repo> --base B --head H --no-llm --report <out>/report.json [args…]` there with `REVIEWMAP_HOME=<home>`. It writes the following to `<out>`:
 
 - `log.txt`: every stderr line, prefixed with the seconds since the start.
-- `summary.txt`: the total time, the load average at start and end, peak RSS, and the disk use of `<home>/cache`.
+- `summary.txt`: the total time, the load average at start and end, peak RSS, the machine's swap in use at start and at its peak, and the disk use of `<home>/cache`.
 - `report.json`: the report.
 
 Its options:

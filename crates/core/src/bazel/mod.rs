@@ -3,6 +3,7 @@
 
 pub mod cache;
 pub mod graph;
+pub mod jobs;
 pub mod query;
 pub mod workspace;
 

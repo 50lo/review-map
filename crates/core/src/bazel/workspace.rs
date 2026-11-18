@@ -288,15 +288,17 @@ pub fn shutdown_all() {
         .into_iter()
         .map(|(bazel, dir, base)| {
             std::thread::spawn(move || {
-                let _ = std::process::Command::new(&bazel)
-                    .arg(format!("--output_base={}", base.display()))
-                    .arg("shutdown")
-                    .env("PATH", crate::tools::child_path())
-                    .current_dir(&dir)
-                    .stdin(std::process::Stdio::null())
-                    .stdout(std::process::Stdio::null())
-                    .stderr(std::process::Stdio::null())
-                    .status();
+                let _ = crate::proc::spawn(
+                    std::process::Command::new(&bazel)
+                        .arg(format!("--output_base={}", base.display()))
+                        .arg("shutdown")
+                        .env("PATH", crate::tools::child_path())
+                        .current_dir(&dir)
+                        .stdin(std::process::Stdio::null())
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null()),
+                )
+                .and_then(|mut c| c.wait());
             })
         })
         .collect();

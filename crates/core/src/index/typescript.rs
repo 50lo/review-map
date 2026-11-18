@@ -67,6 +67,8 @@ pub struct TypeScriptIndexJob<'a> {
     pub setup: Setup<'a>,
     /// Where logs go.
     pub log_dir: PathBuf,
+    /// Called once this side's Bazel build is done (`Session::index_workspaces` starts base then).
+    pub bazel_done: &'a dyn Fn(),
 }
 
 #[derive(Serialize, Deserialize, Default)]
@@ -130,6 +132,11 @@ fn cache_key(job: &TypeScriptIndexJob, indexer: &str) -> String {
 }
 
 /// Loads the TypeScript index of one project at one side.
+/// Held while Yarn or scip-typescript runs. A Bazel workspace's base is built while head is still being
+/// indexed (`Session::index_workspaces`), but npx and Yarn Classic share caches that are not safe for two
+/// installs at once, and each scip-typescript takes most of a gigabyte. Bazel's part runs without it.
+static NODE_TOOLS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 pub fn load(job: &TypeScriptIndexJob, cancel: &Cancel, log: Log) -> Result<SideIndex> {
     let at = if job.dir.is_empty() { String::new() } else { format!(" in {}", job.dir) };
     let node = crate::tools::node().ok_or_else(|| {
@@ -170,6 +177,7 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
             let (yarn, yarn_args) = yarn_command(node, pin.as_deref(), cancel)?;
             log(format!("Installing {} {} dependencies{at} for the TypeScript index (Yarn, scripts off)", job.side.name(), short(job.sha)));
             let lockfile = if *has_lockfile { "--frozen-lockfile" } else { "--pure-lockfile" };
+            let _node = NODE_TOOLS.lock().unwrap_or_else(|e| e.into_inner());
             let status = Cmd::new(&yarn)
                 .what("yarn install")
                 .context(job.side.name())
@@ -223,7 +231,9 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
                 .args(env.args.iter().cloned())
                 .arg("--")
                 .args(targets.iter().cloned())
-                .run_logged(&log_path, cancel)?;
+                .run_logged(&log_path, cancel);
+            (job.bazel_done)();
+            let status = status?;
             if !status.success() {
                 complete = false;
                 notes.warnings.push(Warning::new(
@@ -244,12 +254,15 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
     }
 
     let projects = project.index_projects(job.dir);
-    let output = job.log_dir.join(format!("typescript-{}-{}.scip.tmp", job.side.name(), std::process::id()));
+    let output = job.log_dir.join(format!("typescript-{}-{}{}.scip.tmp", job.side.name(), std::process::id(), crate::git::slug(&job.dir.replace('/', "__"))));
     let _ = std::fs::remove_file(&output);
     log(format!("Indexing {} {}{at} with scip-typescript", job.side.name(), short(job.sha)));
     let mut cmd = Cmd::new(program).what("scip-typescript").context(job.side.name()).context(format!("{:?}", job.dir)).args(prefix.iter().cloned()).arg("index").arg("--output").arg(output.to_string_lossy()).arg("--no-progress-bar");
     cmd = if projects.is_empty() { cmd.arg("--infer-tsconfig") } else { cmd.args(projects) };
-    let status = cmd.cwd(&dir).env("PATH", &path).env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0").run_logged(&log_path, cancel);
+    let status = {
+        let _node = NODE_TOOLS.lock().unwrap_or_else(|e| e.into_inner());
+        cmd.cwd(&dir).env("PATH", &path).env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0").run_logged(&log_path, cancel)
+    };
     links.remove();
     if let Setup::Yarn { in_bazel_workspace: true, .. } = job.setup {
         // Bazel would walk an installed node_modules on its next query of this tree.

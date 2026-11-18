@@ -72,13 +72,44 @@ impl Cancel {
         });
     }
 
+    /// Registers a child's process group. A child that started while the job was being cancelled, after
+    /// `cancel` took its list, is stopped here, the same way: several commands of a job run at once
+    /// (`bazel::jobs`), so one may start in that moment.
     pub fn register(&self, pid: u32) {
-        self.groups.lock().unwrap().push(pid as i32);
+        let mut groups = self.groups.lock().unwrap();
+        groups.push(pid as i32);
+        if !self.is_cancelled() {
+            return;
+        }
+        drop(groups);
+        let group = pid as i32;
+        unsafe { libc::killpg(group, libc::SIGTERM) };
+        let pending = self.groups.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            if pending.lock().unwrap().contains(&group) {
+                unsafe { libc::killpg(group, libc::SIGKILL) };
+            }
+        });
     }
 
     pub fn unregister(&self, pid: u32) {
         self.groups.lock().unwrap().retain(|g| *g != pid as i32);
     }
+}
+
+/// Starts a child process while no other thread of this process starts one.
+///
+/// On macOS, which has no `pipe2`, the standard library makes a child's pipes first and marks them
+/// close-on-exec a moment later. A child that another thread starts in between inherits them. When that child
+/// is a Bazel client that starts a server, the server keeps them open for as long as it lives, so the first
+/// child's reader never sees the end of its output and the review hangs (seen with the Bazel commands that
+/// `bazel::jobs` runs at once). Every child the core starts goes through here; the lock is held only while
+/// it starts, not while it runs.
+pub fn spawn(command: &mut Command) -> std::io::Result<Child> {
+    static SPAWN: Mutex<()> = Mutex::new(());
+    let _only = SPAWN.lock().unwrap_or_else(|e| e.into_inner());
+    command.spawn()
 }
 
 /// Whether an error is a cancellation, however deep it is wrapped.
@@ -209,7 +240,7 @@ impl Cmd {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::piped());
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let pid = child.id();
         cancel.register(pid);
         let mut out = child.stdout.take().unwrap();
@@ -248,7 +279,7 @@ impl Cmd {
         cancel.check()?;
         let mut command = self.command();
         command.stdout(Stdio::piped()).stderr(Stdio::null());
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let pid = child.id();
         cancel.register(pid);
         let mut stdout = Vec::new();
@@ -328,7 +359,7 @@ impl Cmd {
         writeln!(file, "$ {}\n", self.display())?;
         let mut command = self.command();
         command.stdout(file.try_clone()?).stderr(file.try_clone()?);
-        let mut child = command.spawn().with_context(|| format!("could not start {}", self.program.display()))?;
+        let mut child = spawn(&mut command).with_context(|| format!("could not start {}", self.program.display()))?;
         let status = wait(&mut child, cancel);
         let _ = writeln!(file);
         cancel.check()?;

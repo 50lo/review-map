@@ -21,6 +21,7 @@ use crate::proc::{log_tail, Cancel, Log};
 use anyhow::{anyhow, bail, Context, Result};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub const ASPECT_PACKAGE: &str = ".reviewmap_aspects";
 const OUTPUT_GROUP: &str = "reviewmap_swift_index";
@@ -185,8 +186,10 @@ fn toolchain_id(library: &Path) -> String {
     format!("{}@{stamp}", library.display())
 }
 
-/// Loads the index of one workspace at one side, building it when it isn't cached.
-pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log: Log) -> Result<SwiftIndexResult> {
+/// Loads the index of one workspace at one side, building it when it isn't cached. Several jobs may share
+/// the helper, which reads one request at a time.
+pub fn load(job: &SwiftIndexJob, helper: &Mutex<SwiftHelper>, cancel: &Cancel, log: Log) -> Result<SwiftIndexResult> {
+    let helper_version = helper.lock().unwrap_or_else(|e| e.into_inner()).version.clone();
     let library = crate::tools::lib_index_store()
         .ok_or_else(|| anyhow!("Can't find libIndexStore next to the Swift toolchain. Set REVIEWMAP_LIBINDEXSTORE to its path."))?;
     let key = crate::store::digest([
@@ -196,7 +199,7 @@ pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log:
         job.targets.join("\n").as_bytes(),
         job.env.args.join("\n").as_bytes(),
         toolchain_id(&library).as_bytes(),
-        helper.version.as_bytes(),
+        helper_version.as_bytes(),
     ]);
     let cache = job.cache_dir.join(&key[..24]);
     let refs_path = cache.join("refs.json");
@@ -288,8 +291,10 @@ pub fn load(job: &SwiftIndexJob, helper: &mut SwiftHelper, cancel: &Cancel, log:
         prefix_map_root: (!execution_root.is_empty()).then_some(execution_root),
         files: job.files.clone(),
     };
+    let mut helper = helper.lock().unwrap_or_else(|e| e.into_inner());
     let reading = crate::proc::timer(format!("swift helper read ({})", job.side.name()));
     let refs = helper.index(&request, cancel)?;
+    drop(helper);
     drop(reading);
     log(format!("Indexed {} of {} Swift files at {}{at} in {}s", refs.len(), job.files.len(), job.side.name(), start.elapsed().as_secs()));
     let partial = (!ok).then(|| format!("The Swift index build of {}{at} had errors, so the index covers only what compiled. Log: {}", job.side.name(), log_path.display()));
