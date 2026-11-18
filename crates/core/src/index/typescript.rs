@@ -48,10 +48,31 @@ const FORMAT: &str = "typescript-index-2";
 
 /// How a project gets what the indexer needs.
 pub enum Setup<'a> {
-    /// A Yarn Classic root: install with Yarn. `pin` is its `packageManager` field.
-    Yarn { pin: Option<String>, has_lockfile: bool, in_bazel_workspace: bool },
+    /// A package-manager root: install its dependencies with `manager`, in the app-owned tree.
+    Install { manager: Install, has_lockfile: bool, in_bazel_workspace: bool },
     /// A rules_ts workspace: build the targets with Bazel.
     Bazel { env: &'a BazelEnv, targets: &'a [String] },
+}
+
+/// The package manager that installs a root's dependencies, with what it needs to pick its release.
+pub enum Install {
+    /// Yarn Classic. `pin` is its `packageManager` field.
+    YarnClassic { pin: Option<String> },
+}
+
+impl Install {
+    /// The package-manager part of the cache key.
+    fn key(&self) -> String {
+        match self {
+            Install::YarnClassic { pin } => format!("yarn {}", pin.as_deref().unwrap_or(YARN_CLASSIC)),
+        }
+    }
+}
+
+/// How an install went. A failed one does not stop indexing: the index is built without what it would
+/// have installed, says so, and is not cached.
+pub struct InstallOutcome {
+    pub ok: bool,
 }
 
 pub struct TypeScriptIndexJob<'a> {
@@ -119,7 +140,7 @@ fn yarn_command(node: &Path, pin: Option<&str>, cancel: &Cancel) -> Result<(Path
 fn cache_key(job: &TypeScriptIndexJob, indexer: &str) -> String {
     let mut parts: Vec<String> = vec![FORMAT.to_string(), indexer.to_string()];
     match &job.setup {
-        Setup::Yarn { pin, .. } => parts.push(format!("yarn {}", pin.as_deref().unwrap_or(YARN_CLASSIC))),
+        Setup::Install { manager, .. } => parts.push(manager.key()),
         Setup::Bazel { env, targets } => {
             parts.push(format!("bazel {}", targets.join(" ")));
             parts.extend(env.args.iter().cloned());
@@ -173,23 +194,10 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
     let mut links = Links::default();
 
     match &job.setup {
-        Setup::Yarn { pin, has_lockfile, .. } => {
-            let (yarn, yarn_args) = yarn_command(node, pin.as_deref(), cancel)?;
-            log(format!("Installing {} {} dependencies{at} for the TypeScript index (Yarn, scripts off)", job.side.name(), short(job.sha)));
-            let lockfile = if *has_lockfile { "--frozen-lockfile" } else { "--pure-lockfile" };
-            let _node = NODE_TOOLS.lock().unwrap_or_else(|e| e.into_inner());
-            let status = Cmd::new(&yarn)
-                .what("yarn install")
-                .context(job.side.name())
-                .args(yarn_args)
-                .args(["install", lockfile, "--ignore-scripts", "--non-interactive", "--prefer-offline", "--no-progress"])
-                .cwd(&dir)
-                .env("PATH", &path)
-                .env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0")
-                .env("YARN_IGNORE_ENGINES", "true")
-                .run_logged(&log_path, cancel)?;
+        Setup::Install { manager, .. } => {
+            let outcome = install(job, manager, node, &dir, &log_path, cancel, log)?;
             restore_tracked(job)?;
-            if !status.success() {
+            if !outcome.ok {
                 complete = false;
                 notes.warnings.push(Warning::new(
                     "index-partial",
@@ -264,7 +272,7 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
         cmd.cwd(&dir).env("PATH", &path).env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0").run_logged(&log_path, cancel)
     };
     links.remove();
-    if let Setup::Yarn { in_bazel_workspace: true, .. } = job.setup {
+    if let Setup::Install { in_bazel_workspace: true, .. } = job.setup {
         // Bazel would walk an installed node_modules on its next query of this tree.
         let _ = std::fs::remove_dir_all(dir.join("node_modules"));
     }
@@ -285,6 +293,34 @@ fn build(job: &TypeScriptIndexJob, node: &Path, program: &Path, prefix: &[String
     }
     log(format!("Indexed TypeScript at {}{at} in {}s", job.side.name(), start.elapsed().as_secs()));
     Ok((index, notes))
+}
+
+/// Installs a root's dependencies in its directory `dir` inside the app-owned tree (CORE-002), with
+/// install scripts off, logging to `log_path`. What follows every install (restoring tracked files, the
+/// warnings) is `build`'s.
+fn install(job: &TypeScriptIndexJob, manager: &Install, node: &Path, dir: &Path, log_path: &Path, cancel: &Cancel, log: Log) -> Result<InstallOutcome> {
+    let at = if job.dir.is_empty() { String::new() } else { format!(" in {}", job.dir) };
+    let has_lockfile = matches!(job.setup, Setup::Install { has_lockfile: true, .. });
+    let path = crate::tools::node_path(node).to_string_lossy().to_string();
+    match manager {
+        Install::YarnClassic { pin } => {
+            let (yarn, yarn_args) = yarn_command(node, pin.as_deref(), cancel)?;
+            log(format!("Installing {} {} dependencies{at} for the TypeScript index (Yarn, scripts off)", job.side.name(), short(job.sha)));
+            let lockfile = if has_lockfile { "--frozen-lockfile" } else { "--pure-lockfile" };
+            let _node = NODE_TOOLS.lock().unwrap_or_else(|e| e.into_inner());
+            let status = Cmd::new(&yarn)
+                .what("yarn install")
+                .context(job.side.name())
+                .args(yarn_args)
+                .args(["install", lockfile, "--ignore-scripts", "--non-interactive", "--prefer-offline", "--no-progress"])
+                .cwd(dir)
+                .env("PATH", &path)
+                .env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0")
+                .env("YARN_IGNORE_ENGINES", "true")
+                .run_logged(log_path, cancel)?;
+            Ok(InstallOutcome { ok: status.success() })
+        }
+    }
 }
 
 /// The query that finds what scip-typescript needs Bazel to build for the scope: the npm links the scope
@@ -744,6 +780,14 @@ mod tests {
             assert_eq!(targets, scope);
             assert!(line.starts_with("The query for what the TypeScript index needs found no npm links, so Bazel builds the scope targets"), "{line}");
         }
+    }
+
+    /// The Yarn Classic part of the cache key is the same as before installs had their own seam, so an
+    /// index cached then is still found.
+    #[test]
+    fn the_yarn_classic_cache_key_is_unchanged() {
+        assert_eq!(Install::YarnClassic { pin: None }.key(), "yarn yarn@1.22.22");
+        assert_eq!(Install::YarnClassic { pin: Some("yarn@1.22.19".into()) }.key(), "yarn yarn@1.22.19");
     }
 
     #[test]

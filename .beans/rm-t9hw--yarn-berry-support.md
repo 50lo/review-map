@@ -1,11 +1,11 @@
 ---
 # rm-t9hw
 title: Yarn Berry support
-status: todo
+status: in-progress
 type: epic
 priority: normal
 created_at: 2026-11-18T21:10:16Z
-updated_at: 2026-11-18T21:10:22Z
+updated_at: 2026-11-18T21:44:52Z
 ---
 
 Index TypeScript in Yarn Berry (Yarn 2, 3 and 4) projects, which today end syntax-only with the warning "Yarn Berry support comes later".

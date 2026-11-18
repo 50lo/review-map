@@ -1,11 +1,11 @@
 ---
 # rm-wb96
 title: Give the TypeScript index one install seam per package manager
-status: todo
+status: completed
 type: task
 priority: normal
 created_at: 2026-11-18T21:10:16Z
-updated_at: 2026-11-18T21:10:23Z
+updated_at: 2026-11-18T21:48:49Z
 parent: rm-t9hw
 ---
 

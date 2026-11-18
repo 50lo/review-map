@@ -605,7 +605,7 @@ impl Session {
     /// or npm root is not indexed, and its files show only links that syntax proves, with a warning that says
     /// why (for Berry: that support comes later).
     fn index_typescript(&self, trees: &mut Option<Trees>, bazel_tool: Option<&PathBuf>, scopes: &BTreeMap<(Side, String), Scope>, cancel: &Cancel, emit: Emit) -> Result<(SideIndex, SideIndex)> {
-        use crate::index::typescript::{load, unsupported, Setup, TypeScriptIndexJob};
+        use crate::index::typescript::{load, unsupported, Install, Setup, TypeScriptIndexJob};
         use crate::lang::typescript::project;
         let rules_ts = |src: &SideSource, w: &str| Self::has_workspace(src, w) && bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "aspect_rules_ts");
         let bazel_ws: BTreeSet<String> = self.workspaces.iter().filter(|w| rules_ts(&self.head, w) || rules_ts(&self.base, w)).cloned().collect();
@@ -684,8 +684,8 @@ impl Session {
             } else {
                 let p = project(src);
                 let root = p.roots.iter().find(|r| r.dir == u).expect("checked above");
-                Setup::Yarn {
-                    pin: root.yarn_pin.clone(),
+                Setup::Install {
+                    manager: Install::YarnClassic { pin: root.yarn_pin.clone() },
                     has_lockfile: root.has_lockfile,
                     in_bazel_workspace: workspace_of(&self.workspaces, &crate::paths::join(u, "package.json")).is_some(),
                 }
