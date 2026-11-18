@@ -72,8 +72,25 @@ impl Cancel {
         });
     }
 
+    /// Registers a child's process group. A child that started while the job was being cancelled, after
+    /// `cancel` took its list, is stopped here, the same way: several commands of a job run at once
+    /// (`bazel::jobs`), so one may start in that moment.
     pub fn register(&self, pid: u32) {
-        self.groups.lock().unwrap().push(pid as i32);
+        let mut groups = self.groups.lock().unwrap();
+        groups.push(pid as i32);
+        if !self.is_cancelled() {
+            return;
+        }
+        drop(groups);
+        let group = pid as i32;
+        unsafe { libc::killpg(group, libc::SIGTERM) };
+        let pending = self.groups.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(Duration::from_secs(2));
+            if pending.lock().unwrap().contains(&group) {
+                unsafe { libc::killpg(group, libc::SIGKILL) };
+            }
+        });
     }
 
     pub fn unregister(&self, pid: u32) {

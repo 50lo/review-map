@@ -5,8 +5,11 @@
 
 Each argument is a directory that scripts/bench-review.sh wrote (log.txt, summary.txt) or a log.txt itself.
 Prints one markdown row per run: seconds of wall time per phase, from the core's `[timing]` lines (their format
-is described in docs/rebuild-build.md, "Benchmarking a review"). A dash means the phase didn't run, or its
-result came from Review Map's cache. Below the table, how much of each run's wall time the timing lines cover.
+is described in docs/rebuild-build.md, "Benchmarking a review"). Steps of one phase can run at the same time
+(the graph queries and index builds of different workspaces and sides, since rm-zm5r), so a phase's time is the
+wall time its lines cover, not their sum; for a log without timestamps it is the sum. A dash means the phase
+didn't run, or its result came from Review Map's cache. Below the table, how much of each run's wall time the
+timing lines cover.
 """
 import os
 import re
@@ -42,11 +45,29 @@ def column(label):
     return None
 
 
+def union(intervals):
+    """The length of the time the intervals cover together."""
+    covered = 0.0
+    end = None
+    for a, b in sorted(intervals):
+        a = max(a, 0.0)
+        if end is None or a > end:
+            covered += b - a
+            end = b
+        elif b > end:
+            covered += b - end
+            end = b
+    return covered
+
+
 def read_run(path):
     log = os.path.join(path, "log.txt") if os.path.isdir(path) else path
     directory = os.path.dirname(os.path.abspath(log))
     phases = {c: 0.0 for c in COLUMNS}
     kotlin_index = 0.0
+    # Per column: the interval of each line, when the log has timestamps.
+    spans = {c: [] for c in COLUMNS + ["Kotlin index"]}
+    stamped = True
     graph_report = None
     intervals = []
     last = 0.0
@@ -64,13 +85,21 @@ def read_run(path):
             seconds, label = float(m.group(1)), m.group(2).strip()
             if label.startswith("total"):
                 continue
+            c = column(label)
             if t is not None:
                 intervals.append((t - seconds, t))
-            c = column(label)
+                if c:
+                    spans[c].append((t - seconds, t))
+            else:
+                stamped = False
             if c == "Kotlin index":
                 kotlin_index += seconds
             elif c:
                 phases[c] += seconds
+    if stamped:
+        for c in COLUMNS:
+            phases[c] = union(spans[c])
+        kotlin_index = union(spans["Kotlin index"])
     # The Kotlin indexer's JVMs run several at a time: its wall time is the index step's, less its build and download.
     # An index step with no build is a cache hit or a workspace that doesn't build Kotlin: no indexer ran.
     if phases["Kotlin Bazel"]:
@@ -89,16 +118,7 @@ def read_run(path):
         load = "%.0f→%.0f" % (float(first(summary["load at start"])), float(first(summary["load at end"])))
 
     # The share of wall time inside at least one timed step (steps nest and may run at the same time).
-    covered = 0.0
-    end = None
-    for a, b in sorted(intervals):
-        a = max(a, 0.0)
-        if end is None or a > end:
-            covered += b - a
-            end = b
-        elif b > end:
-            covered += b - end
-            end = b
+    covered = union(intervals)
     name = summary.get("run") or os.path.basename(directory)
     return {"name": name, "state": summary.get("state", ""), "phases": phases, "graph report": graph_report, "total": total, "load": load, "covered": covered}
 
