@@ -114,17 +114,17 @@ Measured with `scripts/bench-review.sh` on a scratch clone of `rebuild` at b7f9d
 
 | Scenario, measure | Bean | Today (b7f9d92) | New |
 | --- | --- | --- | --- |
-| UI cold `6324470^..6324470 --target //app:bundle`: graph report at | 17.4 s | 15.4–16.9 s (4 runs) | **12.9–14.2 s** (6 runs); 12.9 and 13.4 s in the two runs started at load < 4, against 15.4 s for today's binary at the same load |
+| UI cold `6324470^..6324470 --target //app:bundle`: graph report at | 17.4 s | 15.4–16.9 s (4 runs) | **12.9–14.2 s** (7 runs); 12.9 and 13.4 s in the two runs started at load < 4, against 15.4 s for today's binary at the same load |
 | … graph step (two `cquery`s) | 16.8 s | 14.9–15.6 s | 12.3–13.0 s |
 | … Swift index step | 67 s | 57.8–59.3 s | 57.4–60.1 s (unchanged: one workspace) |
 | … TypeScript index step (wall) | 236 s (pre-rm-9e2v) | 15.0–16.8 s | **14.1–14.2 s** (base overlaps head's scip-typescript) |
 | … total | 323.7 s | 89.6–92.5 s | 85.1–90.7 s |
 | … peak RSS, processes naming the home | 2.4 GB | 4.55–4.70 GB | 4.40–4.60 GB |
-| Mixed `8cf8972..046c3e7`, root warm, nested cold: graph step | 92–93.8 s | 95.8, 107.6, 118.5 s; 111.5–121.7 s with the new binary at `REVIEWMAP_BAZEL_JOBS=1` | **27.4–33.2 s** in 9 of 10 runs (one run 38.0 s at load 14; one 56.5 s, below) |
+| Mixed `8cf8972..046c3e7`, root warm, nested cold: graph step | 92–93.8 s | 95.8, 107.6, 118.5 s; 111.5–121.7 s with the new binary at `REVIEWMAP_BAZEL_JOBS=1` | **27.5–35.0 s in 9 of 13 runs**; 38.0, 41.7 and 51.8 s when the machine was busy, 56.5 s when the registry was slow (below). The final binary: 27.5, 30.9, 31.1, 56.5 s |
 | … index steps (total − graph report) | 65 s (pre-rm-9e2v) | 28–35 s | 25–39 s (unchanged within noise: units still run one after another) |
 | … total | 159.6 s | 124.0–153.6 s | 53.0–70.0 s (89.1 s in the 56.5 s run) |
-| … peak RSS, Bazel servers only | – | 4.14–4.35 GB (mean 4.27, 4 runs: today's binary, and the new one at jobs=1) | **4.07–4.43 GB (mean 4.28, 4 runs)** |
-| … peak RSS, processes naming the home | 3.4 GB | 4.40–4.82 GB | 4.38–5.08 GB |
+| … peak RSS, Bazel servers only | – | 4.14–4.35 GB (mean 4.27; 4 runs: today's binary once, the new binary at `REVIEWMAP_BAZEL_JOBS=1` three times) | **3.90–4.43 GB (mean 4.19; 5 runs of the final index design)** |
+| … peak RSS, processes naming the home | 3.4 GB | 4.40–4.82 GB (8 runs) | 3.93–5.08 GB (6 runs of the final index design) |
 | … swap in use | 4.7 GB (busy machine) | 220–252 MB, no growth | 220–252 MB, no growth |
 | No index, cold: graph report at | 8.5 s | 14.3 s | 12.7–13.0 s |
 | Rust cold `f1df7b4`: graph report at / total | – | 15.7 / 74.8 s | 12.7–12.9 / 70.8–71.5 s |
@@ -136,15 +136,15 @@ Notes on the numbers:
 
 - **Today's peak memory is higher than the bean's 3.4 GB.** In every run of either binary, 10 Bazel servers are alive at the end. The root servers are bigger since rm-n8fo, and `~/.bazelrc` changed on 2026-11-18. So "today" is the baseline, not 3.4 GB.
 - **The 56.5 s mixed run.** Only the three ts-bazel fixture queries were slow: about 39 s each, all at the same moment, against about 14 s in the other runs. These queries resolve Bzlmod modules from the Bazel Central Registry, so this was the network. The Swift fixture queries in the same run took their usual 11–14 s. rm-l8ck saw the same kind of swing (Mixed graph 94 against 181 s).
-- **Graph times depend on load.** Two cold `cquery`s of the root take about 7.5 s each one after the other, and about 12.5 s each when they run together, because they compete for the CPU (8 cores, shared with other sessions).
+- **Graph times depend on load.** The mixed review's 8 nested queries, 4 at a time, are two rounds of about 14 s each, so the step's floor is about 28–30 s. Any slowdown of the queries takes it past 35 s. In the 38.0, 41.7 and 51.8 s runs, every query was slower, the Swift fixtures' too (13–25 s each instead of 11–15 s): other work on the machine. A 14th run hung before the spawn fix (above) and is not counted. Two cold `cquery`s of the root take about 7.5 s each one after the other, and about 12.5 s each when they run together, because they compete for the CPU (8 cores, shared with other sessions).
 
 ### Acceptance criteria
 
 - **UI cold: graph report within 11 s (was 17.4 s). Not met: 12.9–14.2 s.** Today's binary gives 15.4–16.9 s on the same code. The two `cquery`s do run at once, but each cold analysis of `//app:bundle` uses several cores, so together they take about 12.5 s instead of about 7.5 s alone. In the two runs started at a 1-minute load below 4, the graph report came at 12.9 and 13.4 s, against 15.4 s for today's binary. What remains is CPU, which more concurrency can't remove. rm-2tan (the same flags in every command) and rm-0ixm don't touch this either. Reaching 11 s would take a smaller analysis per server or one server for both sides (item 12 of `docs/rebuild-step5-speed.md`).
-- **Mixed, root warm and nested cold: graph step at most 35 s (was 92 s). Met: 27.4–33.2 s in 9 of 10 runs** with the default bound. Today's binary took 95.8–118.5 s. One run took 38.0 s at load 14. Another took 56.5 s while the Bazel Central Registry was slow (above); network time is item 8 (rm-0ixm).
-- **Peak Bazel server memory at or below today's with the default bound. Met on the servers' own memory:** 4.07–4.43 GB (mean 4.28 GB) against 4.14–4.35 GB (mean 4.27 GB) today.
+- **Mixed, root warm and nested cold: graph step at most 35 s (was 92 s). Met under normal load; exceeded in 4 of 13 runs.** With the default bound, 9 of 13 runs took 27.5–35.0 s, and today's binary took 95.8–118.5 s. Three runs took 38.0, 41.7 and 51.8 s while other work slowed every query. One took 56.5 s while the Bazel Central Registry was slow (above); network time is item 8 (rm-0ixm). The margin is thin: two rounds of about 14 s.
+- **Peak Bazel server memory at or below today's with the default bound. Met on the servers' own memory:** 3.90–4.43 GB (mean 4.19 GB, 5 runs) against 4.14–4.35 GB (mean 4.27 GB, 4 runs) today. With workspaces indexed at once, before the change back, it was 4.16–4.57 GB (mean 4.35 GB, 4 runs).
   - Each server's own peak is the same, and so is the number of servers (10).
-  - Counting every process that names the home (Bazel clients and workers too), the new binary's spread is 4.38–5.08 GB against 4.40–4.82 GB. One run reached 5.08 GB.
+  - Counting every process that names the home (Bazel clients and workers too), the spread is 3.93–5.08 GB against 4.40–4.82 GB today. One run reached 5.08 GB.
   - Swap stayed at 220–252 MB with no growth in every run.
   - Indexing workspaces at once was removed to keep this criterion (see above).
 - **Reports identical. Met.** Every report of this branch equals today's after `jq -S`, through `--compare`: 59 comparisons, 0 differences.
