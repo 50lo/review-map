@@ -76,7 +76,9 @@ pub enum Install {
 /// The Yarn release a Berry root without a `packageManager` pin is installed with: the one that writes
 /// its lockfile's format. `__metadata.version` 8 and later is Yarn 4's.
 pub fn berry_version(pin: Option<&str>, lock_version: Option<u32>) -> String {
-    match pin {
+    // A root that is Berry by its `.yarnrc.yml` or lockfile may still carry a stale Classic pin, which
+    // can't run a Berry install.
+    match pin.filter(|p| *p != "yarn@1" && !p.starts_with("yarn@1.")) {
         Some(pin) => pin.to_string(),
         None if lock_version.is_some_and(|v| v >= 8) => YARN_4.to_string(),
         None => YARN_3.to_string(),
@@ -905,6 +907,7 @@ mod tests {
         assert_eq!(berry_version(None, Some(10)), YARN_4);
         assert_eq!(berry_version(None, Some(6)), YARN_3);
         assert_eq!(berry_version(None, None), YARN_3);
+        assert_eq!(berry_version(Some("yarn@1.22.22"), Some(8)), YARN_4, "a stale Classic pin on a Berry root");
         assert_eq!(berry_major("yarn@3.8.7", Some(".yarn/releases/yarn-2.4.3.cjs")), Some(2));
         assert_eq!(berry_major("yarn@2.4.3", None), Some(2));
         assert_eq!(berry_major("yarn@4.5.0", Some(".yarn/releases/yarn-berry.cjs")), Some(4));
