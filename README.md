@@ -1,6 +1,6 @@
 # Review Map
 
-A macOS app for code review that shows a change as structure (components, dependency edges, changed contracts, findings) instead of line diffs. It reviews Swift and Kotlin in Bazel workspaces, and TypeScript in Yarn Classic workspaces and in Bazel workspaces that use rules_ts with rules_js. The app is Tauri 2 with a React UI over a Rust core; a small SwiftSyntax helper parses Swift. The plan is in [docs/rebuild-phase1-proposal.md](docs/rebuild-phase1-proposal.md).
+A macOS app for code review that shows a change as structure (components, dependency edges, changed contracts, findings) instead of line diffs. It reviews Swift and Kotlin in Bazel workspaces, and TypeScript in Yarn workspaces (Classic and Berry) and in Bazel workspaces that use rules_ts with rules_js. The app is Tauri 2 with a React UI over a Rust core; a small SwiftSyntax helper parses Swift. The plan is in [docs/rebuild-phase1-proposal.md](docs/rebuild-phase1-proposal.md).
 
 ## Requirements
 
@@ -58,11 +58,11 @@ Review Map reads committed content only, never the working tree. It builds both 
 | --- | --- | --- | --- |
 | Swift | Bazel (rules_swift) | SwiftSyntax, in the bundled helper | Bazel builds the scope targets with indexing on; the app reads the index store with Xcode's `libIndexStore`. |
 | Kotlin | Bazel (rules_kotlin) | tree-sitter | Bazel builds the targets' compile classpath; the Kotlin indexer from the scip-java launcher indexes each target. The launcher is downloaded once; `REVIEWMAP_SCIP_JAVA` names another. Needs a JDK 17 or newer. |
-| TypeScript, TSX | Yarn Classic projects and workspaces; Bazel with rules_ts and rules_js | tree-sitter | scip-typescript 0.4.0, run through `npx`. Yarn Classic projects get `yarn install` with scripts off; Bazel workspaces get no install: Bazel builds only the npm links the review's targets depend on, which lays out `node_modules` itself. Needs Node.js. |
+| TypeScript, TSX | Yarn projects and workspaces, Classic (1.x) and Berry (2 and later); Bazel with rules_ts and rules_js | tree-sitter | scip-typescript 0.4.0, run through `npx`. Yarn Classic projects get `yarn install` with scripts off; Yarn Berry projects get `yarn install` with the project's own Yarn release, scripts off, and the `node-modules` linker whatever `.yarnrc.yml` sets (scip-typescript cannot resolve through Plug'n'Play); Bazel workspaces get no install: Bazel builds only the npm links the review's targets depend on, which lays out `node_modules` itself. Needs Node.js. |
 
 Index mode is on by default. Without an index for a language or a file, Review Map shows only the links that syntax alone proves, never links matched by name, and says so with an `index-unavailable` or `index-partial` warning. Checks that need complete references, such as finding unused declarations, are held back until the index is there (`checks-held-back`).
 
-Yarn Berry is detected and reported as not supported yet. Go, Rust, Gradle, SwiftPM, and direct Xcode builds are outside phase 1. Java and Objective-C files in the review scope are reported as coverage gaps.
+Every install runs in the app's own copy of the revision, never in the reviewed repository. For a Yarn Berry project, index mode runs the Yarn release the project commits (`yarnPath` in `.yarnrc.yml`) and the Yarn plugins it configures, as a Bazel build runs the workspace's own rules; without a committed release it runs the `packageManager` version through corepack (or npx on Node.js 25 and later), and without a `packageManager` pin either, Yarn 4.18.1 for a lockfile in a Yarn 4 format and Yarn 3.8.7 for an older one. pnpm, npm and Bun projects outside Bazel are detected and reported as not indexed. Go, Rust, Gradle, SwiftPM, and direct Xcode builds are outside phase 1. Java and Objective-C files in the review scope are reported as coverage gaps.
 
 ## LLM pass
 

@@ -18,10 +18,10 @@ All rebuild implementation will be done on a long-living branch named `rebuild`.
 | Core and repository access | Rust and gix. Read committed content directly; materialize source trees where Bazel or other tools require them. |
 | Swift | Bazel projects; SwiftSyntax through a bundled helper for parsing, with compiler-backed reference resolution. |
 | Kotlin | Bazel projects; tree-sitter for syntax and the existing Kotlin compiler-analysis approach for references. |
-| TypeScript/TSX | Yarn Classic projects and workspaces, and TypeScript built with Bazel (rules_ts with rules_js); tree-sitter for syntax and TypeScript-backed indexing. |
+| TypeScript/TSX | Yarn projects and workspaces (Classic, and Berry since 2026-11-19), and TypeScript built with Bazel (rules_ts with rules_js); tree-sitter for syntax and TypeScript-backed indexing. |
 | Launching | `reviewmap` opens or focuses the app and passes the repository, refs, and working directory. |
 
-Go, Rust language support, Gradle, SwiftPM, direct Xcode build orchestration, Yarn Berry, and other package managers (pnpm, npm-only projects) are outside phase 1. Detect Berry and explain in the review, as a coverage warning, that support comes later.
+Go, Rust language support, Gradle, SwiftPM, direct Xcode build orchestration, and other package managers (pnpm, npm-only projects, Bun) are outside phase 1. On 2026-11-19 Yarn Berry (2 and later) moved into phase 1 (epic rm-t9hw): a Berry root is installed in the app-owned tree with the project's own Yarn release, install scripts off, and the `node-modules` linker forced whatever its `.yarnrc.yml` sets, so the rest is the Yarn Classic path. Index mode therefore runs the project's committed Yarn release and Yarn plugins.
 
 On 2026-11-16 the user moved TypeScript built with Bazel into phase 1. Any rules_ts workspace that uses aspect_rules_js is supported, whatever lockfile its `npm_translate_lock` reads (normally `pnpm-lock.yaml`; a converted `yarn.lock` works the same way). The lockfile is Bazel's business there, so pnpm as a package manager stays out of scope. Review Map installs no packages for Bazel workspaces: Bazel builds, in the app-owned tree, the npm links the scope targets depend on (since rm-9e2v; before, the scope targets themselves) and fetches `node_modules` itself, and indexing uses what Bazel laid out. Java and Objective-C review support are out of scope for the foreseeable future. They may still need compilation as dependencies of supported targets.
 
@@ -65,7 +65,7 @@ Cache Kotlin indexes per configured target, conservatively invalidating them whe
 
 **TypeScript and external tools**
 
-Support Yarn Classic workspaces, package exports, and tsconfig project references and path aliases. Deeper TypeScript analysis may install dependencies in the app-owned revision tree using the lockfile, with install scripts disabled as in the prototype. Account for download and installation time, reuse package caches, and report failures or incomplete resolution clearly. Do not install into the user's working tree. Because scripts are disabled, `postinstall` code generation does not run and its generated sources and types are missing. This is an accepted coverage gap: references into generated code stay unresolved and are reported as incomplete coverage, never as missing callers.
+Support Yarn workspaces (Classic, and Berry since 2026-11-19, installed with the `node-modules` linker), package exports, and tsconfig project references and path aliases. Deeper TypeScript analysis may install dependencies in the app-owned revision tree using the lockfile, with install scripts disabled as in the prototype. Account for download and installation time, reuse package caches, and report failures or incomplete resolution clearly. Do not install into the user's working tree. Because scripts are disabled, `postinstall` code generation does not run and its generated sources and types are missing. This is an accepted coverage gap: references into generated code stay unresolved and are reported as incomplete coverage, never as missing callers.
 
 Obtain indexers the same way as the prototype. scip-java's release launcher is downloaded on first use from its GitHub release at a pinned version, checked against the published SHA-256, and kept in the app's tool cache. scip-typescript runs through `npx` at a pinned version. The JDK is not downloaded: as in the prototype, Kotlin indexing needs a user-installed JDK 17 or newer, and its absence makes Kotlin fall back with incomplete coverage. Keep the prototype's overrides for using another scip-java or scip-typescript.
 
@@ -82,7 +82,7 @@ Provide a cache-size limit and eviction. Keep notes and reviewed state separate 
 1. Bring the review UI into Tauri, with parsing and reusable Bazel workspaces.
 2. Connect Swift and Kotlin indexing immediately, including Kotlin ownership corrections.
 3. Compare indexed and non-indexed reviews manually on representative real changes before substantial performance optimization.
-4. Add TypeScript indexing for Yarn Classic and for Bazel workspaces that build TypeScript with rules_ts.
+4. Add TypeScript indexing for Yarn (Classic, and Berry since 2026-11-19) and for Bazel workspaces that build TypeScript with rules_ts.
 5. Optimize measured bottlenecks while checking that reference results and coverage remain correct.
 
 Measure empty caches, retained disk caches after reopening, and another review in the same session. Separate workspace preparation, Bazel queries, dependency preparation, index generation, and report/UI work. Record time to the first usable view and to sufficient indexed coverage, false links, missed callers, memory, and disk use.
@@ -93,6 +93,6 @@ Carry CORE-001–006 into acceptance tests: merge-base comparison, no writes to 
 
 **Later additions**
 
-Keep future scope high-level: a branch list for starting reviews in the GUI, additional languages or build systems if needed, Yarn Berry, Linux/Windows, broader verified index import, and further semantic optimizations. Java and Objective-C analysis are not planned. Phase 1 should remain a focused review application rather than grow into a general-purpose IDE.
+Keep future scope high-level: a branch list for starting reviews in the GUI, additional languages or build systems if needed, Linux/Windows, broader verified index import, and further semantic optimizations. Java and Objective-C analysis are not planned. Phase 1 should remain a focused review application rather than grow into a general-purpose IDE.
 
 Implementation references: [Bazel output directories](https://bazel.build/remote/output-directories), [Bazel action caching](https://bazel.build/remote/caching), [SwiftParser](https://github.com/swiftlang/swift-syntax/blob/main/Sources/SwiftParser/SwiftParser.docc/SwiftParser.md), and [SourceKit Bazel cache handling](https://github.com/spotify/sourcekit-bazel-bsp#bazel-cache-handling).

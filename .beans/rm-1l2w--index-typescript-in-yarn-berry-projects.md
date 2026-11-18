@@ -1,11 +1,11 @@
 ---
 # rm-1l2w
 title: Index TypeScript in Yarn Berry projects
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-11-18T21:10:16Z
-updated_at: 2026-11-18T21:10:23Z
+updated_at: 2026-11-18T21:58:09Z
 parent: rm-t9hw
 blocked_by:
     - rm-wb96
@@ -50,3 +50,19 @@ A Berry root ends syntax-only today: `unsupported` in `crates/core/src/index/typ
 - Blocked by rm-wb96 (the `Install` seam) and rm-xt4l (`yarn_path`, `lock_version`).
 - Install scripts never run. A failed install does not stop indexing: it adds the existing `index-partial` warning and the index is not cached.
 - The first run downloads Yarn and scip-typescript; the Mac mini has Node.js 24 with corepack and no global Yarn.
+
+## Checked by hand (2026-11-19)
+
+Node.js 24.22.2, corepack 0.36.0, macOS. A copy of the ts-yarn fixture as a Yarn workspace with `workspace:*` dependencies and one third-party package (is-number 7.0.0), each project in its own git repository in a temporary directory outside this one. Install command as in What 1: `install --immutable --mode=skip-build` with `YARN_NODE_LINKER=node-modules YARN_ENABLE_SCRIPTS=false YARN_ENABLE_GLOBAL_CACHE=true YARN_ENABLE_TELEMETRY=false`.
+
+- **PnP project** (Yarn 4.18.1 pinned, `.yarnrc.yml` without nodeLinker, `.pnp.cjs` and `.yarn/` not committed): exit 0. `node_modules/@demo/{app,lib,proto}` are links to the packages, `node_modules/is-number` is installed. No tracked file changed.
+- **Zero-install project** (`enableGlobalCache: false`, `.yarn/cache/*.zip` and `.pnp.cjs` committed): exit 0, same `node_modules`. Yarn **deleted the committed `.pnp.cjs`**, so `restore_tracked` must restore removed files, not only changed ones. Nothing was added to `.yarn/cache`.
+- **`__metadata.version` by Yarn release** (lockfile written by a fresh install): 2.4.3 → 4; 3.1.1 → 5; 3.2.4 and 3.8.7 → 6; 4.0.0 and 4.5.3 → 8; 4.18.1 → 10. 3.0.2 crashes on Node.js 24. The version follows the minor release, not the major.
+- **A lockfile in another format than the running Yarn writes fails `--immutable`** (YN0028, "The lockfile would have been modified"): a version 4 or 5 lockfile under 3.8.7, and a version 8 lockfile under 4.18.1. A version 6 lockfile under 3.8.7 passes. This only matters for a root with neither a `packageManager` pin nor a committed `yarnPath`, which falls back to the constants (`YARN_4` = yarn@4.18.1 for lock_version >= 8, `YARN_3` = yarn@3.8.7 below).
+- **Without `--immutable`** (and `YARN_ENABLE_IMMUTABLE_INSTALLS=false`, which Berry otherwise turns on in CI) the same installs pass. Yarn 4.18.1 then rewrites `yarn.lock` (the format version) and adds `packageManager` to the root `package.json` ("YN0087 Migrated your project to the latest Yarn version"); `.yarnrc.yml` is untouched. Both are tracked files that `restore_tracked` puts back.
+
+So the retry is implemented: when a root with a lockfile fails `--immutable`, the install runs once more without it, under the same NODE_TOOLS lock, and the tracked files are restored after the last attempt. The log says that it retried.
+
+Also checked: Yarn 2.4.3 accepts the same environment with `--skip-builds` in place of `--mode=skip-build` (exit 0, node_modules laid out; a version 4 lockfile stays unchanged under `--immutable`). The ts-berry fixture's `yarn.lock` (version 10) and its Yarn-formatted `package.json` files were written by running `corepack yarn@4.18.1 install --mode=skip-build` once in a temporary copy.
+
+Also checked: Yarn 2.4.3 committed as `.yarn/releases/yarn-berry.cjs` (the name `yarn set version berry` used in the Yarn 2 days, in projects that also predate `packageManager`) rejects `--mode=skip-build` ("Invalid option name"). The file name names no release, so the install asks the release itself (`<yarn> --version`) and passes `--skip-builds` to Yarn 2; only when that fails does it fall back to the file name and the version.

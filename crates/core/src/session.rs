@@ -356,7 +356,7 @@ impl Session {
     /// A step that fails leaves a warning and the report as far as it got; only cancelling is an error.
     ///
     /// Swift and Kotlin are indexed in the Bazel workspaces the change touches. TypeScript is indexed in
-    /// those that use rules_ts, and in Yarn Classic projects, which need no Bazel.
+    /// those that use rules_ts, and in Yarn projects, which need no Bazel.
     pub fn refine(&mut self, cancel: &Cancel, emit: Emit) -> Result<()> {
         let languages: Vec<&'static str> = self.languages().iter().map(|l| l.id()).collect();
         let bazel_only: Vec<&'static str> = languages.iter().copied().filter(|l| *l != "typescript").collect();
@@ -601,11 +601,11 @@ impl Session {
     }
 
     /// TypeScript's index, over the projects that hold its changed files: Bazel workspaces that use rules_ts,
-    /// and package-manager roots outside them, of which phase 1 indexes Yarn Classic ones. A Yarn Berry, pnpm,
-    /// or npm root is not indexed, and its files show only links that syntax proves, with a warning that says
-    /// why (for Berry: that support comes later).
+    /// and package-manager roots outside them, of which phase 1 indexes Yarn ones (Classic and Berry). A pnpm,
+    /// npm, or Bun root is not indexed, and its files show only links that syntax proves, with a warning that
+    /// says why.
     fn index_typescript(&self, trees: &mut Option<Trees>, bazel_tool: Option<&PathBuf>, scopes: &BTreeMap<(Side, String), Scope>, cancel: &Cancel, emit: Emit) -> Result<(SideIndex, SideIndex)> {
-        use crate::index::typescript::{load, unsupported, Install, Setup, TypeScriptIndexJob};
+        use crate::index::typescript::{berry_version, load, unsupported, Install, Setup, TypeScriptIndexJob};
         use crate::lang::typescript::project;
         let rules_ts = |src: &SideSource, w: &str| Self::has_workspace(src, w) && bazel::uses_module(&|f| src.text(&crate::paths::join(w, f)), "aspect_rules_ts");
         let bazel_ws: BTreeSet<String> = self.workspaces.iter().filter(|w| rules_ts(&self.head, w) || rules_ts(&self.base, w)).cloned().collect();
@@ -640,7 +640,7 @@ impl Session {
                 let place = if u.is_empty() { "the repository root".to_string() } else { u.to_string() };
                 if bazel_names.contains(u) { format!("the Bazel workspace {place}") } else { place }
             }),
-            none: "the change's TypeScript files are in no Yarn Classic project and no Bazel workspace that uses rules_ts".to_string(),
+            none: "the change's TypeScript files are in no Yarn project and no Bazel workspace that uses rules_ts".to_string(),
         };
         let (head_source, base_source) = (self.head.clone(), self.base.clone());
         let source = move |side: Side| if side == Side::Head { head_source.clone() } else { base_source.clone() };
@@ -684,8 +684,14 @@ impl Session {
             } else {
                 let p = project(src);
                 let root = p.roots.iter().find(|r| r.dir == u).expect("checked above");
+                let manager = match root.manager {
+                    lang::typescript::project::Manager::YarnBerry => {
+                        Install::YarnBerry { version: berry_version(root.yarn_pin.as_deref(), root.lock_version), yarn_path: root.yarn_path.clone() }
+                    }
+                    _ => Install::YarnClassic { pin: root.yarn_pin.clone() },
+                };
                 Setup::Install {
-                    manager: Install::YarnClassic { pin: root.yarn_pin.clone() },
+                    manager,
                     has_lockfile: root.has_lockfile,
                     in_bazel_workspace: workspace_of(&self.workspaces, &crate::paths::join(u, "package.json")).is_some(),
                 }
@@ -700,7 +706,7 @@ impl Session {
     ///
     /// A unit is indexed at every side it exists at, or not at all: its files that exist at both sides
     /// could not use an index of one side anyway. A unit that can't be indexed (it doesn't build the
-    /// language with Bazel, it has no scope targets, its build failed, it is a Yarn Berry project) leaves
+    /// language with Bazel, it has no scope targets, its build failed, it uses pnpm or npm) leaves
     /// its files syntax-only and says why in an `index-partial` warning (CORE-003); it doesn't take the other
     /// units' indexes with it. Only when no unit could be indexed is the language without an index.
     ///

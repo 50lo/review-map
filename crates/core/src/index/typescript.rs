@@ -1,9 +1,13 @@
 //! TypeScript's index, from scip-typescript, for two kinds of project:
 //!
-//! - **Yarn Classic** roots. Dependencies are installed into the app-owned revision tree, never the
-//!   reviewed working tree, with the lockfile frozen and install scripts off, as in the prototype. Yarn's
-//!   own package cache is shared by every install, and the tree's `node_modules` stays between reviews
-//!   unless the root is inside a Bazel workspace, where Bazel would trip over it.
+//! - **Yarn** roots, Classic (1.x) and Berry (2 and later). Dependencies are installed into the app-owned
+//!   revision tree, never the reviewed working tree, with the lockfile frozen and install scripts off, as in
+//!   the prototype. A Berry root is installed with the project's own Yarn release and the `node-modules`
+//!   linker, whatever its `.yarnrc.yml` sets: scip-typescript's TypeScript can't resolve through
+//!   Plug'n'Play, and only real `node_modules` link workspace packages to each other. From there on it is
+//!   indexed as a Classic root. Yarn's own package cache is shared by every install, and the tree's
+//!   `node_modules` stays between reviews unless the root is inside a Bazel workspace, where Bazel would
+//!   trip over it.
 //! - **Bazel workspaces that use rules_ts** (with rules_js). Nothing is installed: Bazel builds, in the
 //!   app-owned tree, the npm links the scope targets depend on, which fetches and lays out their
 //!   `node_modules` under bazel-bin (one query finds them; see `input_query`). For the indexer, each
@@ -44,6 +48,11 @@ use std::path::{Path, PathBuf};
 pub const SCIP_TYPESCRIPT: &str = "@sourcegraph/scip-typescript@0.4.0";
 /// The Yarn Classic release corepack or npx runs when no Yarn is installed and the project pins none.
 pub const YARN_CLASSIC: &str = "yarn@1.22.22";
+/// The Yarn release corepack or npx runs for a Berry root that pins no Yarn and commits none, when its
+/// lockfile is in a Yarn 4 format (`__metadata.version` 8 or later).
+pub const YARN_4: &str = "yarn@4.18.1";
+/// The same for an older lockfile format (Yarn 2 and 3), or none.
+pub const YARN_3: &str = "yarn@3.8.7";
 const FORMAT: &str = "typescript-index-2";
 
 /// How a project gets what the indexer needs.
@@ -58,6 +67,33 @@ pub enum Setup<'a> {
 pub enum Install {
     /// Yarn Classic. `pin` is its `packageManager` field.
     YarnClassic { pin: Option<String> },
+    /// Yarn Berry (2 and later). `version` is the `packageManager` pin (`yarn@4.5.0`), or `YARN_4` or
+    /// `YARN_3` by the lockfile's format (`berry_version`); `yarn_path` is the release the root commits
+    /// (`.yarnrc.yml`'s `yarnPath`, repo-relative), which runs first.
+    YarnBerry { version: String, yarn_path: Option<String> },
+}
+
+/// The Yarn release a Berry root without a `packageManager` pin is installed with: the one that writes
+/// its lockfile's format. `__metadata.version` 8 and later is Yarn 4's.
+pub fn berry_version(pin: Option<&str>, lock_version: Option<u32>) -> String {
+    match pin {
+        Some(pin) => pin.to_string(),
+        None if lock_version.is_some_and(|v| v >= 8) => YARN_4.to_string(),
+        None => YARN_3.to_string(),
+    }
+}
+
+/// The major release in `yarn --version`'s output (`2.4.3`).
+fn reported_major(output: &str) -> Option<u32> {
+    output.trim().lines().last()?.trim().split('.').next()?.parse().ok()
+}
+
+/// The major release of the Yarn that a Berry install runs, when the release can't say: the committed
+/// release's, by its file name (`yarn-2.4.3.cjs`), else the version's. A name such as `yarn-berry.cjs`,
+/// which `yarn set version berry` committed in the Yarn 2 days, says nothing.
+fn berry_major(version: &str, yarn_path: Option<&str>) -> Option<u32> {
+    let from_file = yarn_path.and_then(|p| crate::paths::file_name(p).strip_prefix("yarn-")).and_then(|v| v.split('.').next()?.parse().ok());
+    from_file.or_else(|| version.trim_start_matches("yarn@").split('.').next()?.parse().ok())
 }
 
 impl Install {
@@ -65,6 +101,7 @@ impl Install {
     fn key(&self) -> String {
         match self {
             Install::YarnClassic { pin } => format!("yarn {}", pin.as_deref().unwrap_or(YARN_CLASSIC)),
+            Install::YarnBerry { version, .. } => format!("yarn-berry {version}"),
         }
     }
 }
@@ -320,7 +357,69 @@ fn install(job: &TypeScriptIndexJob, manager: &Install, node: &Path, dir: &Path,
                 .run_logged(log_path, cancel)?;
             Ok(InstallOutcome { ok: status.success() })
         }
+        Install::YarnBerry { version, yarn_path } => {
+            let (yarn, yarn_args) = berry_command(job, node, version, yarn_path.as_deref())?;
+            let _node = NODE_TOOLS.lock().unwrap_or_else(|e| e.into_inner());
+            // Yarn 2 has no --mode. The release that runs says which it is.
+            let reported = Cmd::new(&yarn)
+                .what("yarn install")
+                .context(job.side.name())
+                .args(yarn_args.iter().cloned())
+                .arg("--version")
+                .cwd(dir)
+                .env("PATH", &path)
+                .env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0")
+                .output_string(cancel);
+            cancel.check()?;
+            let major = reported.ok().as_deref().and_then(reported_major).or_else(|| berry_major(version, yarn_path.as_deref()));
+            let skip = if major == Some(2) { "--skip-builds" } else { "--mode=skip-build" };
+            log(format!("Installing {} {} dependencies{at} for the TypeScript index (Yarn Berry, node_modules, scripts off)", job.side.name(), short(job.sha)));
+            let run = |immutable: bool| {
+                Cmd::new(&yarn)
+                    .what("yarn install")
+                    .context(job.side.name())
+                    .args(yarn_args.iter().cloned())
+                    .arg("install")
+                    .args(immutable.then(|| "--immutable".to_string()))
+                    .arg(skip)
+                    .cwd(dir)
+                    .env("PATH", &path)
+                    // node_modules, not Plug'n'Play, whatever the project's linker: see the module's comment.
+                    .env("YARN_NODE_LINKER", "node-modules")
+                    .env("YARN_ENABLE_SCRIPTS", "false")
+                    .env("YARN_ENABLE_GLOBAL_CACHE", "true")
+                    .env("YARN_ENABLE_TELEMETRY", "false")
+                    // Yarn makes every install immutable on CI unless told otherwise.
+                    .env("YARN_ENABLE_IMMUTABLE_INSTALLS", if immutable { "true" } else { "false" })
+                    .env("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0")
+                    .run_logged(log_path, cancel)
+            };
+            let mut status = run(has_lockfile)?;
+            if !status.success() && has_lockfile {
+                // A Yarn that writes another lockfile format than the committed one (a root that pins no Yarn,
+                // installed with YARN_4 or YARN_3) refuses --immutable. Without it, Yarn installs what the
+                // lockfile locks and rewrites its format; `build` puts the tracked files back.
+                log(format!("The immutable install of {} {}{at} failed; installing again without --immutable", job.side.name(), short(job.sha)));
+                append_log(log_path, "\nThe immutable install failed; installing again without --immutable.\n\n")?;
+                status = run(false)?;
+            }
+            Ok(InstallOutcome { ok: status.success() })
+        }
     }
+}
+
+/// The Yarn that installs a Berry root: the release the project commits, run by Node.js; else corepack at
+/// `version`; else npx with Yarn's npm distribution (Node.js 25 and later ship no corepack). An installed
+/// global `yarn` is never used: another major would rewrite the lockfile.
+fn berry_command(job: &TypeScriptIndexJob, node: &Path, version: &str, yarn_path: Option<&str>) -> Result<(PathBuf, Vec<String>)> {
+    if let Some(release) = yarn_path {
+        return Ok((node.to_path_buf(), vec![job.tree_dir.join(release).to_string_lossy().to_string()]));
+    }
+    if let Some(corepack) = crate::tools::node_tool(node, "corepack") {
+        return Ok((corepack, vec![version.to_string()]));
+    }
+    let npx = crate::tools::node_tool(node, "npx").ok_or_else(|| anyhow!("corepack and npx were not found next to {}.", node.display()))?;
+    Ok((npx, vec!["--yes".to_string(), format!("@yarnpkg/cli-dist@{}", version.trim_start_matches("yarn@"))]))
 }
 
 /// The query that finds what scip-typescript needs Bazel to build for the scope: the npm links the scope
@@ -410,13 +509,21 @@ fn append_log(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-/// Puts back any tracked package.json or yarn.lock that an install rewrote. The tree's manifest trusts
-/// that tracked files are as it wrote them, so a later review must not see an install's edits.
+/// The tracked files an install may rewrite or remove: manifests, lockfiles, and Yarn Berry's Plug'n'Play
+/// loader and settings (with the node-modules linker, Yarn deletes a committed `.pnp.cjs`).
+const INSTALL_TOUCHES: &[&str] = &["package.json", "yarn.lock", ".pnp.cjs", ".pnp.loader.mjs", ".yarnrc.yml"];
+
+/// Puts back every tracked file of `INSTALL_TOUCHES` under the root that an install changed or removed.
+/// The tree's manifest trusts that tracked files are as it wrote them, so a later review must not see an
+/// install's edits.
 fn restore_tracked(job: &TypeScriptIndexJob) -> Result<()> {
-    for path in job.source.tree.keys().filter(|p| is_under(p, job.dir) && matches!(crate::paths::file_name(p), "package.json" | "yarn.lock")) {
+    for path in job.source.tree.keys().filter(|p| is_under(p, job.dir) && INSTALL_TOUCHES.contains(&crate::paths::file_name(p))) {
         let full = job.tree_dir.join(path);
         let Some(want) = job.source.bytes(path) else { continue };
         if std::fs::read(&full).ok().as_deref() != Some(want.as_slice()) {
+            if let Some(parent) = full.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
             std::fs::write(&full, want)?;
         }
     }
@@ -667,13 +774,12 @@ pub fn resolve_documents(
     (SideIndex { refs: found.into_iter().map(|(f, r)| (f, r.into_iter().collect())).collect(), warnings: Vec::new() }, incomplete)
 }
 
-/// Why a package-manager root can't be indexed in phase 1, or None for Yarn Classic.
+/// Why a package-manager root can't be indexed in phase 1, or None for Yarn (Classic and Berry).
 pub fn unsupported(manager: &Manager, evidence: &str) -> Option<String> {
     match manager {
-        Manager::YarnClassic => None,
-        Manager::YarnBerry => Some(format!("it is a Yarn Berry (v2 or later) project ({evidence}); Yarn Berry support comes later")),
+        Manager::YarnClassic | Manager::YarnBerry => None,
         other => Some(format!(
-            "it uses {} ({evidence}), and phase 1 indexes TypeScript only in Yarn Classic projects and in Bazel workspaces that use rules_ts",
+            "it uses {} ({evidence}), and phase 1 indexes TypeScript only in Yarn projects and in Bazel workspaces that use rules_ts",
             other.describe()
         )),
     }
@@ -790,10 +896,29 @@ mod tests {
         assert_eq!(Install::YarnClassic { pin: Some("yarn@1.22.19".into()) }.key(), "yarn yarn@1.22.19");
     }
 
+    /// A Berry root without a pin gets the Yarn whose lockfile format it has; its install flags follow the
+    /// release that runs.
+    #[test]
+    fn berry_releases() {
+        assert_eq!(berry_version(Some("yarn@4.5.0"), Some(6)), "yarn@4.5.0");
+        assert_eq!(berry_version(None, Some(8)), YARN_4);
+        assert_eq!(berry_version(None, Some(10)), YARN_4);
+        assert_eq!(berry_version(None, Some(6)), YARN_3);
+        assert_eq!(berry_version(None, None), YARN_3);
+        assert_eq!(berry_major("yarn@3.8.7", Some(".yarn/releases/yarn-2.4.3.cjs")), Some(2));
+        assert_eq!(berry_major("yarn@2.4.3", None), Some(2));
+        assert_eq!(berry_major("yarn@4.5.0", Some(".yarn/releases/yarn-berry.cjs")), Some(4));
+        // A committed yarn-berry.cjs names no release: the release's own --version decides.
+        assert_eq!(reported_major("2.4.3\n"), Some(2));
+        assert_eq!(reported_major("! Corepack is about to download …\n4.18.1\n"), Some(4));
+        assert_eq!(reported_major(""), None);
+        assert_eq!(Install::YarnBerry { version: "yarn@4.5.0".into(), yarn_path: None }.key(), "yarn-berry yarn@4.5.0");
+    }
+
     #[test]
     fn unsupported_managers() {
         assert!(unsupported(&Manager::YarnClassic, "yarn.lock").is_none());
-        assert!(unsupported(&Manager::YarnBerry, "it has a .yarnrc.yml").unwrap().contains("Yarn Berry support comes later"));
+        assert!(unsupported(&Manager::YarnBerry, "it has a .yarnrc.yml").is_none());
         assert!(unsupported(&Manager::Pnpm, "pnpm-lock.yaml").unwrap().contains("uses pnpm"));
     }
 }

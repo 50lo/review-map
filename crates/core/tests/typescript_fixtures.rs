@@ -1,11 +1,12 @@
 //! TypeScript outside Bazel, from start to end: `tests/fixtures/ts-yarn`, a Yarn Classic workspace with
-//! three packages. Name matching gets its common member name wrong (`load()` on Store and Cache, where the
+//! three packages, and `tests/fixtures/ts-berry`, the same workspace in Yarn 4 with its default linker,
+//! Plug'n'Play. Name matching gets its common member name wrong (`load()` on Store and Cache, where the
 //! app only calls Store's), and one file imports a workspace package whose `types` entry is an unbuilt
 //! `dist/`, which the index can't see. Rules_ts workspaces are covered in `bazel_fixtures.rs`.
 //!
 //! The tests that index need Node.js and return early, saying why, without it; the first run fetches Yarn
-//! Classic (through corepack) and scip-typescript (through npx), so it needs the network once. The
-//! fallback, Berry, and package-manager tests need no tools.
+//! Classic and Yarn 4 (through corepack) and scip-typescript (through npx), so it needs the network once.
+//! The fallback and package-manager tests need no tools.
 
 mod common;
 
@@ -186,12 +187,58 @@ fn a_failing_indexer_leaves_a_syntax_only_report() {
 
 const APP: &str = "import { Store } from \"./store\";\n\nexport function start(): number {\n  return new Store().load();\n}\n";
 const STORE: &str = "export class Store {\n  load(): number {\n    return 1;\n  }\n}\n";
+const PNP: &str = "// A committed Plug'n'Play loader.\n";
 const STORE_HEAD: &str = "export class Store {\n  load(): number {\n    return 2;\n  }\n}\n";
 
-/// A Yarn Berry project is not indexed: the review completes, syntax-only, and says that Berry support
-/// comes later. Detecting it needs no tools.
+/// A Yarn Berry workspace whose own linker is Plug'n'Play is installed with the node-modules linker in the
+/// app's own tree, with the project's Yarn and scripts off, and indexed like a Classic one.
 #[test]
-fn yarn_berry_is_reported_not_indexed() {
+fn yarn_berry_workspace_index() {
+    let _guard = lock();
+    if !node() {
+        return;
+    }
+    let fixture = own_fixture("ts-berry");
+    let repo = fixture_repo(&fixture);
+    let before = snapshot(&repo.path());
+    let (_, reports, progress) = run(request(&repo));
+    let report = reports.last().expect("a report");
+    if report.warnings.iter().any(|w| w.kind == "index-unavailable" && (w.message.contains("could not") || w.message.contains("failed"))) {
+        eprintln!("skipped: the TypeScript tools could not be fetched: {:?}", report.warnings);
+        return;
+    }
+    assert_eq!(report.analyzer.resolution, "index", "{:?}", report.warnings);
+    assert!(progress.iter().any(|m| m.starts_with("Installing head") && m.contains("Yarn Berry") && m.contains("scripts off")), "{progress:?}");
+    let warnings = typescript_warnings(report);
+    assert!(!warnings.iter().any(|w| w.contains("could not be installed")), "{warnings:#?}");
+    assert_eq!(used_by(report, "Store.load()"), ["start()"]);
+    assert_eq!(used_by(report, "Cache.load()"), Vec::<String>::new(), "the app never calls Cache.load()");
+
+    // CORE-002: the install ran in the app's own copies, and left every tracked file there as committed
+    // (with the node-modules linker Yarn would rewrite manifests and drop a committed .pnp.cjs).
+    assert_eq!(snapshot(&repo.path()), before, "nothing in the reviewed repository changed");
+    let trees = reviewmap_core::store::cache_root().join("bazel").join(reviewmap_core::store::repo_key(&repo.path()));
+    for side in ["base", "head"] {
+        let tree = trees.join(side).join("tree");
+        assert!(tree.join("node_modules/@demo/lib").exists(), "{side}: workspace packages are linked in node_modules");
+        assert!(!tree.join(".pnp.cjs").exists(), "{side}: no Plug'n'Play loader");
+        for (file, _) in snapshot(&fixture.join(side)).into_iter().filter(|(_, what)| what != "directory") {
+            let want = std::fs::read(fixture.join(side).join(&file)).unwrap();
+            assert_eq!(std::fs::read(tree.join(&file)).ok(), Some(want), "{side}: {file} is as committed");
+        }
+    }
+
+    // Another review of the same commits reads the kept index.
+    let (_, again, progress) = run(request(&repo));
+    assert!(progress.iter().any(|m| m.starts_with("TypeScript index for head") && m.ends_with("cached")), "{progress:?}");
+    let again = again.last().unwrap();
+    assert_eq!(again.edges, report.edges);
+    assert_eq!(again.review_items, report.review_items);
+}
+
+/// A Yarn Berry project without Node.js ends syntax-only, and the reason is Node.js.
+#[test]
+fn a_yarn_berry_project_without_node_is_syntax_only() {
     let _guard = lock();
     let base: Vec<(&str, &str)> = vec![
         ("web/package.json", "{\"name\": \"web\", \"packageManager\": \"yarn@4.5.0\"}"),
@@ -201,19 +248,25 @@ fn yarn_berry_is_reported_not_indexed() {
         ("web/src/store.ts", STORE),
     ];
     let repo = two_commits(&base, &[("web/src/store.ts", Some(STORE_HEAD))]);
+    let _node = Var::set("REVIEWMAP_NODE", "reviewmap-no-such-node");
     let report = analyze(request(&repo));
     assert_eq!(report.analysis.stage, "complete");
     assert_eq!(report.analyzer.resolution, "syntax");
     let warning = report.warnings.iter().find(|w| w.kind == "index-unavailable" && w.message.contains("TypeScript")).expect("a coverage warning");
-    assert!(warning.message.contains("Yarn Berry") && warning.message.contains("support comes later"), "{}", warning.message);
+    assert!(warning.message.contains("Node.js") && !warning.message.contains("Yarn Berry"), "{}", warning.message);
     assert!(review_item(&report, "Store.load()").used_by.is_empty());
 }
 
-/// A project that moved from Yarn Classic to Berry is indexed at neither side, so coverage can't differ
-/// between them.
+/// A project that moved from Yarn Classic to Berry is indexed at both sides, each with its own Yarn. Head's
+/// lockfile is in a Yarn 4 format and pins no Yarn, so the pinned Yarn 4 installs it; it would write another
+/// format, so the immutable install fails and the install runs again without --immutable. Head commits a
+/// `.pnp.cjs`, which Yarn deletes under the node-modules linker; the app's tree gets it back.
 #[test]
-fn a_project_that_is_berry_at_one_side_is_indexed_at_neither() {
+fn a_project_that_is_classic_at_base_and_berry_at_head_is_indexed_at_both() {
     let _guard = lock();
+    if !node() {
+        return;
+    }
     let base: Vec<(&str, &str)> = vec![
         ("package.json", "{\"name\": \"web\"}"),
         ("yarn.lock", "# yarn lockfile v1\n\n\n"),
@@ -221,13 +274,31 @@ fn a_project_that_is_berry_at_one_side_is_indexed_at_neither() {
         ("src/store.ts", STORE),
     ];
     let head: Vec<(&str, Option<&str>)> = vec![
-        ("yarn.lock", Some("__metadata:\n  version: 8\n")),
+        ("yarn.lock", Some("__metadata:\n  version: 8\n  cacheKey: 10c0\n\n\"web@workspace:.\":\n  version: 0.0.0-use.local\n  resolution: \"web@workspace:.\"\n  languageName: unknown\n  linkType: soft\n")),
         ("src/store.ts", Some(STORE_HEAD)),
+        (".pnp.cjs", Some(PNP)),
     ];
     let repo = two_commits(&base, &head);
-    let report = analyze(request(&repo));
-    assert_eq!(report.analyzer.resolution, "syntax", "{:?}", report.warnings);
-    assert!(report.warnings.iter().any(|w| w.kind == "index-unavailable" && w.message.contains("Yarn Berry")), "{:?}", report.warnings);
+    let before = snapshot(&repo.path());
+    let (_, reports, progress) = run(request(&repo));
+    let report = reports.last().expect("a report");
+    if report.warnings.iter().any(|w| w.kind == "index-unavailable" && (w.message.contains("could not") || w.message.contains("failed"))) {
+        eprintln!("skipped: the TypeScript tools could not be fetched: {:?}", report.warnings);
+        return;
+    }
+    assert_eq!(report.analyzer.resolution, "index", "{:?}", report.warnings);
+    assert!(progress.iter().any(|m| m.starts_with("Installing base") && m.contains("(Yarn, scripts off)")), "{progress:?}");
+    assert!(progress.iter().any(|m| m.starts_with("Installing head") && m.contains("Yarn Berry")), "{progress:?}");
+    assert!(progress.iter().any(|m| m.starts_with("The immutable install of head") && m.contains("without --immutable")), "{progress:?}");
+    let warnings = typescript_warnings(report);
+    assert!(!warnings.iter().any(|w| w.contains("could not be installed") || w.starts_with("index-unavailable")), "{warnings:#?}");
+    // A unit is indexed at both sides or at neither, so full coverage means both.
+    let coverage = report.analysis.languages.iter().find(|l| l.id == "typescript").expect("TypeScript's coverage");
+    assert_eq!((coverage.resolution.as_str(), coverage.files, coverage.indexed_files), ("index", 2, 2));
+    assert_eq!(snapshot(&repo.path()), before, "nothing in the reviewed repository changed");
+    let head_tree = reviewmap_core::store::cache_root().join("bazel").join(reviewmap_core::store::repo_key(&repo.path())).join("head/tree");
+    assert_eq!(std::fs::read_to_string(head_tree.join(".pnp.cjs")).ok().as_deref(), Some(PNP), "the committed .pnp.cjs is back");
+    assert_eq!(std::fs::read_to_string(head_tree.join("package.json")).ok().as_deref(), Some("{\"name\": \"web\"}"), "no packageManager added");
 }
 
 /// pnpm and npm projects outside Bazel are outside phase 1: syntax-only, with the reason.

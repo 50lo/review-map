@@ -12,7 +12,7 @@
 {"source": "CORE-002", "target": "Sources/ReviewMapCore/Shell.swift#GitRepo.export", "role": "code", "mode": "swift-ast-sha256-v1", "sig": "d73c9ba0e864aeda982b96855e159249adbcb9673577396b5211b177613a4d9b"}
 {"source": "CORE-002", "target": "crates/core/src/bazel/workspace.rs#Workspaces.materialize", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "b585c6908652ef308cb89521ec1c83e99428651a9edb6ba111a4b4ce34f24500"}
 {"source": "CORE-002", "target": "crates/core/src/index/typescript.rs#build", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "113f28e2edc08845c0ec3b6459255f6dc0a3e3e2a084e5c6a44eea86367cf550"}
-{"source": "CORE-002", "target": "crates/core/src/index/typescript.rs#install", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "622b942fb4239ac4351feea8365ba01a64fee95fece500c71d56935fcd4b2743"}
+{"source": "CORE-002", "target": "crates/core/src/index/typescript.rs#install", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "d317680b23e4d0f73b50e38695b6b0a0bd7d545675ad28411f7dfef00b868871"}
 {"source": "CORE-002", "target": "crates/core/src/llm/cli.rs#Runner.call", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "a839210ede86053bd0dd0bd4af87dbe16ced952c031c9ec279a6d7bfe6d99851"}
 {"source": "CORE-002", "target": "crates/core/src/llm/mod.rs#Annotator.run", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "eef3d1e0d2c1f7d8517593bbb32db19d671dc21e0d0b70d7c1c2cc5372c0d391"}
 {"source": "CORE-002", "target": "crates/core/src/session.rs#Session.open", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "3b8da3486257934ee38c1d409faee0385373a9475d94a1feaff0b8175d3877a2"}
@@ -22,6 +22,7 @@
 {"source": "CORE-002", "target": "crates/core/tests/core_rules.rs#core_002_analysis_leaves_the_repo_untouched", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "8d5d3d3b471deede39c4becbf066309cfba82416c4b86bb926b801cc763c0a02"}
 {"source": "CORE-002", "target": "crates/core/tests/core_rules.rs#core_002_reviewmap_yml_is_read_from_the_head_commit", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "d7ee362253faa544863c4f0e1db5b9a868a4045d48926e4e0825a48c2d107f40"}
 {"source": "CORE-002", "target": "crates/core/tests/llm.rs#reads_sources_from_the_commits", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "d66293c6f4ce15ac56f72d82b8e845453b79e4dba27ab4360096331d0214948f"}
+{"source": "CORE-002", "target": "crates/core/tests/typescript_fixtures.rs#yarn_berry_workspace_index", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "839229f65fae3e96ff2c907399a9ad232143321778dfc5203b52a69723105b12"}
 {"source": "CORE-002", "target": "crates/core/tests/typescript_fixtures.rs#yarn_workspace_index", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "2f16d53524c07d5076c438305565ab415dba7a8b5608a75a551470474b007c04"}
 {"source": "CORE-003", "target": "crates/core/src/analyze/checks.rs#StructuralChecks.conformers", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "b13e2721af5cc761d06c60a421b220703c5875320f5b89bc276c38370153a79e"}
 {"source": "CORE-003", "target": "crates/core/src/analyze/checks.rs#StructuralChecks.knows_all_references", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "85c7c3c1d1f6e0aada3859fdcef44fdf4c684174f33cadb17e122ddc51c1a00d"}
@@ -38,7 +39,7 @@
 {"source": "CORE-003", "target": "crates/core/src/session.rs#Session.build", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "7d07c6d587a57281aa937f043eb320f2b95e3ebde9668e4b61f196decead73a5"}
 {"source": "CORE-003", "target": "crates/core/src/session.rs#Session.final_notes", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "074c4402167576028a8c25c59cf922f3424ca42d7bc4426336cfefe41aa047f2"}
 {"source": "CORE-003", "target": "crates/core/src/session.rs#Session.finish_cancelled", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "8a8d5d2e0046b2882f45a81e4329ec7f614fa7be2cff93e8c774eedbb326ec05"}
-{"source": "CORE-003", "target": "crates/core/src/session.rs#Session.index_typescript", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "cb8ebb3c70cdfcc9c911389319942c1fed14b1e7c88e66e52ce8d5396e6bb7a6"}
+{"source": "CORE-003", "target": "crates/core/src/session.rs#Session.index_typescript", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "7fbba5c9c0c74531dd4ccff7a065edfdb876cb00529deec8a94dc23e3bf25b4d"}
 {"source": "CORE-003", "target": "crates/core/src/session.rs#Session.index_workspaces", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "e090576f9501aa303c21e723d772b48f9144d96c5fbcaaba8e6375f72f113062"}
 {"source": "CORE-003", "target": "crates/core/src/session.rs#Session.report", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "d3f6ca27ee51604dc07cbbe27a2b73419cf66c9bab078e92ec47fed7be87e73c"}
 {"source": "CORE-003", "target": "crates/core/tests/bazel_fixtures.rs#cancelling_stops_every_bazel_command_and_ends_syntax_only", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "edb5cd0599c857096fbaec50b86a25934c03400e0aaddac900cd871ac760f66f"}
@@ -61,7 +62,8 @@
 {"source": "CORE-003", "target": "crates/core/tests/core_rules.rs#the_preliminary_report_matches_nothing_by_name", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "9a92885a8031988a98e6cb0d17c93c310471ed186e9f37f7f95b155151121e5c"}
 {"source": "CORE-003", "target": "crates/core/tests/swift_rules.rs#core_003_swift_supertypes_come_from_the_index_not_from_their_names", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "128abadda4387038f657b403d4be49aae5ab97348e9129e9b42d9fb23a68445c"}
 {"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#a_failing_indexer_leaves_a_syntax_only_report", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "a3734190e2f43b8e4d9e94afb1d0a7c400cc6a160639efb62a3ac07bfbd9aa90"}
-{"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#a_project_that_is_berry_at_one_side_is_indexed_at_neither", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "cbd9ecddae75d765013af3d5ce2944ffa2ec9889eaeed55d92bc17449d891046"}
+{"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#a_project_that_is_classic_at_base_and_berry_at_head_is_indexed_at_both", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "b22c87b25be5fa774d247ccf1c0c79d1e0a59d2ca9e5d524b9d6449b4cc7fb17"}
+{"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#a_yarn_berry_project_without_node_is_syntax_only", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "40e0eeb48c13eeec19f7790f32957752f24f45694ffe8d1c2be2c3d01ca77471"}
 {"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#without_node_the_review_stays_syntax_only", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "6f49efc3969995f2e830c6b6c984b9b72f28752b586f39ea452dec4ca1e22956"}
 {"source": "CORE-003", "target": "crates/core/tests/typescript_fixtures.rs#yarn_workspace_index", "role": "test", "mode": "rust-ast-sha256-v1", "sig": "2f16d53524c07d5076c438305565ab415dba7a8b5608a75a551470474b007c04"}
 {"source": "CORE-004", "target": "crates/core/src/llm/batch.rs#run_batch", "role": "code", "mode": "rust-ast-sha256-v1", "sig": "d61d22301495350120738227238002813cf947700e0345da861b5ca16aba3b6c"}
